@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDateEdit, QDoubleSpinBox,
-    QSpinBox, QTextEdit, QComboBox, QPushButton, QMessageBox, QTabWidget
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QTabWidget
 )
 from storage_bteam import BTeamStorage
 
