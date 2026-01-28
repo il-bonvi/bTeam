@@ -11,7 +11,7 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -258,8 +258,26 @@ class BTeamStorage:
         tss: Optional[float] = None,
         source: str = "manual",
         intervals_payload: Optional[Iterable[Dict]] = None,
-    ) -> int:
-        """Add a new activity."""
+        intervals_id: Optional[str] = None,
+    ) -> Tuple[int, bool]:
+        """Add a new activity, avoiding duplicates for Intervals imports.
+        
+        Returns:
+            Tuple (activity_id, is_new) - is_new True if activity was newly created
+        """
+        # Controlla se l'attività da Intervals esiste già
+        if source == "intervals" and intervals_id:
+            existing = self.session.query(Activity).filter(
+                Activity.athlete_id == athlete_id,
+                Activity.source == "intervals",
+                Activity.title == title.strip(),
+                Activity.activity_date == activity_date
+            ).first()
+            
+            if existing:
+                # Attività già esiste, non aggiungere duplicato
+                return existing.id, False
+        
         now = datetime.utcnow().isoformat()
         payload = json.dumps(list(intervals_payload), ensure_ascii=False) if intervals_payload else None
         activity = Activity(
@@ -275,7 +293,42 @@ class BTeamStorage:
         )
         self.session.add(activity)
         self.session.commit()
-        return activity.id
+        return activity.id, True
+
+    def delete_activity(self, activity_id: int) -> bool:
+        """Delete an activity by ID.
+        
+        Returns:
+            True if activity was deleted, False if not found
+        """
+        try:
+            activity = self.session.query(Activity).filter(Activity.id == activity_id).first()
+            if activity:
+                self.session.delete(activity)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione attività: {e}")
+            return False
+
+    def get_activity(self, activity_id: int) -> Optional[Dict]:
+        """Get activity details by ID.
+        
+        Returns:
+            Activity dict with all details, or None if not found
+        """
+        try:
+            activity = self.session.query(Activity).filter(Activity.id == activity_id).first()
+            if activity:
+                return activity.to_dict(with_athlete_name=True)
+            return None
+        except Exception as e:
+            print(f"[bTeam] Errore lettura attività: {e}")
+            return None
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione attività: {e}")
+            return False
 
     def list_activities(self) -> List[Dict[str, str]]:
         """List all activities with athlete names."""

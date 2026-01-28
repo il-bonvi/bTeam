@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QSpinBox,
     QCheckBox,
+    QTextEdit,
 )
 
 from shared.styles import get_style
@@ -157,11 +158,18 @@ class BTeamApp(QMainWindow):
         grid.addWidget(QLabel("Atleti"), 0, 0)
         grid.addWidget(self.athletes_table, 1, 0)
 
-        self.activities_table = QTableWidget(0, 7)
+        self.activities_table = QTableWidget(0, 6)
         self.activities_table.setHorizontalHeaderLabels(
-            ["ID", "Atleta", "Data", "Titolo", "Durata (min)", "TSS", "Distanza km"]
+            ["Atleta", "Data", "Titolo", "Durata (min)", "Distanza km", "Azioni"]
         )
         self.activities_table.horizontalHeader().setStretchLastSection(True)
+        self.activities_table.horizontalHeader().setSortIndicatorShown(True)
+        self.activities_table.setSortingEnabled(False)  # Disabilito sorting automatico per ordinamento personalizzato
+        self.activities_table.horizontalHeader().sectionClicked.connect(self._on_table_header_clicked)
+        self.activities_table.setColumnWidth(5, 80)
+        self.activities_table.itemDoubleClicked.connect(self._show_activity_details)
+        self.current_sort_column = 1  # Default: ordina per Data
+        self.current_sort_order = Qt.DescendingOrder  # Default: decrescente
         grid.addWidget(QLabel("Attività"), 0, 1)
         grid.addWidget(self.activities_table, 1, 1)
 
@@ -207,20 +215,103 @@ class BTeamApp(QMainWindow):
             self.athletes_table.setItem(row_idx, 3, QTableWidgetItem(athlete.get("team_name", "")))
             self.athletes_table.setItem(row_idx, 4, QTableWidgetItem(athlete.get("notes", "")))
 
+        # Ricarica la tabella attività con ordinamento personalizzato
+        self._refresh_activities_table()
+        
+        # Ordinamento personalizzato rimane disabilitato
+
+    def _on_table_header_clicked(self, column: int) -> None:
+        """Gestisce il click sul header della tabella per ordinare"""
+        # Se clicco la stessa colonna, inverti l'ordine
+        if column == self.current_sort_column:
+            self.current_sort_order = Qt.AscendingOrder if self.current_sort_order == Qt.DescendingOrder else Qt.DescendingOrder
+        else:
+            # Se clicco una colonna diversa, ordina per quella in descending
+            self.current_sort_column = column
+            self.current_sort_order = Qt.DescendingOrder
+        
+        # Aggiorna l'indicatore di sort nell'header
+        self.activities_table.horizontalHeader().setSortIndicator(column, self.current_sort_order)
+        
+        # Ricarica la tabella con il nuovo ordine
+        self._refresh_activities_table()
+
+    def _refresh_activities_table(self) -> None:
+        """Ricarica la tabella attività con ordinamento personalizzato"""
         activities = self.storage.list_activities()
+        
+        # Funzione per estrarre il valore di sort in base alla colonna
+        def get_sort_key(activity):
+            if self.current_sort_column == 0:  # Atleta
+                return activity.get("athlete_name", "").lower()
+            elif self.current_sort_column == 1:  # Data
+                return activity.get("activity_date", "")[:10]  # YYYY-MM-DD
+            elif self.current_sort_column == 2:  # Titolo
+                return activity.get("title", "").lower()
+            elif self.current_sort_column == 3:  # Durata
+                return activity.get("duration_minutes") or 0
+            elif self.current_sort_column == 4:  # Distanza
+                return activity.get("distance_km") or 0
+            return ""
+        
+        # Ordina in base alla colonna e all'ordine selezionati
+        reverse = (self.current_sort_order == Qt.DescendingOrder)
+        try:
+            activities = sorted(activities, key=get_sort_key, reverse=reverse)
+        except Exception as e:
+            print(f"[bTeam] Errore ordinamento: {e}")
+        
+        # Disabilita sorting durante l'inserimento dati per evitare problemi
         self.activities_table.setRowCount(len(activities))
         for row_idx, activity in enumerate(activities):
-            self.activities_table.setItem(row_idx, 0, QTableWidgetItem(str(activity["id"])))
-            self.activities_table.setItem(row_idx, 1, QTableWidgetItem(activity.get("athlete_name", "")))
-            self.activities_table.setItem(row_idx, 2, QTableWidgetItem(activity.get("activity_date", "")))
-            self.activities_table.setItem(row_idx, 3, QTableWidgetItem(activity.get("title", "")))
-            self.activities_table.setItem(row_idx, 4, QTableWidgetItem(self._fmt_num(activity.get("duration_minutes"))))
-            self.activities_table.setItem(row_idx, 5, QTableWidgetItem(self._fmt_num(activity.get("tss"))))
-            self.activities_table.setItem(row_idx, 6, QTableWidgetItem(self._fmt_num(activity.get("distance_km"))))
+            activity_id = activity["id"]
+            self.activities_table.setItem(row_idx, 0, QTableWidgetItem(activity.get("athlete_name", "")))
+            
+            # Formatta la data dal timestamp ISO (YYYY-MM-DDTHH:MM:SS) a GG/MM/AAAA
+            activity_date = activity.get("activity_date", "")
+            formatted_date = activity_date  # Default
+            
+            try:
+                if activity_date:
+                    # Se è un timestamp ISO completo, estrailo direttamente
+                    if "T" in activity_date:
+                        date_obj = datetime.fromisoformat(activity_date.replace("Z", "+00:00"))
+                        formatted_date = date_obj.strftime("%d/%m/%Y")
+                    # Se è solo YYYY-MM-DD
+                    elif len(activity_date) == 10:
+                        date_obj = datetime.strptime(activity_date, "%Y-%m-%d")
+                        formatted_date = date_obj.strftime("%d/%m/%Y")
+            except Exception as e:
+                print(f"[bTeam] Errore formattazione data: {e}")
+            
+            self.activities_table.setItem(row_idx, 1, QTableWidgetItem(formatted_date))
+            self.activities_table.setItem(row_idx, 2, QTableWidgetItem(activity.get("title", "")))
+            self.activities_table.setItem(row_idx, 3, QTableWidgetItem(self._fmt_duration(activity.get("duration_minutes"))))
+            self.activities_table.setItem(row_idx, 4, QTableWidgetItem(self._fmt_num(activity.get("distance_km"))))
+            
+            # Aggiungi pulsante di eliminazione
+            delete_btn = QPushButton("Elimina")
+            delete_btn.setMaximumWidth(70)
+            delete_btn.clicked.connect(lambda checked, aid=activity_id: self._delete_activity(aid))
+            self.activities_table.setCellWidget(row_idx, 5, delete_btn)
 
     @staticmethod
     def _fmt_num(value: Optional[float]) -> str:
         return "" if value is None else f"{value:.1f}"
+
+    @staticmethod
+    def _fmt_duration(minutes: Optional[float]) -> str:
+        """Formatta durata da minuti a HH:MM:SS"""
+        if minutes is None or minutes < 0:
+            return ""
+        
+        total_seconds = int(minutes * 60)
+        hours = total_seconds // 3600
+        remaining_seconds = total_seconds % 3600
+        mins = remaining_seconds // 60
+        secs = remaining_seconds % 60
+        
+        return f"{hours}:{mins:02d}:{secs:02d}"
 
     def _add_team_dialog(self) -> None:
         dialog = QDialog(self)
@@ -361,6 +452,141 @@ class BTeamApp(QMainWindow):
             self._refresh_tables()
             self._refresh_stats()
 
+    def _delete_activity(self, activity_id: int) -> None:
+        """Elimina un'attività dopo conferma"""
+        confirm_dialog = QDialog(self)
+        confirm_dialog.setWindowTitle("Conferma eliminazione")
+        confirm_dialog.setMinimumWidth(300)
+        layout = QVBoxLayout(confirm_dialog)
+        
+        layout.addWidget(QLabel("Sei sicuro di voler eliminare questa attività?"))
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(confirm_dialog.accept)
+        buttons.rejected.connect(confirm_dialog.reject)
+        layout.addWidget(buttons)
+        
+        if confirm_dialog.exec():
+            if self.storage.delete_activity(activity_id):
+                self._refresh_tables()
+                self._refresh_stats()
+                print(f"[bTeam] Attività {activity_id} eliminata")
+            else:
+                error_dialog = QDialog(self)
+                error_dialog.setWindowTitle("Errore")
+                error_layout = QVBoxLayout(error_dialog)
+                error_layout.addWidget(QLabel("Errore durante l'eliminazione dell'attività"))
+                error_buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+                error_buttons.accepted.connect(error_dialog.accept)
+                error_layout.addWidget(error_buttons)
+                error_dialog.exec()
+
+    def _show_activity_details(self, item: QTableWidgetItem) -> None:
+        """Mostra i dettagli dell'attività in un dialog"""
+        row = item.row()
+        # Estrai i dati della riga per identificare l'attività
+        athlete_item = self.activities_table.item(row, 0)
+        title_item = self.activities_table.item(row, 2)
+        date_item = self.activities_table.item(row, 1)
+        
+        if not (athlete_item and title_item and date_item):
+            return
+        
+        # Cerca l'attività nel database basandosi su atleta, data e titolo
+        try:
+            athlete_name = athlete_item.text()
+            title = title_item.text()
+            activity_date = date_item.text()
+            
+            # Cerca l'attività
+            all_activities = self.storage.list_activities()
+            activity = None
+            for act in all_activities:
+                if (act.get("athlete_name") == athlete_name and 
+                    act.get("title") == title and 
+                    act.get("activity_date") == activity_date):
+                    activity = act
+                    break
+            
+            if not activity:
+                return
+            
+            # Crea dialog dettagli
+            details_dialog = QDialog(self)
+            details_dialog.setWindowTitle("Dettagli Attività")
+            details_dialog.setMinimumWidth(500)
+            layout = QVBoxLayout(details_dialog)
+            
+            # Titolo principale
+            title_label = QLabel(activity.get("title", ""))
+            title_font = title_label.font()
+            title_font.setBold(True)
+            title_font.setPointSize(12)
+            title_label.setFont(title_font)
+            layout.addWidget(title_label)
+            
+            # Divider
+            divider = QLabel("-" * 50)
+            divider.setStyleSheet("color: #999;")
+            layout.addWidget(divider)
+            
+            # Info grid
+            grid = QGridLayout()
+            grid.setSpacing(10)
+            grid.setColumnMinimumWidth(1, 250)
+            
+            row_idx = 0
+            fields = [
+                ("ID", str(activity.get("id", ""))),
+                ("Atleta", activity.get("athlete_name", "")),
+                ("Data", activity.get("activity_date", "")),
+                ("Durata (min)", self._fmt_num(activity.get("duration_minutes"))),
+                ("Distanza (km)", self._fmt_num(activity.get("distance_km"))),
+                ("TSS", self._fmt_num(activity.get("tss"))),
+                ("Fonte", activity.get("source", "manual").capitalize()),
+                ("Creato il", activity.get("created_at", "")),
+            ]
+            
+            for label_text, value_text in fields:
+                label = QLabel(f"{label_text}:")
+                label.setStyleSheet("font-weight: bold;")
+                value = QLabel(value_text)
+                grid.addWidget(label, row_idx, 0)
+                grid.addWidget(value, row_idx, 1)
+                row_idx += 1
+            
+            layout.addLayout(grid)
+            
+            # Payload JSON (se disponibile)
+            if activity.get("intervals_payload"):
+                layout.addSpacing(10)
+                payload_label = QLabel("Dati Intervals:")
+                payload_label.setStyleSheet("font-weight: bold;")
+                layout.addWidget(payload_label)
+                
+                payload_text = QTextEdit()
+                payload_text.setReadOnly(True)
+                payload_text.setMaximumHeight(150)
+                try:
+                    import json
+                    payload_data = json.loads(activity.get("intervals_payload"))
+                    payload_text.setPlainText(json.dumps(payload_data, indent=2, ensure_ascii=False))
+                except:
+                    payload_text.setPlainText(activity.get("intervals_payload", ""))
+                layout.addWidget(payload_text)
+            
+            layout.addStretch()
+            
+            # Pulsanti
+            buttons = QDialogButtonBox(QDialogButtonBox.Close)
+            buttons.rejected.connect(details_dialog.accept)
+            layout.addWidget(buttons)
+            
+            details_dialog.exec()
+            
+        except Exception as e:
+            print(f"[bTeam] Errore mostra dettagli: {e}")
+
     def _sync_intervals_dialog(self) -> None:
         """Dialog per configurare e sincronizzare attività da Intervals.icu"""
         dialog = SyncIntervalsDialog(self, self.sync_service, self.storage)
@@ -381,38 +607,74 @@ class BTeamApp(QMainWindow):
 
     def _perform_sync(self, athlete_id: int, days_back: int = 30) -> None:
         """Esegue la sincronizzazione delle attività"""
-        activities, message = self.sync_service.fetch_activities(days_back=days_back)
+        activities, fetch_message = self.sync_service.fetch_activities(days_back=days_back)
+        
+        new_count = 0
+        duplicate_count = 0
+        error_count = 0
         
         if activities:
             # Salva le attività nell'app
-            count = 0
             for activity in activities:
                 try:
                     formatted = IntervalsSyncService.format_activity_for_storage(activity)
-                    self.storage.add_activity(
+                    activity_id, is_new = self.storage.add_activity(
                         athlete_id=athlete_id,
                         title=formatted['name'],
                         activity_date=formatted['start_date'],
                         duration_minutes=formatted['moving_time_minutes'],
                         distance_km=formatted['distance_km'],
                         tss=None,  # Non disponibile da Intervals
-                        source='intervals'
+                        source='intervals',
+                        intervals_id=str(formatted['intervals_id'])
                     )
-                    count += 1
+                    if is_new:
+                        new_count += 1
+                    else:
+                        duplicate_count += 1
                 except Exception as e:
+                    error_count += 1
                     print(f"[bTeam] Errore inserimento attività: {e}")
             
-            message = f"✅ Sincronizzate {count} attività da Intervals.icu"
-            print(f"[bTeam] {message}")
+            # Costruisci messaggio dettagliato
+            parts = []
+            if new_count > 0:
+                parts.append(f"✅ {new_count} nuove attività")
+            if duplicate_count > 0:
+                parts.append(f"⚠️  {duplicate_count} già presenti (duplicate)")
+            if error_count > 0:
+                parts.append(f"❌ {error_count} errori")
+            
+            message = "Sincronizzazione completata:\n" + "\n".join(parts) if parts else "✅ Nessuna attività da sincronizzare"
+        else:
+            message = "✅ Nessuna attività trovata negli ultimi " + str(days_back) + " giorni"
         
-        # Mostra risultato
+        print(f"[bTeam] {message}")
+        
+        # Mostra risultato con dialog migliorato
         result_dialog = QDialog(self)
         result_dialog.setWindowTitle("Risultato sincronizzazione")
+        result_dialog.setMinimumWidth(350)
         layout = QVBoxLayout(result_dialog)
-        layout.addWidget(QLabel(message))
+        
+        # Titolo
+        title_label = QLabel("Sincronizzazione Intervals.icu")
+        title_font = title_label.font()
+        title_font.setBold(True)
+        title_font.setPointSize(11)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+        
+        # Messaggio
+        msg_label = QLabel(message)
+        msg_label.setStyleSheet("margin-top: 10px; margin-bottom: 10px;")
+        layout.addWidget(msg_label)
+        
+        # Pulsanti
         buttons = QDialogButtonBox(QDialogButtonBox.Ok)
         buttons.accepted.connect(result_dialog.accept)
         layout.addWidget(buttons)
+        
         result_dialog.exec()
         
         # Aggiorna tabelle
