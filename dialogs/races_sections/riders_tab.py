@@ -33,7 +33,7 @@ def build_riders_tab(storage: BTeamStorage, race_id: int, on_riders_changed) -> 
     
     # Tabella atleti
     riders_table = QTableWidget(0, 6)
-    riders_table.setHorizontalHeaderLabels(["Nome", "Squadra", "kJ/h/kg", "Obbiettivo", "Note", "Azioni"])
+    riders_table.setHorizontalHeaderLabels(["Nome", "Squadra", "kJ/h/kg", "Obiettivo", "Note", "Azioni"])
     riders_table.setColumnWidth(0, 200)
     riders_table.setColumnWidth(1, 150)
     riders_table.setColumnWidth(2, 80)
@@ -98,11 +98,14 @@ def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget
     """Aggiunge atleti alla gara"""
     athletes = storage.list_athletes()
     
+    # Get parent widget from riders_table
+    parent = riders_table.window() if riders_table else None
+    
     if not athletes:
-        QMessageBox.warning(None, "Nessun atleta", "Non ci sono atleti disponibili. Creane uno prima.")
+        QMessageBox.warning(parent, "Nessun atleta", "Non ci sono atleti disponibili. Creane uno prima.")
         return
     
-    dialog = QDialog()
+    dialog = QDialog(parent)
     dialog.setWindowTitle("Aggiungi Atleti")
     dialog.setMinimumSize(500, 400)
     
@@ -139,7 +142,7 @@ def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget
     
     layout.addWidget(table)
     
-    layout.addWidget(QLabel("Obbiettivo (A/B/C):"))
+    layout.addWidget(QLabel("Obiettivo (A/B/C):"))
     objective_combo = QComboBox()
     objective_combo.addItems(["A", "B", "C"])
     objective_combo.setCurrentText("C")
@@ -188,8 +191,11 @@ def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget
 def on_remove_rider(storage: BTeamStorage, race_id: int, athlete_id: int, 
                     riders_table: QTableWidget, riders_kj_total) -> None:
     """Rimuove un atleta dalla gara"""
+    # Get parent widget from riders_table
+    parent = riders_table.window() if riders_table else None
+    
     confirm = QMessageBox.question(
-        None,
+        parent,
         "Conferma rimozione",
         "Sei sicuro di voler rimuovere questo atleta dalla gara?",
         QMessageBox.Yes | QMessageBox.No
@@ -197,7 +203,7 @@ def on_remove_rider(storage: BTeamStorage, race_id: int, athlete_id: int,
     if confirm == QMessageBox.Yes:
         if storage.remove_athlete_from_race(race_id, athlete_id):
             load_riders(storage, race_id, riders_table, riders_kj_total)
-            QMessageBox.information(None, "Rimosso", "Atleta rimosso dalla gara!")
+            QMessageBox.information(parent, "Rimosso", "Atleta rimosso dalla gara!")
 
 
 def update_riders_kj_total(riders_table: QTableWidget, riders_kj_total) -> None:

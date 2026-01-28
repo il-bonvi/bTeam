@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QFileDialog, QMessageBox
+    QTableWidget, QTableWidgetItem, QFileDialog
 )
 
 
@@ -105,7 +106,7 @@ def build_metrics_tab() -> tuple[QWidget, dict]:
     return widget, controls
 
 
-def on_import_trace(trace_file_label) -> str:
+def on_import_trace(trace_file_label) -> Optional[str]:
     """Importa il file traccia GPX/FIT/TCX"""
     file_path, _ = QFileDialog.getOpenFileName(
         None,
@@ -129,15 +130,19 @@ def on_add_tv(tv_km_spin: QDoubleSpinBox, tv_table: QTableWidget) -> None:
     
     delete_btn = QPushButton("Elimina")
     delete_btn.setMaximumWidth(80)
-    delete_btn.clicked.connect(lambda: delete_tv_row(row, tv_table))
+    delete_btn.clicked.connect(lambda: delete_tv_row(delete_btn, tv_table))
     tv_table.setCellWidget(row, 1, delete_btn)
     
     tv_km_spin.setValue(0)
 
 
-def delete_tv_row(row: int, tv_table: QTableWidget) -> None:
+def delete_tv_row(button: QPushButton, tv_table: QTableWidget) -> None:
     """Elimina una riga dalla tabella TV"""
-    tv_table.removeRow(row)
+    # Trova la riga corrente dal pulsante
+    for row in range(tv_table.rowCount()):
+        if tv_table.cellWidget(row, 1) == button:
+            tv_table.removeRow(row)
+            break
 
 
 def on_add_gpm(gpm_km_spin: QDoubleSpinBox, gpm_table: QTableWidget) -> None:
@@ -149,12 +154,16 @@ def on_add_gpm(gpm_km_spin: QDoubleSpinBox, gpm_table: QTableWidget) -> None:
     
     delete_btn = QPushButton("Elimina")
     delete_btn.setMaximumWidth(80)
-    delete_btn.clicked.connect(lambda: delete_gpm_row(row, gpm_table))
+    delete_btn.clicked.connect(lambda: delete_gpm_row(delete_btn, gpm_table))
     gpm_table.setCellWidget(row, 1, delete_btn)
     
     gpm_km_spin.setValue(0)
 
 
-def delete_gpm_row(row: int, gpm_table: QTableWidget) -> None:
+def delete_gpm_row(button: QPushButton, gpm_table: QTableWidget) -> None:
     """Elimina una riga dalla tabella GPM"""
-    gpm_table.removeRow(row)
+    # Trova la riga corrente dal pulsante
+    for row in range(gpm_table.rowCount()):
+        if gpm_table.cellWidget(row, 1) == button:
+            gpm_table.removeRow(row)
+            break
