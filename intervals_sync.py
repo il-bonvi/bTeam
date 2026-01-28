@@ -203,13 +203,14 @@ class IntervalsSyncService:
             'intervals_id': activity.get('id'),
             'name': activity.get('name', 'Unknown'),
             'type': activity.get('type', 'Other'),
+            'sub_type': activity.get('sub_type'),
             'start_date': activity.get('start_date_local'),
             'distance_km': safe_numeric(activity.get('distance'), 'distance') / 1000,
             'moving_time_minutes': safe_numeric(activity.get('moving_time'), 'moving_time') / 60,
             'elapsed_time_minutes': safe_numeric(activity.get('elapsed_time'), 'elapsed_time') / 60,
             'elevation_m': safe_numeric(activity.get('total_elevation_gain'), 'elevation'),
-            'avg_watts': activity.get('average_watts'),
-            'normalized_watts': activity.get('normalized_watts'),
+            'avg_watts': activity.get('icu_average_watts'),
+            'normalized_watts': activity.get('icu_weighted_avg_watts'),
             'avg_hr': activity.get('average_heartrate'),
             'max_hr': activity.get('max_heartrate'),
             'avg_cadence': activity.get('average_cadence'),
@@ -217,6 +218,17 @@ class IntervalsSyncService:
             'intensity': activity.get('icu_intensity'),
             'feel': activity.get('feel'),
             'description': activity.get('description', ''),
+            # ✨ NUOVI CAMPI IMPORTANTI
+            'tags': activity.get('tags', []),  # Array di tag
+            'is_race': activity.get('race', False),  # Boolean: è una gara?
+            'paired_event_id': activity.get('paired_event_id'),  # ID evento associato
+            'device_name': activity.get('device_name'),  # Dispositivo usato
+            'calories': safe_numeric(activity.get('calories'), 'calories'),
+            'carbs_used': activity.get('carbs_used'),
+            'athlete_weight': activity.get('icu_weight'),
+            'trainer': activity.get('trainer', False),  # Indoor training?
+            'commute': activity.get('commute', False),  # È una pendolare?
+            'source': activity.get('source', 'Unknown'),  # WAHOO, STRAVA, GARMIN, etc
             'raw_data': json.dumps(activity)
         }
     def create_workout(
