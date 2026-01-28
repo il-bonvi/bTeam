@@ -5,10 +5,9 @@
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidgetItem,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QMessageBox, QTextEdit, QGridLayout, QProgressBar
 )
 
@@ -91,15 +90,27 @@ def show_activity_details(parent, storage, activity_id: int, on_download_fit) ->
     
     # Pulsante download FIT (se attività da Intervals)
     if activity.get("source") == "intervals":
-        fit_btn = QPushButton("💾 Scarica FIT")
-        fit_btn.clicked.connect(lambda: on_download_fit(
-            activity_id=activity.get("id"),
-            intervals_id=activity.get("id"),
-            activity_title=activity.get("title"),
-            athlete_name=activity.get("athlete_name"),
-            details_dialog=details_dialog
-        ))
-        buttons_layout.addWidget(fit_btn)
+        # Estrai l'ID remoto da intervals_payload
+        intervals_id = None
+        payload_str = activity.get("intervals_payload")
+        if payload_str:
+            try:
+                payload_list = json.loads(payload_str)
+                if payload_list and len(payload_list) > 0:
+                    intervals_id = payload_list[0].get("id")
+            except Exception:
+                pass
+        
+        if intervals_id:
+            fit_btn = QPushButton("💾 Scarica FIT")
+            fit_btn.clicked.connect(lambda: on_download_fit(
+                activity_id=activity.get("id"),
+                intervals_id=intervals_id,
+                activity_title=activity.get("title"),
+                athlete_name=activity.get("athlete_name"),
+                details_dialog=details_dialog
+            ))
+            buttons_layout.addWidget(fit_btn)
     
     buttons_layout.addStretch()
     
@@ -178,7 +189,7 @@ def download_fit_file(parent, storage, sync_service, activity_id: int, intervals
                 date_obj = datetime.strptime(activity_date_str, "%Y-%m-%d")
             else:
                 date_obj = datetime.now()
-        except:
+        except Exception:
             date_obj = datetime.now()
         
         # Crea struttura cartella
