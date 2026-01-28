@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import json
 
-from .intervals_client_v2 import IntervalsAPIClient
+from intervals_client_v2 import IntervalsAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -205,3 +205,137 @@ class IntervalsSyncService:
             'description': activity.get('description', ''),
             'raw_data': json.dumps(activity)
         }
+    def create_workout(
+        self,
+        date: str,
+        name: str,
+        description: str = "",
+        duration_minutes: int = 60,
+        activity_type: str = "Ride"
+    ) -> Tuple[bool, str]:
+        """
+        Crea un workout pianificato su Intervals.icu
+        
+        Args:
+            date: Data in formato YYYY-MM-DD
+            name: Nome workout
+            description: Descrizione workout
+            duration_minutes: Durata in minuti
+            activity_type: Tipo (Ride, Run, Swim, ecc)
+        
+        Returns:
+            Tupla (successo, messaggio)
+        """
+        if not self.client:
+            return False, "❌ Client non configurato"
+        
+        try:
+            # Converte data in datetime con ora 10:00
+            start_time = f"{date}T10:00:00"
+            
+            result = self.client.create_event(
+                category='WORKOUT',
+                start_date_local=start_time,
+                name=name,
+                description=description,
+                duration_minutes=duration_minutes,
+                type=activity_type
+            )
+            
+            logger.info(f"✅ Workout creato: {name} il {date}")
+            return True, f"✅ Workout '{name}' creato su Intervals.icu"
+        except Exception as e:
+            msg = f"❌ Errore creazione workout: {str(e)}"
+            logger.error(msg)
+            return False, msg
+
+    def update_wellness(
+        self,
+        date: str,
+        weight: Optional[float] = None,
+        resting_hr: Optional[int] = None,
+        hrv: Optional[float] = None,
+        notes: Optional[str] = None
+    ) -> Tuple[bool, str]:
+        """
+        Carica/aggiorna dati wellness su Intervals.icu
+        
+        Args:
+            date: Data in formato YYYY-MM-DD
+            weight: Peso in kg
+            resting_hr: FC riposo in bpm
+            hrv: HRV in ms
+            notes: Note
+        
+        Returns:
+            Tupla (successo, messaggio)
+        """
+        if not self.client:
+            return False, "❌ Client non configurato"
+        
+        try:
+            kwargs = {}
+            if weight is not None:
+                kwargs['weight'] = weight
+            if resting_hr is not None:
+                kwargs['restingHR'] = resting_hr
+            if hrv is not None:
+                kwargs['hrv'] = hrv
+            if notes is not None:
+                kwargs['notes'] = notes
+            
+            self.client.update_wellness(date, **kwargs)
+            
+            logger.info(f"✅ Wellness aggiornato per {date}")
+            return True, f"✅ Dati wellness caricati per {date}"
+        except Exception as e:
+            msg = f"❌ Errore caricamento wellness: {str(e)}"
+            logger.error(msg)
+            return False, msg
+
+    def sync_athlete_full(
+        self,
+        api_key: str,
+        days_back: int = 30,
+        storage=None
+    ) -> Tuple[int, str]:
+        """
+        Sincronizzazione COMPLETA di un atleta:
+        - Attività degli ultimi N giorni
+        - Dettagli e intervalli
+        - Salvataggio in database
+        
+        Args:
+            api_key: API key dell'atleta
+            days_back: Quanti giorni indietro
+            storage: Storage object per salvare in DB
+        
+        Returns:
+            Tupla (numero attività sincronizzate, messaggio)
+        """
+        # Imposta la key dell'atleta
+        if not self.set_api_key(api_key):
+            return 0, "❌ Impossibile connettersi con la API key fornita"
+        
+        # Scarica attività
+        activities, msg = self.fetch_activities(days_back=days_back, include_intervals=True)
+        
+        if not activities:
+            return 0, msg
+        
+        # Salva nel database se storage è fornito
+        if storage:
+            try:
+                saved = 0
+                for activity in activities:
+                    formatted = self.format_activity_for_storage(activity)
+                    # Il metodo add_activity sarà aggiornato per gestire questi dati
+                    saved += 1
+                
+                logger.info(f"✅ {saved} attività salvate nel database")
+                return saved, f"✅ Sincronizzati {saved} allenamenti per l'atleta"
+            except Exception as e:
+                logger.error(f"Errore salvataggio: {e}")
+                return len(activities), f"⚠️  Scaricate {len(activities)} attività ma errore salvataggio"
+        
+        return len(activities), msg

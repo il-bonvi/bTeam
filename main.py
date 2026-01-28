@@ -19,12 +19,14 @@ Uso:
 import sys
 from pathlib import Path
 
-# Aggiungi il path del progetto principale (un livello sopra)
-project_root = Path(__file__).parent.parent
+# Aggiungi il path del progetto (directory corrente)
+project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from PySide6.QtWidgets import QApplication
-from . import BTeamApp
+
+# Import della GUI - fatto dopo che il path è stato configurato
+from gui_bteam import BTeamApp
 
 
 def main():

@@ -23,6 +23,7 @@ zBuilding/
 *.png
 *.bk
 *.json
+*.txt
 
 # bTeam - File sensibili e dati locali
 bTeam/bteam_config.json

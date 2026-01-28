@@ -34,13 +34,16 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDoubleSpinBox,
     QMessageBox,
+    QTabWidget,
+    QSpinBox,
+    QCheckBox,
 )
 
 from shared.styles import get_style
-from .config_bteam import ensure_storage_dir, set_storage_dir, get_intervals_api_key, set_intervals_api_key
-from .intervals_client import IntervalsClient
-from .intervals_sync import IntervalsSyncService
-from .storage_bteam import BTeamStorage
+from config_bteam import ensure_storage_dir, set_storage_dir, get_intervals_api_key, set_intervals_api_key
+from intervals_client import IntervalsClient
+from intervals_sync import IntervalsSyncService
+from storage_bteam import BTeamStorage
 
 
 class BTeamApp(QMainWindow):
@@ -119,13 +122,30 @@ class BTeamApp(QMainWindow):
         btn_add_team.clicked.connect(self._add_team_dialog)
         btn_add_athlete = QPushButton("Aggiungi atleta")
         btn_add_athlete.clicked.connect(self._add_athlete_dialog)
+        btn_delete_athlete = QPushButton("🗑️ Elimina atleta")
+        btn_delete_athlete.clicked.connect(self._delete_athlete)
         btn_add_activity = QPushButton("Aggiungi attività")
         btn_add_activity.clicked.connect(self._add_activity_dialog)
         action_layout.addWidget(btn_add_team)
         action_layout.addWidget(btn_add_athlete)
+        action_layout.addWidget(btn_delete_athlete)
         action_layout.addWidget(btn_add_activity)
         action_layout.addStretch()
         layout.addLayout(action_layout)
+
+        # ===== Tools Toolbar =====
+        tools_layout = QHBoxLayout()
+        btn_wellness = QPushButton("❤️ Tracking Benessere")
+        btn_wellness.clicked.connect(self._wellness_dialog)
+        btn_plan_week = QPushButton("📅 Pianifica Settimana")
+        btn_plan_week.clicked.connect(self._plan_week_dialog)
+        btn_export = QPushButton("💾 Export/Import")
+        btn_export.clicked.connect(self._export_import_dialog)
+        tools_layout.addWidget(btn_wellness)
+        tools_layout.addWidget(btn_plan_week)
+        tools_layout.addWidget(btn_export)
+        tools_layout.addStretch()
+        layout.addLayout(tools_layout)
 
         grid = QGridLayout()
         grid.setSpacing(12)
@@ -275,6 +295,46 @@ class BTeamApp(QMainWindow):
             self._refresh_tables()
             self._refresh_stats()
 
+    def _delete_athlete(self) -> None:
+        """Delete selected athlete after confirmation."""
+        current_row = self.athletes_table.currentRow()
+        if current_row < 0:
+            warning = QDialog(self)
+            warning.setWindowTitle("Seleziona un atleta")
+            layout = QVBoxLayout(warning)
+            layout.addWidget(QLabel("Seleziona un atleta da eliminare"))
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons.accepted.connect(warning.accept)
+            layout.addWidget(buttons)
+            warning.exec()
+            return
+        
+        athlete_id_item = self.athletes_table.item(current_row, 0)
+        first_name_item = self.athletes_table.item(current_row, 1)
+        last_name_item = self.athletes_table.item(current_row, 2)
+        
+        if not athlete_id_item:
+            return
+        
+        athlete_id = int(athlete_id_item.text())
+        first_name = first_name_item.text() if first_name_item else ""
+        last_name = last_name_item.text() if last_name_item else ""
+        
+        # Conferma eliminazione
+        confirm = QDialog(self)
+        confirm.setWindowTitle("Conferma eliminazione")
+        layout = QVBoxLayout(confirm)
+        layout.addWidget(QLabel(f"Eliminare l'atleta {first_name} {last_name}?\nQuesta azione non può essere annullata."))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(confirm.accept)
+        buttons.rejected.connect(confirm.reject)
+        layout.addWidget(buttons)
+        
+        if confirm.exec():
+            self.storage.delete_athlete(athlete_id)
+            self._refresh_tables()
+            self._refresh_stats()
+
     def _add_activity_dialog(self) -> None:
         athletes = self.storage.list_athletes()
         if not athletes:
@@ -358,6 +418,56 @@ class BTeamApp(QMainWindow):
         # Aggiorna tabelle
         self._refresh_tables()
         self._refresh_stats()
+
+    def _wellness_dialog(self) -> None:
+        """Apre il dialog per tracciare dati wellness"""
+        dialog = WellnessDialog(self, self.sync_service)
+        if dialog.exec():
+            values = dialog.values()
+            print(f"[bTeam] Wellness logging: {values}")
+
+    def _plan_week_dialog(self) -> None:
+        """Apre il dialog per pianificare una settimana di allenamenti"""
+        dialog = PlanWeekDialog(self, self.sync_service)
+        if dialog.exec():
+            plan = dialog.get_plan()
+            
+            if not self.sync_service.is_connected():
+                error = QDialog(self)
+                error.setWindowTitle("Errore")
+                layout = QVBoxLayout(error)
+                layout.addWidget(QLabel("Intervals.icu non è connesso. Configura l'API key prima."))
+                buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+                buttons.accepted.connect(error.accept)
+                layout.addWidget(buttons)
+                error.exec()
+                return
+            
+            # Crea i workout
+            created = 0
+            for workout in plan:
+                success, msg = self.sync_service.create_workout(
+                    date=workout['date'],
+                    name=workout['name'],
+                    description=workout['description'],
+                    activity_type=workout['type']
+                )
+                if success:
+                    created += 1
+            
+            result = QDialog(self)
+            result.setWindowTitle("Pianificazione completata")
+            layout = QVBoxLayout(result)
+            layout.addWidget(QLabel(f"✅ {created} allenamenti creati su Intervals.icu"))
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons.accepted.connect(result.accept)
+            layout.addWidget(buttons)
+            result.exec()
+
+    def _export_import_dialog(self) -> None:
+        """Apre il dialog per esportare/importare dati"""
+        dialog = ExportImportDialog(self, self.storage)
+        dialog.exec()
 
     def _choose_storage_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Seleziona cartella dati", str(self.storage_dir))
@@ -933,8 +1043,375 @@ class SyncIntervalsDialog(QDialog):
         return int(self.days_spin.value())
 
 
-if __name__ == "__main__":
-    app = QApplication([])
-    win = BTeamApp()
-    win.show()
-    app.exec()
+class WellnessDialog(QDialog):
+    """Dialog per loggare dati wellness (peso, FC riposo, HRV)"""
+    
+    def __init__(self, parent=None, sync_service=None):
+        super().__init__(parent)
+        self.setWindowTitle("Tracking Benessere")
+        self.setMinimumWidth(500)
+        self.sync_service = sync_service
+        
+        from datetime import date
+        
+        layout = QVBoxLayout(self)
+        
+        # Seleziona data
+        date_layout = QHBoxLayout()
+        date_layout.addWidget(QLabel("Data:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setDate(date.today())
+        self.date_edit.setCalendarPopup(True)
+        date_layout.addWidget(self.date_edit)
+        date_layout.addStretch()
+        layout.addLayout(date_layout)
+        
+        # Peso
+        weight_layout = QHBoxLayout()
+        weight_layout.addWidget(QLabel("Peso (kg):"))
+        self.weight_spin = QDoubleSpinBox()
+        self.weight_spin.setRange(30, 200)
+        self.weight_spin.setDecimals(1)
+        weight_layout.addWidget(self.weight_spin)
+        weight_layout.addStretch()
+        layout.addLayout(weight_layout)
+        
+        # FC Riposo
+        hr_layout = QHBoxLayout()
+        hr_layout.addWidget(QLabel("FC Riposo (bpm):"))
+        self.hr_spin = QSpinBox()
+        self.hr_spin.setRange(30, 120)
+        hr_layout.addWidget(self.hr_spin)
+        hr_layout.addStretch()
+        layout.addLayout(hr_layout)
+        
+        # HRV
+        hrv_layout = QHBoxLayout()
+        hrv_layout.addWidget(QLabel("HRV (ms):"))
+        self.hrv_spin = QDoubleSpinBox()
+        self.hrv_spin.setRange(0, 200)
+        self.hrv_spin.setDecimals(1)
+        hrv_layout.addWidget(self.hrv_spin)
+        hrv_layout.addStretch()
+        layout.addLayout(hrv_layout)
+        
+        # Note
+        layout.addWidget(QLabel("Note (opzionali):"))
+        self.notes_edit = QLineEdit()
+        layout.addWidget(self.notes_edit)
+        
+        # Pulsante sincronizza con Intervals
+        btn_sync = QPushButton("📤 Sincronizza con Intervals.icu")
+        btn_sync.clicked.connect(self._sync_to_intervals)
+        layout.addWidget(btn_sync)
+        
+        layout.addStretch()
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def _sync_to_intervals(self):
+        """Sincronizza i dati con Intervals.icu"""
+        if not self.sync_service or not self.sync_service.is_connected():
+            msg = QDialog(self)
+            msg.setWindowTitle("Errore")
+            layout = QVBoxLayout(msg)
+            layout.addWidget(QLabel("Intervals.icu non è connesso. Configura l'API key prima."))
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons.accepted.connect(msg.accept)
+            layout.addWidget(buttons)
+            msg.exec()
+            return
+        
+        date_str = self.date_edit.date().toString("yyyy-MM-dd")
+        success, result_msg = self.sync_service.update_wellness(
+            date=date_str,
+            weight=self.weight_spin.value() if self.weight_spin.value() > 0 else None,
+            resting_hr=self.hr_spin.value() if self.hr_spin.value() > 0 else None,
+            hrv=self.hrv_spin.value() if self.hrv_spin.value() > 0 else None,
+            notes=self.notes_edit.text() if self.notes_edit.text() else None
+        )
+        
+        result = QDialog(self)
+        result.setWindowTitle("Risultato")
+        layout = QVBoxLayout(result)
+        layout.addWidget(QLabel(result_msg))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(result.accept)
+        layout.addWidget(buttons)
+        result.exec()
+    
+    def values(self):
+        return {
+            'date': self.date_edit.date().toString("yyyy-MM-dd"),
+            'weight': self.weight_spin.value() if self.weight_spin.value() > 0 else None,
+            'resting_hr': self.hr_spin.value() if self.hr_spin.value() > 0 else None,
+            'hrv': self.hrv_spin.value() if self.hrv_spin.value() > 0 else None,
+            'notes': self.notes_edit.text()
+        }
+
+
+class PlanWeekDialog(QDialog):
+    """Dialog per pianificare una settimana di allenamenti"""
+    
+    def __init__(self, parent=None, sync_service=None):
+        super().__init__(parent)
+        self.setWindowTitle("Pianifica Settimana di Allenamenti")
+        self.setMinimumWidth(600)
+        self.sync_service = sync_service
+        
+        from datetime import date, timedelta
+        
+        layout = QVBoxLayout(self)
+        
+        # Data inizio (lunedì)
+        date_layout = QHBoxLayout()
+        date_layout.addWidget(QLabel("Lunedì della settimana:"))
+        self.start_date = QDateEdit()
+        today = date.today()
+        days_ahead = 0 - today.weekday()  # Lunedì scorso
+        if days_ahead <= 0:
+            days_ahead += 7  # Lunedì prossimo
+        next_monday = today + timedelta(days=days_ahead)
+        self.start_date.setDate(next_monday)
+        self.start_date.setCalendarPopup(True)
+        date_layout.addWidget(self.start_date)
+        date_layout.addStretch()
+        layout.addLayout(date_layout)
+        
+        # Preset workouts
+        layout.addWidget(QLabel("Allenamenti settimanali:"))
+        
+        self.workouts = []
+        
+        presets = [
+            {'day': 'Lunedì', 'type': 'Endurance', 'desc': '60m @ 65%'},
+            {'day': 'Mercoledì', 'type': 'VO2 Max', 'desc': '4x5min @ 120%'},
+            {'day': 'Venerdì', 'type': 'Soglia', 'desc': '3x10min @ 95%'},
+            {'day': 'Sabato', 'type': 'Lungo', 'desc': '120m @ 60%'}
+        ]
+        
+        for preset in presets:
+            row_layout = QHBoxLayout()
+            row_layout.addWidget(QLabel(f"{preset['day']}:"))
+            
+            type_combo = QComboBox()
+            type_combo.addItem("Riposo")
+            type_combo.addItem(preset['type'])
+            type_combo.setCurrentIndex(1)
+            row_layout.addWidget(type_combo)
+            
+            desc_edit = QLineEdit()
+            desc_edit.setText(preset['desc'])
+            row_layout.addWidget(desc_edit)
+            
+            checkbox = QCheckBox("Abilitato")
+            checkbox.setChecked(True)
+            row_layout.addWidget(checkbox)
+            
+            self.workouts.append({
+                'day': preset['day'],
+                'combo': type_combo,
+                'desc': desc_edit,
+                'enabled': checkbox
+            })
+            
+            layout.addLayout(row_layout)
+        
+        layout.addStretch()
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def get_plan(self):
+        start_date = self.start_date.date()
+        plan = []
+        
+        for i, workout in enumerate(self.workouts):
+            if not workout['enabled'].isChecked():
+                continue
+            
+            from datetime import timedelta
+            workout_date = start_date.addDays(i * 2)  # Lunedì, Mercoledì, Venerdì, Sabato
+            
+            plan.append({
+                'date': workout_date.toString("yyyy-MM-dd"),
+                'name': workout['combo'].currentText(),
+                'description': workout['desc'].text(),
+                'type': 'Ride'
+            })
+        
+        return plan
+
+
+class ExportImportDialog(QDialog):
+    """Dialog per esportare/importare dati"""
+    
+    def __init__(self, parent=None, storage=None):
+        super().__init__(parent)
+        self.setWindowTitle("Export / Import Dati")
+        self.setMinimumWidth(500)
+        self.storage = storage
+        
+        layout = QVBoxLayout(self)
+        
+        # Tabs
+        tabs = QTabWidget()
+        
+        # ===== EXPORT TAB =====
+        export_layout = QVBoxLayout()
+        
+        export_layout.addWidget(QLabel("Seleziona cosa esportare:"))
+        
+        self.export_athletes = QCheckBox("Atleti")
+        self.export_athletes.setChecked(True)
+        export_layout.addWidget(self.export_athletes)
+        
+        self.export_activities = QCheckBox("Attività")
+        self.export_activities.setChecked(True)
+        export_layout.addWidget(self.export_activities)
+        
+        self.export_wellness = QCheckBox("Dati Wellness")
+        export_layout.addWidget(self.export_wellness)
+        
+        export_format_layout = QHBoxLayout()
+        export_format_layout.addWidget(QLabel("Formato:"))
+        self.export_format = QComboBox()
+        self.export_format.addItem("CSV")
+        self.export_format.addItem("JSON")
+        export_format_layout.addWidget(self.export_format)
+        export_format_layout.addStretch()
+        export_layout.addLayout(export_format_layout)
+        
+        btn_export = QPushButton("💾 Esporta Dati")
+        btn_export.clicked.connect(self._do_export)
+        export_layout.addWidget(btn_export)
+        
+        export_layout.addStretch()
+        
+        export_widget = QWidget()
+        export_widget.setLayout(export_layout)
+        tabs.addTab(export_widget, "Export")
+        
+        # ===== IMPORT TAB =====
+        import_layout = QVBoxLayout()
+        
+        import_layout.addWidget(QLabel("Importa dati da file:"))
+        
+        file_layout = QHBoxLayout()
+        self.import_file_label = QLineEdit()
+        self.import_file_label.setReadOnly(True)
+        file_layout.addWidget(self.import_file_label)
+        btn_browse = QPushButton("Sfoglia...")
+        btn_browse.clicked.connect(self._browse_import_file)
+        file_layout.addWidget(btn_browse)
+        import_layout.addLayout(file_layout)
+        
+        import_layout.addWidget(QLabel("Merge mode (mantieni dati esistenti):"))
+        self.import_merge = QCheckBox("Sì, unisci con i dati esistenti")
+        self.import_merge.setChecked(True)
+        import_layout.addWidget(self.import_merge)
+        
+        btn_import = QPushButton("📂 Importa Dati")
+        btn_import.clicked.connect(self._do_import)
+        import_layout.addWidget(btn_import)
+        
+        import_layout.addStretch()
+        
+        import_widget = QWidget()
+        import_widget.setLayout(import_layout)
+        tabs.addTab(import_widget, "Import")
+        
+        layout.addWidget(tabs)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def _browse_import_file(self):
+        from pathlib import Path
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleziona file da importare",
+            str(Path.home()),
+            "CSV (*.csv);;JSON (*.json);;Tutti (*.*)"
+        )
+        if file_path:
+            self.import_file_label.setText(file_path)
+    
+    def _do_export(self):
+        from pathlib import Path
+        from datetime import datetime
+        import csv
+        import json
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        format_ext = "csv" if self.export_format.currentText() == "CSV" else "json"
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salva esportazione",
+            str(Path.home() / f"bteam_export_{timestamp}.{format_ext}"),
+            f"{format_ext.upper()} (*.{format_ext})"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            data = {}
+            
+            if self.export_athletes.isChecked():
+                data['athletes'] = self.storage.list_athletes()
+            
+            if self.export_activities.isChecked():
+                data['activities'] = self.storage.list_activities()
+            
+            if self.export_format.currentText() == "JSON":
+                with open(file_path, 'w') as f:
+                    json.dump(data, f, indent=2, default=str)
+            else:  # CSV
+                # Semplice export CSV degli atleti
+                if 'athletes' in data:
+                    with open(file_path, 'w', newline='') as f:
+                        if data['athletes']:
+                            writer = csv.DictWriter(f, fieldnames=data['athletes'][0].keys())
+                            writer.writeheader()
+                            writer.writerows(data['athletes'])
+            
+            msg = QDialog(self)
+            msg.setWindowTitle("Successo")
+            layout = QVBoxLayout(msg)
+            layout.addWidget(QLabel(f"✅ Dati esportati in:\n{file_path}"))
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons.accepted.connect(msg.accept)
+            layout.addWidget(buttons)
+            msg.exec()
+        except Exception as e:
+            msg = QDialog(self)
+            msg.setWindowTitle("Errore")
+            layout = QVBoxLayout(msg)
+            layout.addWidget(QLabel(f"❌ Errore export: {str(e)}"))
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+            buttons.accepted.connect(msg.accept)
+            layout.addWidget(buttons)
+            msg.exec()
+    
+    def _do_import(self):
+        msg = QDialog(self)
+        msg.setWindowTitle("Info")
+        layout = QVBoxLayout(msg)
+        layout.addWidget(QLabel("Funzionalità import in sviluppo"))
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(msg.accept)
+        layout.addWidget(buttons)
+        msg.exec()
+
+
