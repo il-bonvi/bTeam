@@ -48,11 +48,21 @@ def build_details_tab(race_data: dict, storage: BTeamStorage) -> tuple[QWidget, 
     
     gender_layout.addWidget(QLabel("Categoria:"))
     controls['category_combo'] = QComboBox()
+    # Inizializza subito le categorie in base al genere corrente
+    update_categories(controls['gender_combo'], controls['category_combo'])
+    
+    # Applica l'eventuale categoria salvata, altrimenti usa un default
     saved_category = race_data.get("category", "")
     if saved_category:
         idx = controls['category_combo'].findText(saved_category)
         if idx >= 0:
             controls['category_combo'].setCurrentIndex(idx)
+        elif controls['category_combo'].count() > 0:
+            controls['category_combo'].setCurrentIndex(0)
+    else:
+        if controls['category_combo'].count() > 0:
+            controls['category_combo'].setCurrentIndex(0)
+    
     controls['gender_combo'].currentIndexChanged.connect(
         lambda: update_categories(controls['gender_combo'], controls['category_combo'])
     )
