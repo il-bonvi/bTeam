@@ -85,7 +85,7 @@ FILES_CREATED = {
     
     "API_GUIDE.md": {
         "descrizione": "Riferimento API completo",
-        "sezioni": 8,
+        "sezioni": 10,
         "features": [
             "✓ Setup e autenticazione",
             "✓ Activities endpoints",
@@ -93,7 +93,9 @@ FILES_CREATED = {
             "✓ Calendar/Events endpoints",
             "✓ Athlete endpoints",
             "✓ Analytics endpoints",
+            "✓ Workout Library endpoints",
             "✓ Esempi pratici",
+            "✓ Note importanti",
             "✓ Helper functions"
         ]
     }
