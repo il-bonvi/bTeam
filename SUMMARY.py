@@ -209,7 +209,7 @@ CHECKS = {
     "Documentation": {
         "User Guide": "✓ INTERVALS_GUIDE.md",
         "API Reference": "✓ API_GUIDE.md",
-        "Quick Start": "✓ QUICKSTART.py",
+        "Quick Start": "✓ INTERVALS_GUIDE.md (Quick Start section)",
         "Examples": "✓ test_intervals_proto.py",
         "API Docs": "✓ Docstrings"
     }
