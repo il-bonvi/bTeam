@@ -122,6 +122,9 @@ class RaceCreateDialog(QDialog):
         buttons_layout.addWidget(create_btn)
         buttons_layout.addWidget(cancel_btn)
         layout.addLayout(buttons_layout)
+        
+        # Aggiorna le previsioni iniziali
+        self._update_predictions()
     
     def _update_predictions(self) -> None:
         """Aggiorna le previsioni di durata e KJ"""
@@ -198,7 +201,7 @@ class RaceCreateDialog(QDialog):
             predicted_kj = 0
         
         try:
-            race_id = self.storage.add_race(
+            self.storage.add_race(
                 name=name,
                 race_date=race_date,
                 gender=gender,
