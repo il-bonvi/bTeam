@@ -4,12 +4,11 @@
 # ===============================================================================
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDialogButtonBox,
-    QMessageBox
+    QDialog, QVBoxLayout, QLabel, QLineEdit, QDialogButtonBox
 )
 
 
-def show_add_team_dialog(parent, storage) -> None:
+def show_add_team_dialog(parent, storage) -> bool:
     """Dialog per aggiungere una nuova squadra"""
     dialog = QDialog(parent)
     dialog.setWindowTitle("Nuova squadra")
