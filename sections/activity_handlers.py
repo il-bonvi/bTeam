@@ -213,9 +213,20 @@ def download_fit_file(parent, storage, sync_service, activity_id: int, intervals
         from datetime import datetime as dt
         file_size_kb = len(fit_content) / 1024
         now = dt.utcnow().isoformat()
+        file_path_rel = str(fit_path.relative_to(storage.storage_dir))
         storage.session.execute(
-            f"""INSERT INTO fit_files (activity_id, file_path, file_size_kb, downloaded_at, intervals_id, created_at)
-               VALUES ({activity_id}, '{fit_path.relative_to(storage.storage_dir)}', {file_size_kb}, '{now}', '{intervals_id}', '{now}')"""
+            """
+            INSERT INTO fit_files (activity_id, file_path, file_size_kb, downloaded_at, intervals_id, created_at)
+            VALUES (:activity_id, :file_path, :file_size_kb, :downloaded_at, :intervals_id, :created_at)
+            """,
+            {
+                "activity_id": activity_id,
+                "file_path": file_path_rel,
+                "file_size_kb": file_size_kb,
+                "downloaded_at": now,
+                "intervals_id": intervals_id,
+                "created_at": now,
+            },
         )
         storage.session.commit()
         
