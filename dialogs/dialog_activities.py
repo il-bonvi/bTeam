@@ -36,7 +36,7 @@ class SimpleActivityDialog(QDialog):
 
         self.athlete_combo = QComboBox()
         for ath in athletes:
-            full_name = f"{ath.get('first_name', '')} {ath.get('last_name', '')}".strip()
+            full_name = f"{ath.get('last_name', '')} {ath.get('first_name', '')}".strip()
             # Fallback to other identifiers if name is empty
             display_name = full_name or ath.get("name") or f"ID {ath.get('id')}" or "Unknown"
             self.athlete_combo.addItem(display_name, ath["id"])

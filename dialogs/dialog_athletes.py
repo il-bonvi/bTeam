@@ -63,7 +63,7 @@ class AthleteDetailsDialog(QDialog):
     
     def __init__(self, parent=None, athlete=None, storage=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Dettagli atleta: {athlete.get('first_name', '')} {athlete.get('last_name', '')}")
+        self.setWindowTitle(f"Dettagli atleta: {athlete.get('last_name', '')} {athlete.get('first_name', '')}")
         self.setMinimumWidth(600)
         self.setMinimumHeight(700)
         self.athlete_id = athlete.get("id")

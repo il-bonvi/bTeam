@@ -168,6 +168,8 @@ class RaceAthlete(Base):
     id = Column(Integer, primary_key=True)
     race_id = Column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False)
     athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    kj_per_hour_per_kg = Column(Float, default=10.0)  # Default 10 kJ/h/kg
+    objective = Column(String(1), default="C")  # A, B, C (default C)
     joined_at = Column(String(255), nullable=False)
 
     race = relationship("Race", back_populates="athletes_assoc")
@@ -178,7 +180,9 @@ class RaceAthlete(Base):
             "id": self.id,
             "race_id": self.race_id,
             "athlete_id": self.athlete_id,
-            "athlete_name": f"{self.athlete.first_name} {self.athlete.last_name}" if self.athlete else "Unknown",
+            "athlete_name": f"{self.athlete.last_name} {self.athlete.first_name}" if self.athlete else "Unknown",
+            "kj_per_hour_per_kg": self.kj_per_hour_per_kg,
+            "objective": self.objective,
             "joined_at": self.joined_at,
         }
 
@@ -204,7 +208,7 @@ class Race(Base):
     athletes_assoc = relationship("RaceAthlete", back_populates="race", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict:
-        athletes = [{"id": ra.athlete_id, "name": f"{ra.athlete.first_name} {ra.athlete.last_name}"} for ra in self.athletes_assoc]
+        athletes = [{"id": ra.athlete_id, "name": f"{ra.athlete.last_name} {ra.athlete.first_name}"} for ra in self.athletes_assoc]
         return {
             "id": self.id,
             "name": self.name,
@@ -311,7 +315,7 @@ class BTeamStorage:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'kj_per_hour_per_kg': {e}")
             
-            # Check if races table exists and if it has old athlete_id column
+            # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
             races_exists = cursor.fetchone() is not None
             if races_exists:
@@ -338,6 +342,31 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
+            
+            # Get existing columns in race_athletes table
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_athletes'")
+            race_athletes_exists = cursor.fetchone() is not None
+            if race_athletes_exists:
+                cursor.execute("PRAGMA table_info(race_athletes)")
+                race_athletes_cols = {row[1] for row in cursor.fetchall()}
+                
+                # Add kj_per_hour_per_kg if missing
+                if "kj_per_hour_per_kg" not in race_athletes_cols:
+                    try:
+                        cursor.execute("ALTER TABLE race_athletes ADD COLUMN kj_per_hour_per_kg REAL DEFAULT 10.0")
+                        print(f"[bTeam] Colonna 'kj_per_hour_per_kg' aggiunta alla tabella race_athletes")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'kj_per_hour_per_kg': {e}")
+                
+                # Add objective if missing
+                if "objective" not in race_athletes_cols:
+                    try:
+                        cursor.execute("ALTER TABLE race_athletes ADD COLUMN objective TEXT DEFAULT 'C'")
+                        print(f"[bTeam] Colonna 'objective' aggiunta alla tabella race_athletes")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'objective': {e}")
             
             conn.commit()
             conn.close()
@@ -655,8 +684,8 @@ class BTeamStorage:
             print(f"[bTeam] Errore aggiornamento gara: {e}")
             return False
 
-    def add_athlete_to_race(self, race_id: int, athlete_id: int) -> bool:
-        """Add an athlete to a race."""
+    def add_athlete_to_race(self, race_id: int, athlete_id: int, objective: str = "C", kj_per_hour_per_kg: float = 10.0) -> bool:
+        """Add an athlete to a race with objective and kJ/h/kg parameters."""
         try:
             # Check if already exists
             existing = self.session.query(RaceAthlete).filter(
@@ -669,6 +698,8 @@ class BTeamStorage:
             race_athlete = RaceAthlete(
                 race_id=race_id,
                 athlete_id=athlete_id,
+                objective=objective,
+                kj_per_hour_per_kg=kj_per_hour_per_kg,
                 joined_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             )
             self.session.add(race_athlete)

@@ -42,7 +42,7 @@ class IntervalsDialog(QDialog):
 
         self.athlete_combo = QComboBox()
         for ath in athletes:
-            full_name = f"{ath.get('first_name', '')} {ath.get('last_name', '')}".strip()
+            full_name = f"{ath.get('last_name', '')} {ath.get('first_name', '')}".strip()
             self.athlete_combo.addItem(full_name, ath["id"])
 
         layout.addWidget(QLabel("API Key"))
@@ -110,7 +110,7 @@ class SyncIntervalsDialog(QDialog):
         if storage:
             athletes = storage.list_athletes()
             for ath in athletes:
-                full_name = f"{ath.get('first_name', '')} {ath.get('last_name', '')}".strip()
+                full_name = f"{ath.get('last_name', '')} {ath.get('first_name', '')}".strip()
                 self.athlete_combo.addItem(full_name, ath["id"])
         
         if self.athlete_combo.count() == 0:

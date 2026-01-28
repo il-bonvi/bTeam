@@ -83,7 +83,7 @@ class BTeamApp(QMainWindow):
         
         print(f"[bTeam] Cartella dati: {self.storage_dir}")
         print(f"[bTeam] Database: {self.storage_dir / 'bteam.db'}")
-        print(f"[bTeam] Intervals.icu: {'✓ Connesso' if self.sync_service.is_connected() else '✗ Non connesso'}")
+        print(f"[bTeam] Intervals.icu: {'[OK] Connesso' if self.sync_service.is_connected() else '[NO] Non connesso'}")
 
         self._build_ui()
         self._refresh_tables()
@@ -173,8 +173,8 @@ class BTeamApp(QMainWindow):
         grid = QGridLayout()
         grid.setSpacing(12)
 
-        self.athletes_table = QTableWidget(0, 5)
-        self.athletes_table.setHorizontalHeaderLabels(["ID", "Nome", "Cognome", "Squadra", "Note"])
+        self.athletes_table = QTableWidget(0, 4)
+        self.athletes_table.setHorizontalHeaderLabels(["ID", "Rider", "Squadra", "Note"])
         self.athletes_table.horizontalHeader().setStretchLastSection(True)
         self.athletes_table.itemDoubleClicked.connect(self._edit_athlete)
         grid.addWidget(QLabel("Atleti"), 0, 0)
@@ -260,10 +260,11 @@ class BTeamApp(QMainWindow):
         self.athletes_table.setRowCount(len(athletes))
         for row_idx, athlete in enumerate(athletes):
             self.athletes_table.setItem(row_idx, 0, QTableWidgetItem(str(athlete["id"])))
-            self.athletes_table.setItem(row_idx, 1, QTableWidgetItem(athlete.get("first_name", "")))
-            self.athletes_table.setItem(row_idx, 2, QTableWidgetItem(athlete.get("last_name", "")))
-            self.athletes_table.setItem(row_idx, 3, QTableWidgetItem(athlete.get("team_name", "")))
-            self.athletes_table.setItem(row_idx, 4, QTableWidgetItem(athlete.get("notes", "")))
+            # Colonna Rider: Cognome Nome
+            rider_name = f"{athlete.get('last_name', '')} {athlete.get('first_name', '')}"
+            self.athletes_table.setItem(row_idx, 1, QTableWidgetItem(rider_name))
+            self.athletes_table.setItem(row_idx, 2, QTableWidgetItem(athlete.get("team_name", "")))
+            self.athletes_table.setItem(row_idx, 3, QTableWidgetItem(athlete.get("notes", "")))
 
         # Ricarica la tabella attività con ordinamento personalizzato
         self._refresh_activities_table()
@@ -552,7 +553,7 @@ class BTeamApp(QMainWindow):
                 layout.addWidget(buttons)
                 warning.exec()
                 return
-            print(f"[bTeam] Inserimento atleta: {first_name} {last_name}, squadra: {team_id}")
+            print(f"[bTeam] Inserimento atleta: {last_name} {first_name}, squadra: {team_id}")
             athlete_id = self.storage.add_athlete(first_name=first_name, last_name=last_name, team_id=team_id)
             print(f"[bTeam] Atleta creato con ID: {athlete_id}")
             self._refresh_tables()
@@ -608,21 +609,23 @@ class BTeamApp(QMainWindow):
             return
         
         athlete_id_item = self.athletes_table.item(current_row, 0)
-        first_name_item = self.athletes_table.item(current_row, 1)
-        last_name_item = self.athletes_table.item(current_row, 2)
+        rider_name_item = self.athletes_table.item(current_row, 1)
         
-        if not athlete_id_item:
+        if not athlete_id_item or not rider_name_item:
             return
         
         athlete_id = int(athlete_id_item.text())
-        first_name = first_name_item.text() if first_name_item else ""
-        last_name = last_name_item.text() if last_name_item else ""
+        # Rider name è "Cognome Nome", lo splitto
+        rider_name = rider_name_item.text()
+        name_parts = rider_name.split(' ', 1)
+        last_name = name_parts[0] if len(name_parts) > 0 else ""
+        first_name = name_parts[1] if len(name_parts) > 1 else ""
         
         # Conferma eliminazione
         confirm = QDialog(self)
         confirm.setWindowTitle("Conferma eliminazione")
         layout = QVBoxLayout(confirm)
-        layout.addWidget(QLabel(f"Eliminare l'atleta {first_name} {last_name}?\nQuesta azione non può essere annullata."))
+        layout.addWidget(QLabel(f"Eliminare l'atleta {last_name} {first_name}?\nQuesta azione non può essere annullata."))
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(confirm.accept)
         buttons.rejected.connect(confirm.reject)
