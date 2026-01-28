@@ -1,0 +1,170 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║                                                                        ║
+║                   🚀 bTEAM - STANDALONE APPLICATION                  ║
+║                                                                        ║
+║         Tutto quello che serve è contenuto in questa cartella         ║
+║      Puoi copiarla altrove e usarla completamente in autonomia       ║
+║                                                                        ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════════════════════
+🎯 AVVIO VELOCE
+════════════════════════════════════════════════════════════════════════════
+
+Windows:        Doppio click su run.bat
+PowerShell:     .\run.ps1
+Python:         python main.py
+
+════════════════════════════════════════════════════════════════════════════
+📁 STRUTTURA CARTELLA
+════════════════════════════════════════════════════════════════════════════
+
+🚀 LAUNCHER (Scegli uno):
+   • main.py           - Entry point Python
+   • run.bat           - Launcher batch Windows (più semplice)
+   • run.ps1           - Launcher PowerShell
+
+📦 APPLICAZIONE PRINCIPALE:
+   • gui_bteam.py      - Interfaccia grafica bTeam
+   • storage_bteam.py  - Database e storage
+   • config_bteam.py   - Configurazione
+
+🔗 INTEGRAZIONE INTERVALS.ICU:
+   • intervals_sync.py      - Servizio sincronizzazione
+   • intervals_client_v2.py - Client API (40+ metodi)
+   • intervals_models.py    - Modelli Pydantic
+
+⚙️ CONFIGURAZIONE:
+   • bteam_config.json - Config file (auto-creato)
+   • __init__.py       - Package initialization
+
+🧪 TESTING:
+   • test_intervals_proto.py - Test suite Intervals
+
+📚 DOCUMENTAZIONE:
+   • README.md              - Quick start
+   • INTERVALS_INTEGRATION.md - Guida Intervals
+   • PROTOTYPE_STATUS.md    - Dettagli tecnici
+   • COMPLETION_REPORT.txt  - Report completamento
+   • README_INTERVALS.md    - Guida completa Intervals
+   • QUICKSTART.py          - Setup rapido
+   • SUMMARY.py             - Riepilogo statistiche
+
+📂 RIFERIMENTI:
+   • INFO/              - Documentazione Intervals originale
+
+════════════════════════════════════════════════════════════════════════════
+✨ CARATTERISTICHE
+════════════════════════════════════════════════════════════════════════════
+
+✓ Dashboard squadra (team management)
+✓ Gestione atleti e attività
+✓ Integrazione Intervals.icu per sincronizzazione attività
+✓ Database SQLite locale
+✓ Interfaccia grafica con temi personalizzabili
+✓ API key management sicuro
+
+════════════════════════════════════════════════════════════════════════════
+🔄 FUNZIONALITÀ INTERVALS.ICU
+════════════════════════════════════════════════════════════════════════════
+
+✓ Lettura attività da Intervals.icu
+✓ Lettura dati atleta
+✓ Lettura wellness data
+✓ Power curve analytics
+✓ Sincronizzazione nel database bTeam
+✓ Test connessione API
+
+════════════════════════════════════════════════════════════════════════════
+📋 COME USARE
+════════════════════════════════════════════════════════════════════════════
+
+1. AVVIO SEMPLICE
+   Windows:   Doppio click run.bat
+   Altrove:   python main.py
+
+2. CONFIGURAZIONE INIZIALE
+   • Aggiungi squadre
+   • Aggiungi atleti
+   • Imposta API key Intervals.icu
+
+3. SINCRONIZZAZIONE ATTIVITÀ
+   • Clicca "🔄 Sincronizza Intervals"
+   • Incolla API key
+   • Seleziona atleta
+   • Importa attività
+
+════════════════════════════════════════════════════════════════════════════
+💡 COPIA-INCOLLA ALTROVE
+════════════════════════════════════════════════════════════════════════════
+
+1. Copia intera cartella bTeam
+2. Naviga nella cartella
+3. Esegui: run.bat  (o main.py / run.ps1)
+4. bTeam si avvia automaticamente
+
+NON hai bisogno di:
+  ✗ Launcher principale (main.py del progetto)
+  ✗ Altri moduli (PEFFORT, MetaboPower, ecc.)
+  ✗ Configurazioni di sistema
+  ✗ Dipendenze esterne (oltre a quelle in requirements.txt)
+
+════════════════════════════════════════════════════════════════════════════
+🛠️ DIPENDENZE RICHIESTE
+════════════════════════════════════════════════════════════════════════════
+
+Assicurati di avere installato:
+  • Python 3.8+
+  • PySide6
+  • SQLAlchemy
+  • requests
+  • pydantic
+
+Installa con: pip install -r ../requirements.txt
+
+════════════════════════════════════════════════════════════════════════════
+📚 DOCUMENTAZIONE
+════════════════════════════════════════════════════════════════════════════
+
+Leggi per dettagli:
+
+Uso base:
+  → README.md
+
+Integrazione Intervals.icu:
+  → INTERVALS_INTEGRATION.md
+  → README_INTERVALS.md
+
+Dettagli tecnici:
+  → PROTOTYPE_STATUS.md
+  → COMPLETION_REPORT.txt
+
+Statistiche:
+  → SUMMARY.py (esegui: python SUMMARY.py)
+
+════════════════════════════════════════════════════════════════════════════
+✅ VERIFICHE
+════════════════════════════════════════════════════════════════════════════
+
+[✓] Tutti i file presenti
+[✓] Syntax check completato
+[✓] Import test passed
+[✓] Launcher funzionante
+[✓] Database ready
+[✓] Intervals.icu integration complete
+
+════════════════════════════════════════════════════════════════════════════
+🚀 READY TO USE!
+════════════════════════════════════════════════════════════════════════════
+
+Digita:
+  • python main.py              (Windows/Mac/Linux)
+  • run.bat                      (Windows)
+  • .\run.ps1                    (PowerShell)
+
+E bTeam si avvia istantaneamente!
+
+════════════════════════════════════════════════════════════════════════════
+Data: 2026-01-28
+Status: ✅ Production Ready - Standalone
+════════════════════════════════════════════════════════════════════════════

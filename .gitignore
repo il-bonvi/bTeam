@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyx
+
+# Ambienti virtuali
+venv/
+env/
+
+# File di sistema e IDE
+.vscode/
+.DS_Store
+
+# Script batch di Windows
+*.bat
+
+# File 
+zBuilding/
+*.xlsx
+*.csv
+*.fit
+*.png
+*.bk
+*.json
+
+# bTeam - File sensibili e dati locali
+bTeam/bteam_config.json
+bTeam/bteam.db
+bTeam/bteam_data/
+Database/
+INFO/
+
+# Environment variables e credenziali (IMPORTANTE!)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
