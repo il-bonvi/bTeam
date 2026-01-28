@@ -186,14 +186,17 @@ class IntervalsSyncService:
             Attività nel formato bTeam
         """
         # Helper function to safely get and validate numeric values
-        def safe_numeric(value, default=0):
+        def safe_numeric(value, field_name='field', default=0):
             """Safely convert to numeric, ensuring non-negative values"""
             if value is None:
                 return default
             try:
                 num = float(value)
+                if num < 0:
+                    logger.warning(f"Valore negativo rilevato per {field_name}: {num}. Convertito a 0.")
                 return max(0, num)  # Ensure non-negative
             except (ValueError, TypeError):
+                logger.warning(f"Valore non numerico per {field_name}: {value}. Usando default {default}.")
                 return default
         
         return {
@@ -201,10 +204,10 @@ class IntervalsSyncService:
             'name': activity.get('name', 'Unknown'),
             'type': activity.get('type', 'Other'),
             'start_date': activity.get('start_date_local'),
-            'distance_km': safe_numeric(activity.get('distance')) / 1000,
-            'moving_time_minutes': safe_numeric(activity.get('moving_time')) / 60,
-            'elapsed_time_minutes': safe_numeric(activity.get('elapsed_time')) / 60,
-            'elevation_m': safe_numeric(activity.get('total_elevation_gain')),
+            'distance_km': safe_numeric(activity.get('distance'), 'distance') / 1000,
+            'moving_time_minutes': safe_numeric(activity.get('moving_time'), 'moving_time') / 60,
+            'elapsed_time_minutes': safe_numeric(activity.get('elapsed_time'), 'elapsed_time') / 60,
+            'elevation_m': safe_numeric(activity.get('total_elevation_gain'), 'elevation'),
             'avg_watts': activity.get('average_watts'),
             'normalized_watts': activity.get('normalized_watts'),
             'avg_hr': activity.get('average_heartrate'),
@@ -250,7 +253,7 @@ class IntervalsSyncService:
                 name=name,
                 description=description,
                 duration_minutes=duration_minutes,
-                type=activity_type
+                activity_type=activity_type
             )
             
             logger.info(f"✅ Workout creato: {name} il {date}")

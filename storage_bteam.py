@@ -293,19 +293,31 @@ class BTeamStorage:
         return {"athletes": athletes_count, "activities": activities_count}
 
     def close(self) -> None:
-        """Close database session and connections."""
+        """
+        Close database session and connections.
+        
+        This method should be called explicitly when done with the storage object,
+        or use the storage object as a context manager with 'with' statement.
+        """
         if hasattr(self, 'session') and self.session:
             try:
                 self.session.close()
             except Exception as e:
+                # Log error but don't raise during cleanup
                 print(f"[bTeam] Errore chiusura sessione: {e}")
         
         if hasattr(self, 'engine') and self.engine:
             try:
                 self.engine.dispose()
             except Exception as e:
+                # Log error but don't raise during cleanup
                 print(f"[bTeam] Errore chiusura engine: {e}")
     
-    def __del__(self):
-        """Cleanup when object is destroyed."""
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
         self.close()
+        return False  # Don't suppress exceptions

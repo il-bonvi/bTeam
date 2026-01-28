@@ -113,13 +113,13 @@ class IntervalsAPIClient:
             error_msg = f"HTTP {e.response.status_code} error: {e}"
             if hasattr(e.response, 'text'):
                 error_msg += f" - {e.response.text[:200]}"
-            raise requests.exceptions.HTTPError(error_msg, response=e.response)
+            raise requests.exceptions.HTTPError(error_msg, response=e.response) from e
         except requests.exceptions.ConnectionError as e:
-            raise requests.exceptions.ConnectionError(f"Errore di connessione a {url}: {e}")
+            raise requests.exceptions.ConnectionError(f"Errore di connessione a {url}: {e}") from e
         except requests.exceptions.Timeout as e:
-            raise requests.exceptions.Timeout(f"Timeout nella richiesta a {url}: {e}")
+            raise requests.exceptions.Timeout(f"Timeout nella richiesta a {url}: {e}") from e
         except requests.exceptions.RequestException as e:
-            raise requests.exceptions.RequestException(f"Errore nella richiesta: {e}")
+            raise requests.exceptions.RequestException(f"Errore nella richiesta: {e}") from e
     
     # ========== ACTIVITIES ==========
     
@@ -229,7 +229,7 @@ class IntervalsAPIClient:
         athlete_id: str = '0',
         name: Optional[str] = None,
         description: Optional[str] = None,
-        type: Optional[str] = None,
+        activity_type: Optional[str] = None,
         external_id: Optional[str] = None
     ) -> Dict:
         """
@@ -240,7 +240,7 @@ class IntervalsAPIClient:
             athlete_id: ID atleta ('0' = corrente)
             name: Nome attività (opzionale)
             description: Descrizione (opzionale)
-            type: Tipo attività (opzionale)
+            activity_type: Tipo attività (opzionale)
             external_id: ID esterno per tracking (opzionale)
         
         Returns:
@@ -248,15 +248,15 @@ class IntervalsAPIClient:
             
         Raises:
             FileNotFoundError: Se il file non esiste
-            IOError: Se il file non può essere letto
+            OSError: Se il file non può essere letto
         """
         params = {}
         if name:
             params['name'] = name
         if description:
             params['description'] = description
-        if type:
-            params['type'] = type
+        if activity_type:
+            params['type'] = activity_type
         if external_id:
             params['external_id'] = external_id
         
@@ -271,10 +271,10 @@ class IntervalsAPIClient:
                 )
             
             return response.json()
-        except FileNotFoundError:
-            raise FileNotFoundError(f"File non trovato: {file_path}")
-        except IOError as e:
-            raise IOError(f"Errore lettura file {file_path}: {e}")
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"File non trovato: {file_path}") from e
+        except OSError as e:
+            raise OSError(f"Errore lettura file {file_path}: {e}") from e
     
     def update_activity(
         self,
@@ -424,7 +424,7 @@ class IntervalsAPIClient:
         name: str = None,
         description: str = None,
         duration_minutes: Optional[int] = None,
-        type: Optional[str] = None,
+        activity_type: Optional[str] = None,
         notes: Optional[str] = None,
         **kwargs
     ) -> Dict:
@@ -434,17 +434,23 @@ class IntervalsAPIClient:
         Args:
             athlete_id: ID atleta ('0' = corrente)
             category: Categoria evento (WORKOUT, NOTE, ecc)
-            start_date_local: Data/ora locale (YYYY-MM-DDTHH:MM:SS)
+            start_date_local: Data/ora locale (YYYY-MM-DDTHH:MM:SS) - REQUIRED
             name: Nome evento
             description: Descrizione workout
             duration_minutes: Durata in minuti
-            type: Tipo attività (Ride, Run, Swim, ecc)
+            activity_type: Tipo attività (Ride, Run, Swim, ecc)
             notes: Note aggiuntive
             **kwargs: Altri campi opzionali
         
         Returns:
             Evento creato
+            
+        Raises:
+            ValueError: Se start_date_local non è fornito
         """
+        if not start_date_local:
+            raise ValueError("start_date_local è obbligatorio per creare un evento")
+        
         data = {
             'category': category,
             'start_date_local': start_date_local,
@@ -456,8 +462,8 @@ class IntervalsAPIClient:
             data['description'] = description
         if duration_minutes is not None:
             data['duration_minutes'] = duration_minutes
-        if type:
-            data['type'] = type
+        if activity_type:
+            data['type'] = activity_type
         if notes:
             data['notes'] = notes
         
