@@ -77,7 +77,15 @@ class IntervalsAPIClient:
         data: Any = None,
         files: Optional[Dict] = None
     ) -> requests.Response:
-        """Esegue una richiesta HTTP gestendo errori"""
+        """
+        Esegue una richiesta HTTP gestendo errori
+        
+        Raises:
+            requests.exceptions.HTTPError: Per errori HTTP (4xx, 5xx)
+            requests.exceptions.ConnectionError: Per errori di connessione
+            requests.exceptions.Timeout: Per timeout
+            requests.exceptions.RequestException: Per altri errori
+        """
         url = f"{self.base_url}{endpoint}"
         
         # Per upload file non usiamo Content-Type
@@ -85,19 +93,43 @@ class IntervalsAPIClient:
         if files:
             headers.pop('Content-Type', None)
         
-        response = requests.request(
-            method=method,
-            url=url,
-            params=params,
-            json=json,
-            data=data,
-            files=files,
-            headers=headers,
-            auth=self.auth
-        )
-        
-        response.raise_for_status()
-        return response
+        try:
+            response = requests.request(
+                method=method,
+                url=url,
+                params=params,
+                json=json,
+                data=data,
+                files=files,
+                headers=headers,
+                auth=self.auth,
+                timeout=30  # Timeout di 30 secondi
+            )
+            
+            response.raise_for_status()
+            return response
+        except requests.exceptions.HTTPError as e:
+            # Arricchisci il messaggio mantenendo l'eccezione originale (e.request / e.response)
+            error_msg = f"HTTP {e.response.status_code} error: {e}"
+            if hasattr(e.response, 'text'):
+                error_msg += f" - {e.response.text[:200]}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
+        except requests.exceptions.ConnectionError as e:
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Errore di connessione a {url}: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
+        except requests.exceptions.Timeout as e:
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Timeout nella richiesta a {url}: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
+        except requests.exceptions.RequestException as e:
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Errore nella richiesta: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
     
     # ========== ACTIVITIES ==========
     
@@ -150,7 +182,8 @@ class IntervalsAPIClient:
         Returns:
             Dati attività completi
         """
-        params = {'intervals': str(include_intervals).lower()}
+        # Convert boolean to lowercase string for API
+        params = {'intervals': 'true' if include_intervals else 'false'}
         response = self._request('GET', f'/api/v1/activity/{activity_id}', params=params)
         return response.json()
     
@@ -206,7 +239,7 @@ class IntervalsAPIClient:
         athlete_id: str = '0',
         name: Optional[str] = None,
         description: Optional[str] = None,
-        type: Optional[str] = None,
+        activity_type: Optional[str] = None,
         external_id: Optional[str] = None
     ) -> Dict:
         """
@@ -217,32 +250,41 @@ class IntervalsAPIClient:
             athlete_id: ID atleta ('0' = corrente)
             name: Nome attività (opzionale)
             description: Descrizione (opzionale)
-            type: Tipo attività (opzionale)
+            activity_type: Tipo attività (opzionale)
             external_id: ID esterno per tracking (opzionale)
         
         Returns:
             Dati attività creata
+            
+        Raises:
+            FileNotFoundError: Se il file non esiste
+            OSError: Se il file non può essere letto
         """
         params = {}
         if name:
             params['name'] = name
         if description:
             params['description'] = description
-        if type:
-            params['type'] = type
+        if activity_type:
+            params['type'] = activity_type
         if external_id:
             params['external_id'] = external_id
         
-        with open(file_path, 'rb') as f:
-            files = {'file': f}
-            response = self._request(
-                'POST',
-                f'/api/v1/athlete/{athlete_id}/activities',
-                params=params,
-                files=files
-            )
-        
-        return response.json()
+        try:
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                response = self._request(
+                    'POST',
+                    f'/api/v1/athlete/{athlete_id}/activities',
+                    params=params,
+                    files=files
+                )
+            
+            return response.json()
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"File non trovato: {file_path}") from e
+        except OSError as e:
+            raise OSError(f"Errore lettura file {file_path}: {e}") from e
     
     def update_activity(
         self,
@@ -382,6 +424,63 @@ class IntervalsAPIClient:
         
         params = {'oldest': oldest, 'newest': newest}
         response = self._request('GET', f'/api/v1/athlete/{athlete_id}/events', params=params)
+        return response.json()
+    
+    def create_event(
+        self,
+        athlete_id: str = '0',
+        category: str = 'WORKOUT',
+        start_date_local: str = None,
+        name: str = None,
+        description: str = None,
+        duration_minutes: Optional[int] = None,
+        activity_type: Optional[str] = None,
+        notes: Optional[str] = None,
+        **kwargs
+    ) -> Dict:
+        """
+        Crea un evento/workout pianificato
+        
+        Args:
+            athlete_id: ID atleta ('0' = corrente)
+            category: Categoria evento (WORKOUT, NOTE, ecc)
+            start_date_local: Data/ora locale (YYYY-MM-DDTHH:MM:SS) - REQUIRED
+            name: Nome evento
+            description: Descrizione workout
+            duration_minutes: Durata in minuti
+            activity_type: Tipo attività (Ride, Run, Swim, ecc)
+            notes: Note aggiuntive
+            **kwargs: Altri campi opzionali
+        
+        Returns:
+            Evento creato
+            
+        Raises:
+            ValueError: Se start_date_local non è fornito
+        """
+        if not start_date_local:
+            raise ValueError("start_date_local è obbligatorio per creare un evento")
+        
+        data = {
+            'category': category,
+            'start_date_local': start_date_local,
+        }
+        
+        if name:
+            data['name'] = name
+        if description:
+            data['description'] = description
+        if duration_minutes is not None:
+            data['duration_minutes'] = duration_minutes
+        if activity_type:
+            data['type'] = activity_type
+        if notes:
+            data['notes'] = notes
+        
+        # Aggiungi eventuali altri parametri
+        data.update(kwargs)
+        
+        response = self._request('POST', f'/api/v1/athlete/{athlete_id}/events', json=data)
         return response.json()
     
     def get_athlete(self, athlete_id: str = '0') -> Dict:

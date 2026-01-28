@@ -132,7 +132,7 @@ class BTeamStorage:
                 if cols and "name" in cols:
                     print("[bTeam] Schema obsoleto rilevato, eliminazione database...")
                     self.db_path.unlink()
-            except Exception as e:
+            except (sqlite3.Error, OSError) as e:
                 print(f"[bTeam] Errore check schema: {e}")
                 try:
                     self.db_path.unlink()
@@ -293,5 +293,31 @@ class BTeamStorage:
         return {"athletes": athletes_count, "activities": activities_count}
 
     def close(self) -> None:
-        """Close the database session."""
-        self.session.close()
+        """
+        Close database session and connections.
+        
+        This method should be called explicitly when done with the storage object,
+        or use the storage object as a context manager with 'with' statement.
+        """
+        if hasattr(self, 'session') and self.session:
+            try:
+                self.session.close()
+            except Exception as e:
+                # Log error but don't raise during cleanup
+                print(f"[bTeam] Errore chiusura sessione: {e}")
+        
+        if hasattr(self, 'engine') and self.engine:
+            try:
+                self.engine.dispose()
+            except Exception as e:
+                # Log error but don't raise during cleanup
+                print(f"[bTeam] Errore chiusura engine: {e}")
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup."""
+        self.close()
+        return False  # Don't suppress exceptions
