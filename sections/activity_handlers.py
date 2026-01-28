@@ -79,8 +79,8 @@ def show_activity_details(parent, storage, activity_id: int, on_download_fit) ->
         payload_text.setMaximumHeight(150)
         try:
             payload_data = json.loads(activity.get("intervals_payload"))
-            payload_text.setPlainText(json.dumps(payload_data, indent=2, ensure_ascii=False))
-        except:
+            payload_text.setPlainText(json.dumps(payload_data, indent=2, indent=2, ensure_ascii=False))
+        except Exception:
             payload_text.setPlainText(activity.get("intervals_payload", ""))
         layout.addWidget(payload_text)
     
