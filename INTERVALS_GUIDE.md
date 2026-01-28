@@ -62,7 +62,7 @@ Intervals.icu API
 ## 🧪 Testing
 
 ```bash
-cd /home/runner/work/bTeam/bTeam
+cd bTeam
 export INTERVALS_API_KEY='tua_chiave'
 python test_intervals_proto.py
 ```
