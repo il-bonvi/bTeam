@@ -67,28 +67,36 @@ FILES_CREATED = {
         ]
     },
     
-    "INTERVALS_INTEGRATION.md": {
-        "descrizione": "Guida utente completa",
+    "INTERVALS_GUIDE.md": {
+        "descrizione": "Guida completa integrazione Intervals.icu",
         "sezioni": 10,
         "features": [
-            "✓ How-to setup",
-            "✓ Uso dell'app",
+            "✓ Quick Start",
+            "✓ Componenti",
             "✓ Dati sincronizzati",
-            "✓ Troubleshooting",
+            "✓ Testing",
+            "✓ Esempi pratici",
             "✓ Sicurezza",
-            "✓ Roadmap"
+            "✓ Roadmap",
+            "✓ Troubleshooting",
+            "✓ FAQ"
         ]
     },
     
-    "PROTOTYPE_STATUS.md": {
-        "descrizione": "Dettagli implementazione tecnici",
-        "sezioni": 15,
+    "API_GUIDE.md": {
+        "descrizione": "Riferimento API completo",
+        "sezioni": 10,
         "features": [
-            "✓ Architettura",
-            "✓ API endpoints",
-            "✓ Workflow",
-            "✓ Checklist",
-            "✓ Testing guide"
+            "✓ Setup e autenticazione",
+            "✓ Activities endpoints",
+            "✓ Wellness endpoints",
+            "✓ Calendar/Events endpoints",
+            "✓ Athlete endpoints",
+            "✓ Analytics endpoints",
+            "✓ Workout Library endpoints",
+            "✓ Esempi pratici",
+            "✓ Note importanti",
+            "✓ Helper functions"
         ]
     }
 }
@@ -201,9 +209,9 @@ CHECKS = {
     },
     
     "Documentation": {
-        "User Guide": "✓ INTERVALS_INTEGRATION.md",
-        "Tech Docs": "✓ PROTOTYPE_STATUS.md",
-        "Quick Start": "✓ QUICKSTART.py",
+        "User Guide": "✓ INTERVALS_GUIDE.md",
+        "API Reference": "✓ API_GUIDE.md",
+        "Quick Start": "✓ INTERVALS_GUIDE.md (Quick Start section)",
         "Examples": "✓ test_intervals_proto.py",
         "API Docs": "✓ Docstrings"
     }
@@ -267,7 +275,7 @@ STATS = {
     "Metodi API": 40,
     "Modelli Pydantic": 8,
     "Test cases": 7,
-    "Documentazione": "3 file MD + docstrings",
+    "Documentazione": "2 file MD consolidati + docstrings",
     "Tempo sviluppo": "< 2 ore",
     "Prototipo funzionante": "✅ Sì"
 }
