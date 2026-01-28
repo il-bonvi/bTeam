@@ -78,5 +78,12 @@ python test_intervals_proto.py
 
 ---
 
+## 📚 Documentazione
+
+- **[INTERVALS_GUIDE.md](INTERVALS_GUIDE.md)** - Guida completa integrazione Intervals.icu
+- **[API_GUIDE.md](API_GUIDE.md)** - Riferimento API completo
+
+---
+
 **Created**: 2026-01-28  
 **Status**: ✅ Standalone Ready
