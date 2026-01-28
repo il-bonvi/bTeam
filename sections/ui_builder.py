@@ -6,9 +6,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QTableWidget, QWidget
 
-from shared.styles import get_style
-
-
 def build_header(storage_dir) -> QVBoxLayout:
     """Costruisce la sezione header con titolo e cartella dati"""
     layout = QVBoxLayout()
