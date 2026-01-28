@@ -109,17 +109,27 @@ class IntervalsAPIClient:
             response.raise_for_status()
             return response
         except requests.exceptions.HTTPError as e:
-            # Log l'errore HTTP con dettagli
+            # Arricchisci il messaggio mantenendo l'eccezione originale (e.request / e.response)
             error_msg = f"HTTP {e.response.status_code} error: {e}"
             if hasattr(e.response, 'text'):
                 error_msg += f" - {e.response.text[:200]}"
-            raise requests.exceptions.HTTPError(error_msg, response=e.response) from e
+            e.args = (error_msg,) + e.args[1:]
+            raise
         except requests.exceptions.ConnectionError as e:
-            raise requests.exceptions.ConnectionError(f"Errore di connessione a {url}: {e}") from e
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Errore di connessione a {url}: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
         except requests.exceptions.Timeout as e:
-            raise requests.exceptions.Timeout(f"Timeout nella richiesta a {url}: {e}") from e
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Timeout nella richiesta a {url}: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
         except requests.exceptions.RequestException as e:
-            raise requests.exceptions.RequestException(f"Errore nella richiesta: {e}") from e
+            # Mantieni il tipo e gli attributi originali, ma arricchisci il messaggio
+            error_msg = f"Errore nella richiesta: {e}"
+            e.args = (error_msg,) + e.args[1:]
+            raise
     
     # ========== ACTIVITIES ==========
     
