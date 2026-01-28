@@ -201,5 +201,22 @@ def on_remove_rider(storage: BTeamStorage, race_id: int, athlete_id: int,
 
 
 def update_riders_kj_total(riders_table: QTableWidget, riders_kj_total) -> None:
-    """Aggiorna il totale KJ"""
-    riders_kj_total.setText("--")
+    """Aggiorna il totale KJ in base ai valori kJ/h/kg presenti in tabella."""
+    total_kj_per_h_per_kg = 0.0
+    for row_idx in range(riders_table.rowCount()):
+        item = riders_table.item(row_idx, 2)  # colonna "kJ/h/kg"
+        if item is None:
+            continue
+        text = item.text().strip()
+        if not text:
+            continue
+        try:
+            value = float(text.replace(",", "."))
+        except ValueError:
+            continue
+        total_kj_per_h_per_kg += value
+
+    if total_kj_per_h_per_kg > 0:
+        riders_kj_total.setText(f"{total_kj_per_h_per_kg:.1f}")
+    else:
+        riders_kj_total.setText("--")
