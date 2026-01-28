@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Dict, Optional
 
 CONFIG_FILE = Path(__file__).resolve().parent / "bteam_config.json"
-DEFAULT_STORAGE_DIR = Path("H:/bFactor Project/bTeam")
+# Use cross-platform path: user home directory instead of Windows-specific drive
+DEFAULT_STORAGE_DIR = Path.home() / "bTeam"
 
 
 def load_config() -> Dict[str, str]:

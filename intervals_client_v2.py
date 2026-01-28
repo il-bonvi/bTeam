@@ -77,7 +77,15 @@ class IntervalsAPIClient:
         data: Any = None,
         files: Optional[Dict] = None
     ) -> requests.Response:
-        """Esegue una richiesta HTTP gestendo errori"""
+        """
+        Esegue una richiesta HTTP gestendo errori
+        
+        Raises:
+            requests.exceptions.HTTPError: Per errori HTTP (4xx, 5xx)
+            requests.exceptions.ConnectionError: Per errori di connessione
+            requests.exceptions.Timeout: Per timeout
+            requests.exceptions.RequestException: Per altri errori
+        """
         url = f"{self.base_url}{endpoint}"
         
         # Per upload file non usiamo Content-Type
@@ -85,19 +93,33 @@ class IntervalsAPIClient:
         if files:
             headers.pop('Content-Type', None)
         
-        response = requests.request(
-            method=method,
-            url=url,
-            params=params,
-            json=json,
-            data=data,
-            files=files,
-            headers=headers,
-            auth=self.auth
-        )
-        
-        response.raise_for_status()
-        return response
+        try:
+            response = requests.request(
+                method=method,
+                url=url,
+                params=params,
+                json=json,
+                data=data,
+                files=files,
+                headers=headers,
+                auth=self.auth,
+                timeout=30  # Timeout di 30 secondi
+            )
+            
+            response.raise_for_status()
+            return response
+        except requests.exceptions.HTTPError as e:
+            # Log l'errore HTTP con dettagli
+            error_msg = f"HTTP {e.response.status_code} error: {e}"
+            if hasattr(e.response, 'text'):
+                error_msg += f" - {e.response.text[:200]}"
+            raise requests.exceptions.HTTPError(error_msg, response=e.response)
+        except requests.exceptions.ConnectionError as e:
+            raise requests.exceptions.ConnectionError(f"Errore di connessione a {url}: {e}")
+        except requests.exceptions.Timeout as e:
+            raise requests.exceptions.Timeout(f"Timeout nella richiesta a {url}: {e}")
+        except requests.exceptions.RequestException as e:
+            raise requests.exceptions.RequestException(f"Errore nella richiesta: {e}")
     
     # ========== ACTIVITIES ==========
     
@@ -150,7 +172,8 @@ class IntervalsAPIClient:
         Returns:
             Dati attività completi
         """
-        params = {'intervals': str(include_intervals).lower()}
+        # Convert boolean to lowercase string for API
+        params = {'intervals': 'true' if include_intervals else 'false'}
         response = self._request('GET', f'/api/v1/activity/{activity_id}', params=params)
         return response.json()
     
@@ -222,6 +245,10 @@ class IntervalsAPIClient:
         
         Returns:
             Dati attività creata
+            
+        Raises:
+            FileNotFoundError: Se il file non esiste
+            IOError: Se il file non può essere letto
         """
         params = {}
         if name:
@@ -233,16 +260,21 @@ class IntervalsAPIClient:
         if external_id:
             params['external_id'] = external_id
         
-        with open(file_path, 'rb') as f:
-            files = {'file': f}
-            response = self._request(
-                'POST',
-                f'/api/v1/athlete/{athlete_id}/activities',
-                params=params,
-                files=files
-            )
-        
-        return response.json()
+        try:
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                response = self._request(
+                    'POST',
+                    f'/api/v1/athlete/{athlete_id}/activities',
+                    params=params,
+                    files=files
+                )
+            
+            return response.json()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File non trovato: {file_path}")
+        except IOError as e:
+            raise IOError(f"Errore lettura file {file_path}: {e}")
     
     def update_activity(
         self,
@@ -382,6 +414,57 @@ class IntervalsAPIClient:
         
         params = {'oldest': oldest, 'newest': newest}
         response = self._request('GET', f'/api/v1/athlete/{athlete_id}/events', params=params)
+        return response.json()
+    
+    def create_event(
+        self,
+        athlete_id: str = '0',
+        category: str = 'WORKOUT',
+        start_date_local: str = None,
+        name: str = None,
+        description: str = None,
+        duration_minutes: Optional[int] = None,
+        type: Optional[str] = None,
+        notes: Optional[str] = None,
+        **kwargs
+    ) -> Dict:
+        """
+        Crea un evento/workout pianificato
+        
+        Args:
+            athlete_id: ID atleta ('0' = corrente)
+            category: Categoria evento (WORKOUT, NOTE, ecc)
+            start_date_local: Data/ora locale (YYYY-MM-DDTHH:MM:SS)
+            name: Nome evento
+            description: Descrizione workout
+            duration_minutes: Durata in minuti
+            type: Tipo attività (Ride, Run, Swim, ecc)
+            notes: Note aggiuntive
+            **kwargs: Altri campi opzionali
+        
+        Returns:
+            Evento creato
+        """
+        data = {
+            'category': category,
+            'start_date_local': start_date_local,
+        }
+        
+        if name:
+            data['name'] = name
+        if description:
+            data['description'] = description
+        if duration_minutes is not None:
+            data['duration_minutes'] = duration_minutes
+        if type:
+            data['type'] = type
+        if notes:
+            data['notes'] = notes
+        
+        # Aggiungi eventuali altri parametri
+        data.update(kwargs)
+        
+        response = self._request('POST', f'/api/v1/athlete/{athlete_id}/events', json=data)
         return response.json()
     
     def get_athlete(self, athlete_id: str = '0') -> Dict:

@@ -522,7 +522,8 @@ class SimpleActivityDialog(QDialog):
 
         self.athlete_combo = QComboBox()
         for ath in athletes:
-            self.athlete_combo.addItem(ath["name"], ath["id"])
+            full_name = f"{ath.get('first_name', '')} {ath.get('last_name', '')}".strip()
+            self.athlete_combo.addItem(full_name, ath["id"])
 
         self.title_edit = QLineEdit()
         self.title_edit.setText("Allenamento")
@@ -650,7 +651,7 @@ class AthleteDetailsDialog(QDialog):
         self.birth_date_edit = QDateEdit()
         self.birth_date_edit.setCalendarPopup(True)
         if athlete.get("birth_date"):
-            self.birth_date_edit.setDate(__import__('datetime').datetime.fromisoformat(athlete["birth_date"]).date())
+            self.birth_date_edit.setDate(datetime.fromisoformat(athlete["birth_date"]).date())
 
         self.weight_spin = QDoubleSpinBox()
         self.weight_spin.setRange(0, 300)
