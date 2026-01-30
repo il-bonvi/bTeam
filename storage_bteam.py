@@ -277,7 +277,13 @@ class Race(Base):
     athletes_assoc = relationship("RaceAthlete", back_populates="race", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict:
-        athletes = [{"id": ra.athlete_id, "name": f"{ra.athlete.last_name} {ra.athlete.first_name}"} for ra in self.athletes_assoc]
+        athletes = [
+            {
+                "id": ra.athlete_id,
+                "name": f"{ra.athlete.last_name} {ra.athlete.first_name}" if ra.athlete else f"[Deleted Athlete #{ra.athlete_id}]"
+            }
+            for ra in self.athletes_assoc
+        ]
         return {
             "id": self.id,
             "name": self.name,

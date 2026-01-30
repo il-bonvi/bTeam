@@ -45,9 +45,9 @@ def main():
     bteam = BTeamApp(theme=theme)
     bteam.showMaximized()
     
-    print(f"\n🚀 bTeam avviato (standalone)")
-    print(f"   Tema: {theme}")
-    print(f"   Finestra massimizzata\n")
+    print(f"\n[*] bTeam avviato (standalone)")
+    print(f"    Tema: {theme}")
+    print(f"    Finestra massimizzata\n")
     
     # Run
     sys.exit(app.exec())
