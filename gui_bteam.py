@@ -382,6 +382,7 @@ class BTeamApp(QMainWindow):
                 cp=values["cp"],
                 w_prime=values["w_prime"],
                 api_key=values["api_key"],
+                kj_per_hour_per_kg=values["kj_per_hour_per_kg"],
                 notes=values["notes"]
             )
             self._refresh_tables()

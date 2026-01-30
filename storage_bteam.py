@@ -48,7 +48,7 @@ class Athlete(Base):
     height_cm = Column(Float, nullable=True)
     cp = Column(Float, nullable=True)
     w_prime = Column(Float, nullable=True)
-    kj_per_hour_per_kg = Column(Float, default=1.0)  # KJ/h/kg per calcoli gare
+    kj_per_hour_per_kg = Column(Float, default=10.0)  # KJ/h/kg per calcoli gare
     api_key = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(String(255), nullable=False)
@@ -309,7 +309,7 @@ class BTeamStorage:
             # Add kj_per_hour_per_kg to athletes if missing
             if "kj_per_hour_per_kg" not in athletes_cols:
                 try:
-                    cursor.execute("ALTER TABLE athletes ADD COLUMN kj_per_hour_per_kg REAL DEFAULT 1.0")
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN kj_per_hour_per_kg REAL DEFAULT 10.0")
                     print(f"[bTeam] Colonna 'kj_per_hour_per_kg' aggiunta alla tabella athletes")
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():

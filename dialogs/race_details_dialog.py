@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QTabWidget
 )
 from storage_bteam import BTeamStorage
+from config_bteam import get_intervals_api_key, set_intervals_api_key
+from intervals_client_v2 import IntervalsAPIClient
 
 
 class RaceDetailsDialog(QDialog):
@@ -83,6 +86,11 @@ class RaceDetailsDialog(QDialog):
         
         # Bottoni
         buttons_layout = QHBoxLayout()
+        
+        sync_btn = QPushButton("🔄 Sync Race")
+        sync_btn.setStyleSheet("background-color: #3b82f6; color: white; font-weight: bold; padding: 8px;")
+        sync_btn.clicked.connect(self._sync_race_to_intervals)
+        
         save_btn = QPushButton("✓ Salva")
         save_btn.setStyleSheet("background-color: #4ade80; color: black; font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(self._save_changes)
@@ -91,6 +99,7 @@ class RaceDetailsDialog(QDialog):
         cancel_btn.clicked.connect(self.reject)
         
         buttons_layout.addStretch()
+        buttons_layout.addWidget(sync_btn)
         buttons_layout.addWidget(save_btn)
         buttons_layout.addWidget(cancel_btn)
         layout.addLayout(buttons_layout)
@@ -149,3 +158,128 @@ class RaceDetailsDialog(QDialog):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Errore", f"Errore nel salvataggio: {str(e)}")
+    
+    def _sync_race_to_intervals(self) -> None:
+        """Fa il push della gara su Intervals.icu"""
+        try:
+            # Prova a recuperare API key da un atleta
+            api_key = None
+            athlete_id_for_intervals = None
+            athletes = self.storage.list_athletes()
+            
+            for athlete in athletes:
+                if athlete.get("api_key"):
+                    api_key = athlete["api_key"]
+                    athlete_id_for_intervals = athlete.get("intervals_id") or "0"
+                    break
+            
+            # Se non c'è API key negli atleti, offri di configurarla
+            if not api_key:
+                reply = QMessageBox.question(
+                    self,
+                    "API Key non trovata",
+                    "Nessun atleta ha una API key configurata.\n\n"
+                    "Vuoi configurarla ora?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                
+                if reply == QMessageBox.Yes:
+                    # Apri dialog per inserire API key
+                    self._configure_api_key()
+                    # Riprova dopo configurazione
+                    athletes = self.storage.list_athletes()
+                    for athlete in athletes:
+                        if athlete.get("api_key"):
+                            api_key = athlete["api_key"]
+                            break
+                
+                if not api_key:
+                    QMessageBox.warning(
+                        self,
+                        "API Key mancante",
+                        "Configurazione annullata o non salvata.\n"
+                        "Vai ai Dettagli di un atleta e aggiungi l'API key per Intervals.icu."
+                    )
+                    return
+            
+            # Recupera dati dalla UI
+            name = self.details_controls['name_edit'].text().strip()
+            race_date_str = self.details_controls['date_edit'].date().toString("yyyy-MM-dd")
+            distance_km = self.details_controls['distance_spin'].value()
+            speed_kmh = self.details_controls['speed_spin'].value()
+            
+            duration_minutes = (distance_km / speed_kmh) * 60 if speed_kmh > 0 else 0
+            
+            # La classe viene dall'obiettivo di ogni atleta nei riders
+            # Leggi i riders della gara per trovare l'obiettivo
+            riders = self.storage.get_race_athletes(self.race_id) or []
+            
+            # Per adesso, usa la classe del primo rider trovato (può essere esteso per sincronizzare tutti)
+            athlete_classe = "C"  # Default
+            if riders:
+                # Prendi l'obiettivo dal primo rider
+                athlete_classe = riders[0].get("objective", "C") or "C"
+            
+            # Crea il client Intervals
+            client = IntervalsAPIClient(api_key=api_key)
+            
+            # Prepara il timestamp in formato ISO (solo data, no ora)
+            start_date_local = f"{race_date_str}T00:00:00"
+            duration_seconds = int(duration_minutes * 60)
+            from datetime import datetime, timedelta
+            start_dt = datetime.fromisoformat(start_date_local)
+            end_dt = start_dt + timedelta(seconds=duration_seconds)
+            end_date_local = end_dt.isoformat()
+            
+            # Push su Intervals
+            print(f"[bTeam] Push race: {name} il {race_date_str}")
+            print(f"[bTeam] Distanza: {distance_km}km, Durata: {duration_minutes:.0f}m")
+            
+            # Map classe atleta a categoria Intervals
+            classe_map = {
+                "A": "RACE_A",
+                "B": "RACE_B",
+                "C": "RACE_C",
+            }
+            
+            intervals_category = classe_map.get(athlete_classe, "RACE_C")
+            
+            result = client.create_event(
+                athlete_id=athlete_id_for_intervals,
+                category=intervals_category,
+                start_date_local=start_date_local,
+                end_date_local=end_date_local,
+                name=name,
+                activity_type='Ride',
+                distance=distance_km * 1000,  # Converti km → metri
+                moving_time=int(duration_seconds),
+                notes=f"{intervals_category.replace('RACE_', '')} Race"
+            )
+            
+            print(f"[bTeam] Push completato: {result}")
+            QMessageBox.information(
+                self, 
+                "✓ Sync completato", 
+                f"Gara '{name}' pushata su Intervals.icu il {race_date_str}"
+            )
+            
+        except Exception as e:
+            print(f"[bTeam] Errore sync race: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Errore", f"Errore nel sync: {str(e)}")
+    
+    def _configure_api_key(self) -> None:
+        """Dialog per configurare la API key di Intervals"""
+        from dialogs import IntervalsDialog
+        
+        dialog = IntervalsDialog(self, athletes=[])
+        if dialog.exec():
+            api_key, _ = dialog.values()
+            if api_key:
+                from config_bteam import set_intervals_api_key
+                set_intervals_api_key(api_key)
+                QMessageBox.information(self, "✓ Configurato", "API key salvata!")
+                print(f"[bTeam] API key configurata")
+
+

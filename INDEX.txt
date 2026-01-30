@@ -40,14 +40,17 @@ Python:         python main.py
 
 🧪 TESTING:
    • test_intervals_proto.py - Test suite Intervals
+   • test_push_race.py       - Test push race functionality (NUOVO!)
 
 📚 DOCUMENTAZIONE:
-   • README.md              - Quick start
-   • INTERVALS_INTEGRATION.md - Guida Intervals
-   • PROTOTYPE_STATUS.md    - Dettagli tecnici
-   • COMPLETION_REPORT.txt  - Report completamento
-   • README_INTERVALS.md    - Guida completa Intervals
-   • QUICKSTART.py          - Setup rapido
+   • README.md                     - Quick start
+   • INTERVALS_GUIDE.md            - Guida Intervals (AGGIORNATO!)
+   • PUSH_RACE_GUIDE.md            - Guida Push Race (NUOVO!)
+   • API_GUIDE.md                  - Riferimento API
+   • DATA_STRATEGY.md              - Strategia dati
+   • PROTOTYPE_STATUS.md           - Dettagli tecnici
+   • COMPLETION_REPORT.txt         - Report completamento
+   • SUMMARY.py                    - Riepilogo statistiche
    • SUMMARY.py             - Riepilogo statistiche
 
 📂 RIFERIMENTI:

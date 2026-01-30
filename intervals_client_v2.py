@@ -431,9 +431,12 @@ class IntervalsAPIClient:
         athlete_id: str = '0',
         category: str = 'WORKOUT',
         start_date_local: str = None,
+        end_date_local: str = None,
         name: str = None,
         description: str = None,
         duration_minutes: Optional[int] = None,
+        distance: Optional[float] = None,
+        moving_time: Optional[int] = None,
         activity_type: Optional[str] = None,
         notes: Optional[str] = None,
         **kwargs
@@ -443,11 +446,14 @@ class IntervalsAPIClient:
         
         Args:
             athlete_id: ID atleta ('0' = corrente)
-            category: Categoria evento (WORKOUT, NOTE, ecc)
+            category: Categoria evento (WORKOUT, NOTE, PLAN, RACE_A, RACE_B, RACE_C)
             start_date_local: Data/ora locale (YYYY-MM-DDTHH:MM:SS) - REQUIRED
+            end_date_local: Data/ora fine locale
             name: Nome evento
             description: Descrizione workout
             duration_minutes: Durata in minuti
+            distance: Distanza (km)
+            moving_time: Tempo movimento (secondi)
             activity_type: Tipo attività (Ride, Run, Swim, ecc)
             notes: Note aggiuntive
             **kwargs: Altri campi opzionali
@@ -466,12 +472,18 @@ class IntervalsAPIClient:
             'start_date_local': start_date_local,
         }
         
+        if end_date_local:
+            data['end_date_local'] = end_date_local
         if name:
             data['name'] = name
         if description:
             data['description'] = description
         if duration_minutes is not None:
             data['duration_minutes'] = duration_minutes
+        if distance is not None:
+            data['distance'] = distance
+        if moving_time is not None:
+            data['moving_time'] = moving_time
         if activity_type:
             data['type'] = activity_type
         if notes:

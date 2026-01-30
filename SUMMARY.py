@@ -124,6 +124,17 @@ FILES_UPDATED = {
             "+ _perform_sync() method",
             "+ Preview attività prima dell'import"
         ]
+    },
+    
+    "dialogs/race_details_dialog.py": {
+        "aggiunte": [
+            "+ Bottone '🔄 Sync Race'",
+            "+ _sync_race_to_intervals() method",
+            "+ Push gara su Intervals.icu",
+            "+ Mapping categoria A/B/C Race",
+            "+ Calcolo durata da distanza/velocità",
+            "= Phase 2: Scrittura dati iniziato!"
+        ]
     }
 }
 
@@ -244,7 +255,12 @@ ROADMAP = {
             "□ Update feel/notes",
             "□ Wellness sync",
             "□ Bidirezionale",
-            "□ GUI upload dialog"
+            "□ GUI upload dialog",
+            "□ Push race",
+            "□ Analisi MMP",
+            "□ Analisi test",
+            "□ Load analisi del sangue",
+            "□ Designer settimanale (per ultimo)"
         ],
         "durata_stimata": "3-5 giorni",
         "prerequisiti": "Phase 1 ✓"

@@ -125,11 +125,43 @@ storage.add_activity(
 - [ ] Update feel/notes
 - [ ] Wellness sync
 - [ ] Sync bidirezionale
+- [x] **Push race** ← IMPLEMENTATO!
+- [ ] Analisi MMP
+- [ ] Analisi test
+- [ ] Load analisi del sangue
+- [ ] Designer settimanale (per ultimo)
 
 ### Phase 3: Multi-Atleta OAuth ⏳ FUTURA
 - [ ] OAuth 2.0 flow
 - [ ] Token management
 - [ ] Multi-account support
+
+## 🏁 Push Race (NUOVO!)
+
+### Come pushare una gara su Intervals.icu
+
+1. **Accedi a "Gestione Gare"** dal menu principale
+2. **Doppio clic sulla gara** per aprire i dettagli
+3. **Controlla i parametri**:
+   - Nome gara
+   - Data della gara
+   - Distanza (km)
+   - Velocità media (km/h)
+   - Categoria (A/B/C Race)
+4. **Clicca il bottone "🔄 Sync Race"**
+5. **Conferma il push**
+
+La gara sarà creata su Intervals.icu come:
+- **Evento pianificato** (RACE)
+- **Tipo di attività**: Ride
+- **Data**: giorno della gara alle 10:00
+- **Durata**: calcolata da distanza e velocità
+- **Categoria**: A/B/C Race (salvata nelle note)
+
+### Mapping Categorie
+- A Race → Categoria A su Intervals
+- B Race → Categoria B su Intervals
+- C Race → Categoria C su Intervals
 
 ## 🐛 Troubleshooting
 
