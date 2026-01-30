@@ -144,6 +144,11 @@ class AthleteDetailsDialog(QDialog):
         if athlete.get("height_cm"):
             self.height_spin.setValue(athlete["height_cm"])
 
+        self.gender_combo = QComboBox()
+        self.gender_combo.addItems(["", "Femminile", "Maschile"])
+        self.gender_combo.setCurrentText(athlete.get("gender", ""))
+        self.gender_combo.currentTextChanged.connect(self._on_gender_changed)
+
         self.cp_spin = QDoubleSpinBox()
         self.cp_spin.setRange(0, 1000)
         self.cp_spin.setDecimals(0)
@@ -180,7 +185,9 @@ class AthleteDetailsDialog(QDialog):
         if athlete.get("kj_per_hour_per_kg"):
             self.kj_per_hour_per_kg_spin.setValue(athlete["kj_per_hour_per_kg"])
         else:
-            self.kj_per_hour_per_kg_spin.setValue(10.0)
+            # Default based on gender: 10 for women, 15 for men
+            default_kj = 10.0 if athlete.get("gender") == "Femminile" else (15.0 if athlete.get("gender") == "Maschile" else 10.0)
+            self.kj_per_hour_per_kg_spin.setValue(default_kj)
 
         data_layout.addWidget(QLabel("Data di nascita (opzionale)"))
         data_layout.addWidget(self.birth_date_edit)
@@ -188,6 +195,8 @@ class AthleteDetailsDialog(QDialog):
         data_layout.addWidget(self.weight_spin)
         data_layout.addWidget(QLabel("Altezza (cm) - opzionale"))
         data_layout.addWidget(self.height_spin)
+        data_layout.addWidget(QLabel("Genere - opzionale"))
+        data_layout.addWidget(self.gender_combo)
         
         # CP row with label and eCP comparison
         cp_row = QHBoxLayout()
@@ -215,6 +224,14 @@ class AthleteDetailsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _on_gender_changed(self):
+        """Update kJ/h/kg default based on gender selection"""
+        gender = self.gender_combo.currentText()
+        if gender == "Femminile":
+            self.kj_per_hour_per_kg_spin.setValue(10.0)
+        elif gender == "Maschile":
+            self.kj_per_hour_per_kg_spin.setValue(15.0)
 
     def _check_available_workouts(self):
         api_key = self.api_key_edit.text().strip()
@@ -549,6 +566,7 @@ class AthleteDetailsDialog(QDialog):
             "birth_date": self.birth_date_edit.date().toString("yyyy-MM-dd"),
             "weight_kg": self.weight_spin.value() or None,
             "height_cm": self.height_spin.value() or None,
+            "gender": self.gender_combo.currentText() or None,
             "cp": self.cp_spin.value() or None,
             "w_prime": self.w_prime_spin.value() or None,
             "api_key": self.api_key_edit.text(),

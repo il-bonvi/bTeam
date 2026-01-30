@@ -127,9 +127,14 @@ def build_tools_toolbar(
 
 def build_athletes_table() -> tuple[QTableWidget, None]:
     """Costruisce la tabella atleti"""
-    athletes_table = QTableWidget(0, 4)
-    athletes_table.setHorizontalHeaderLabels(["ID", "Rider", "Squadra", "Note"])
-    athletes_table.horizontalHeader().setStretchLastSection(True)
+    athletes_table = QTableWidget(0, 5)
+    athletes_table.setHorizontalHeaderLabels(["Name", "Team", "Notes", "Period", "ID"])
+    athletes_table.horizontalHeader().setStretchLastSection(False)
+    athletes_table.setColumnWidth(0, 150)   # Name
+    athletes_table.setColumnWidth(1, 150)   # Team
+    athletes_table.setColumnWidth(2, 200)   # Notes
+    athletes_table.setColumnWidth(3, 50)    # Period (small column for dot)
+    athletes_table.setColumnHidden(4, True) # ID (hidden, but stored for reference)
     
     return athletes_table, None
 

@@ -82,8 +82,9 @@ class Wellness(BaseModel):
     stress: Optional[int] = None
     mood: Optional[int] = None
     motivation: Optional[int] = None
-    injury: Optional[int] = None
+    injury: Optional[float] = None
     menstruation: Optional[bool] = None
+    menstrualPhase: Optional[int] = Field(None, alias='menstrual_phase')  # 1=mestruale, 2=follicolare, 3=ovulatoria, 4=luteale
     kcal: Optional[int] = None
     sleepSecs: Optional[int] = Field(None, alias='sleep_secs')
     sleepScore: Optional[int] = Field(None, alias='sleep_score')

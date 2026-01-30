@@ -118,11 +118,22 @@ def perform_sync(parent, sync_service, storage, athlete_id: int, days_back: int 
 
 
 def show_wellness_dialog(parent, sync_service) -> None:
-    """Apre il dialog per tracciare dati wellness"""
-    dialog = WellnessDialog(parent, sync_service)
-    if dialog.exec():
-        values = dialog.values()
-        print(f"[bTeam] Wellness logging: {values}")
+    """Apre il dialog per visualizzare dati wellness"""
+    # Get athlete from parent (assuming parent is the main window)
+    if not hasattr(parent, 'selected_athlete_id') or not parent.selected_athlete_id:
+        return
+    
+    athlete_id = parent.selected_athlete_id
+    athlete_name = parent.selected_athlete_name if hasattr(parent, 'selected_athlete_name') else ""
+    
+    dialog = WellnessDialog(
+        parent, 
+        athlete_id=athlete_id,
+        athlete_name=athlete_name,
+        storage=parent.storage if hasattr(parent, 'storage') else None,
+        sync_service=sync_service
+    )
+    dialog.exec()
 
 
 def show_plan_week_dialog(parent, sync_service, on_plan_created) -> None:

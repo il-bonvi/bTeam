@@ -359,7 +359,7 @@ class BTeamApp(QMainWindow):
     def _edit_athlete(self, item) -> None:
         """Modifica dettagli atleta dal doppio click"""
         row = item.row()
-        athlete_id_item = self.athletes_table.item(row, 0)
+        athlete_id_item = self.athletes_table.item(row, 4)  # ID is in column 4 (hidden)
         if athlete_id_item:
             athlete_id = int(athlete_id_item.text())
             self._edit_athlete_details(athlete_id)
@@ -379,6 +379,7 @@ class BTeamApp(QMainWindow):
                 birth_date=values["birth_date"],
                 weight_kg=values["weight_kg"],
                 height_cm=values["height_cm"],
+                gender=values["gender"],
                 cp=values["cp"],
                 w_prime=values["w_prime"],
                 api_key=values["api_key"],
