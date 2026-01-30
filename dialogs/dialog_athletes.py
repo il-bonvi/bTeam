@@ -115,6 +115,12 @@ class AthleteDetailsDialog(QDialog):
         btn_wellness.clicked.connect(self._open_wellness_dialog)
         api_layout.addWidget(btn_wellness)
 
+        # Pulsante per importare CP, W', Height da Intervals
+        btn_power = QPushButton("⚡ Importa CP, W', Altezza")
+        btn_power.setStyleSheet("background-color: #f59e0b; color: white; font-weight: bold;")
+        btn_power.clicked.connect(self._import_power_data)
+        api_layout.addWidget(btn_power)
+
         layout.addWidget(api_section)
 
         # ===== Athlete Data Section =====
@@ -134,28 +140,42 @@ class AthleteDetailsDialog(QDialog):
 
         self.height_spin = QDoubleSpinBox()
         self.height_spin.setRange(0, 250)
-        self.height_spin.setDecimals(1)
+        self.height_spin.setDecimals(0)
         if athlete.get("height_cm"):
             self.height_spin.setValue(athlete["height_cm"])
 
         self.cp_spin = QDoubleSpinBox()
         self.cp_spin.setRange(0, 1000)
-        self.cp_spin.setDecimals(1)
+        self.cp_spin.setDecimals(0)
         if athlete.get("cp"):
             self.cp_spin.setValue(athlete["cp"])
 
+        self.ecp_spin = QDoubleSpinBox()
+        self.ecp_spin.setRange(0, 1000)
+        self.ecp_spin.setDecimals(0)
+        self.ecp_spin.setReadOnly(True)
+        if athlete.get("ecp"):
+            self.ecp_spin.setValue(athlete["ecp"])
+
         self.w_prime_spin = QDoubleSpinBox()
         self.w_prime_spin.setRange(0, 100000)
-        self.w_prime_spin.setDecimals(1)
+        self.w_prime_spin.setDecimals(0)
         if athlete.get("w_prime"):
             self.w_prime_spin.setValue(athlete["w_prime"])
+
+        self.ew_prime_spin = QDoubleSpinBox()
+        self.ew_prime_spin.setRange(0, 100000)
+        self.ew_prime_spin.setDecimals(0)
+        self.ew_prime_spin.setReadOnly(True)
+        if athlete.get("ew_prime"):
+            self.ew_prime_spin.setValue(athlete["ew_prime"])
 
         self.notes_edit = QLineEdit()
         self.notes_edit.setText(athlete.get("notes", ""))
 
         self.kj_per_hour_per_kg_spin = QDoubleSpinBox()
         self.kj_per_hour_per_kg_spin.setRange(0.5, 50.0)
-        self.kj_per_hour_per_kg_spin.setDecimals(2)
+        self.kj_per_hour_per_kg_spin.setDecimals(1)
         self.kj_per_hour_per_kg_spin.setSingleStep(0.1)
         if athlete.get("kj_per_hour_per_kg"):
             self.kj_per_hour_per_kg_spin.setValue(athlete["kj_per_hour_per_kg"])
@@ -168,10 +188,22 @@ class AthleteDetailsDialog(QDialog):
         data_layout.addWidget(self.weight_spin)
         data_layout.addWidget(QLabel("Altezza (cm) - opzionale"))
         data_layout.addWidget(self.height_spin)
-        data_layout.addWidget(QLabel("CP (W) - opzionale"))
-        data_layout.addWidget(self.cp_spin)
-        data_layout.addWidget(QLabel("W' (J) - opzionale"))
-        data_layout.addWidget(self.w_prime_spin)
+        
+        # CP row with label and eCP comparison
+        cp_row = QHBoxLayout()
+        cp_row.addWidget(QLabel("CP (W) - opzionale"))
+        cp_row.addWidget(self.cp_spin, stretch=1)
+        cp_row.addWidget(QLabel("eCP (W)"))
+        cp_row.addWidget(self.ecp_spin, stretch=1)
+        data_layout.addLayout(cp_row)
+        
+        # W' row with label and eW' comparison
+        w_prime_row = QHBoxLayout()
+        w_prime_row.addWidget(QLabel("W' (J) - opzionale"))
+        w_prime_row.addWidget(self.w_prime_spin, stretch=1)
+        w_prime_row.addWidget(QLabel("eW' (J)"))
+        w_prime_row.addWidget(self.ew_prime_spin, stretch=1)
+        data_layout.addLayout(w_prime_row)
         data_layout.addWidget(QLabel("kJ/h/kg (default atleta) - opzionale"))
         data_layout.addWidget(self.kj_per_hour_per_kg_spin)
         data_layout.addWidget(QLabel("Note"))
@@ -436,6 +468,80 @@ class AthleteDetailsDialog(QDialog):
                 self,
                 "Errore",
                 f"Errore durante l'apertura del dialog wellness:\n{str(e)}"
+            )
+
+    def _import_power_data(self) -> None:
+        """Importa CP, W', eCP, eW' e altezza da Intervals."""
+        api_key = self.api_key_edit.text().strip()
+        if not api_key:
+            QMessageBox.warning(
+                self,
+                "API Key richiesta",
+                "Inserisci una API key valida per importare i dati di potenza"
+            )
+            return
+        
+        try:
+            # Crea servizio sincronizzazione
+            sync_service = IntervalsSyncService(api_key=api_key)
+            
+            # Verifica connessione
+            if not sync_service.is_connected():
+                QMessageBox.critical(
+                    self,
+                    "Errore connessione",
+                    "Impossibile connettersi a Intervals.icu.\n\n"
+                    "Verifica la API key e la connessione internet."
+                )
+                return
+            
+            # Scarica dati power da Intervals
+            power_data, status_msg = sync_service.fetch_athlete_power_settings()
+            
+            if not power_data:
+                QMessageBox.warning(
+                    self,
+                    "Errore",
+                    f"Impossibile scaricare i dati di potenza:\n{status_msg}"
+                )
+                return
+            
+            # Importa nel database
+            if self.storage:
+                db_msg = self.storage.import_power_data_from_intervals(
+                    self.athlete_id,
+                    power_data
+                )
+            else:
+                db_msg = "⚠ Storage non disponibile"
+            
+            # Aggiorna i campi nel dialog
+            if power_data.get('cp'):
+                self.cp_spin.setValue(float(power_data['cp']))
+            if power_data.get('w_prime'):
+                self.w_prime_spin.setValue(float(power_data['w_prime']))
+            if power_data.get('ecp'):
+                self.ecp_spin.setValue(float(power_data['ecp']))
+            if power_data.get('ew_prime'):
+                self.ew_prime_spin.setValue(float(power_data['ew_prime']))
+            if power_data.get('height_cm'):
+                self.height_spin.setValue(float(power_data['height_cm']))
+            
+            # Mostra messaggio di successo
+            QMessageBox.information(
+                self,
+                "✓ Importazione completata",
+                f"{db_msg}\n\nDati aggiornati nel dialog. Clicca OK per salvare."
+            )
+        
+        except Exception as e:
+            print(f"[bTeam] Errore importazione power data: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Errore",
+                f"Errore durante l'importazione dei dati di potenza:\n{str(e)}"
             )
 
     def values(self):

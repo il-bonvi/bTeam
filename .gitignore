@@ -22,15 +22,20 @@ zBuilding/
 *.fit
 *.png
 *.bk
-*.json
 *.txt
 
 # bTeam - File sensibili e dati locali
-bTeam/bteam_config.json
-bTeam/bteam.db
-bTeam/bteam_data/
+bteam_config.json
+bteam.db
+bteam_data/
 Database/
 INFO/
+
+# Config files with sensitive data (specifici, ma non *.json che escluderebbe API_GUIDE.md config sections)
+*.env
+.env.local
+*.key
+*.pem
 
 # Environment variables e credenziali (IMPORTANTE!)
 .env

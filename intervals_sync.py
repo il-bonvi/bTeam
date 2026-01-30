@@ -128,6 +128,67 @@ class IntervalsSyncService:
             logger.error(msg)
             return None, msg
     
+    def fetch_athlete_power_settings(self) -> Tuple[Optional[Dict], str]:
+        """
+        Scarica i dati di potenza dell'atleta (CP, W', Height, eCP, eW')
+        da Intervals sportSettings
+        
+        Returns:
+            Tupla (dizionario con cp, w_prime, ecp, ew_prime, height_cm, messaggio stato)
+        """
+        if not self.client:
+            return None, "❌ Client non configurato"
+        
+        try:
+            logger.info("📥 Scarico dati power dall'atleta...")
+            athlete = self.client.get_athlete()
+            
+            power_data = {
+                "cp": None,       # Critical Power da FTP
+                "w_prime": None,  # W Prime da sportSettings
+                "ecp": None,      # Estimated CP da mmp_model
+                "ew_prime": None, # Estimated W Prime da mmp_model
+                "height_cm": None,
+            }
+            
+            # Altezza dal campo principale atleta (in metri, convert to cm)
+            if athlete.get('height'):
+                height_m = athlete.get('height')
+                power_data["height_cm"] = height_m * 100 if height_m > 0 else None
+                logger.info(f"   Height: {power_data['height_cm']} cm")
+            
+            # Dati di power da sportSettings (primo sport = cycling)
+            sport_settings = athlete.get('sportSettings', [])
+            if sport_settings:
+                cycling_settings = sport_settings[0]  # Primo è il principale
+                
+                # FTP = CP (Critical Power)
+                if cycling_settings.get('ftp'):
+                    power_data["cp"] = float(cycling_settings.get('ftp'))
+                    logger.info(f"   FTP/CP: {power_data['cp']} W")
+                
+                # W' (W Prime)
+                if cycling_settings.get('w_prime'):
+                    power_data["w_prime"] = float(cycling_settings.get('w_prime'))
+                    logger.info(f"   W': {power_data['w_prime']} J")
+                
+                # Estimated values from MMP Model (più accurati, calcolati)
+                mmp_model = cycling_settings.get('mmp_model', {})
+                if mmp_model:
+                    if mmp_model.get('criticalPower'):
+                        power_data["ecp"] = float(mmp_model.get('criticalPower'))
+                        logger.info(f"   eCP (estimated): {power_data['ecp']} W")
+                    if mmp_model.get('wPrime'):
+                        power_data["ew_prime"] = float(mmp_model.get('wPrime'))
+                        logger.info(f"   eW' (estimated): {power_data['ew_prime']} J")
+            
+            return power_data, "✅ Dati power caricati da Intervals"
+        
+        except Exception as e:
+            msg = f"❌ Errore lettura dati power: {str(e)}"
+            logger.error(msg)
+            return None, msg
+    
     def fetch_wellness(
         self,
         days_back: int = 7

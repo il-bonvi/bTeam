@@ -46,8 +46,10 @@ class Athlete(Base):
     birth_date = Column(String(255), nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
-    cp = Column(Float, nullable=True)
-    w_prime = Column(Float, nullable=True)
+    cp = Column(Float, nullable=True)  # Critical Power (FTP da Intervals)
+    w_prime = Column(Float, nullable=True)  # W Prime (da Intervals)
+    ecp = Column(Float, nullable=True)  # Estimated CP (criticalPower da mmp_model)
+    ew_prime = Column(Float, nullable=True)  # Estimated W Prime (wPrime da mmp_model)
     kj_per_hour_per_kg = Column(Float, default=10.0)  # KJ/h/kg per calcoli gare
     api_key = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
@@ -68,6 +70,8 @@ class Athlete(Base):
             "height_cm": self.height_cm,
             "cp": self.cp,
             "w_prime": self.w_prime,
+            "ecp": self.ecp,
+            "ew_prime": self.ew_prime,
             "kj_per_hour_per_kg": self.kj_per_hour_per_kg,
             "api_key": self.api_key,
             "notes": self.notes,
@@ -300,25 +304,25 @@ class BTeamStorage:
         self.db_path = self.storage_dir / "bteam.db"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check for obsolete schema and delete if needed
-        if self.db_path.exists():
-            try:
-                test_conn = sqlite3.connect(self.db_path)
-                test_cur = test_conn.cursor()
-                test_cur.execute("PRAGMA table_info(athletes)")
-                cols_data = test_cur.fetchall()
-                test_conn.close()
-
-                cols = [row[1] for row in cols_data] if cols_data else []
-                if cols and "name" in cols:
-                    print("[bTeam] Schema obsoleto rilevato, eliminazione database...")
-                    self.db_path.unlink()
-            except (sqlite3.Error, OSError) as e:
-                print(f"[bTeam] Errore check schema: {e}")
-                try:
-                    self.db_path.unlink()
-                except (OSError, PermissionError):
-                    pass
+        # NOTA: Non cancellare il database se lo schema è "obsoleto"!
+        # Meglio migrare lo schema che perdere i dati. Il vecchio codice era pericoloso.
+        # Se serve cambiare lo schema, usare _migrate_schema() per le alterazioni.
+        
+        # Old dangerous code disabled - was deleting entire database on schema detection:
+        # if self.db_path.exists():
+        #     try:
+        #         test_conn = sqlite3.connect(self.db_path)
+        #         test_cur = test_conn.cursor()
+        #         test_cur.execute("PRAGMA table_info(athletes)")
+        #         cols_data = test_cur.fetchall()
+        #         test_conn.close()
+        #
+        #         cols = [row[1] for row in cols_data] if cols_data else []
+        #         if cols and "name" in cols:
+        #             print("[bTeam] Schema obsoleto rilevato, eliminazione database...")
+        #             self.db_path.unlink()
+        #     except (sqlite3.Error, OSError) as e:
+        #         print(f"[bTeam] Errore check schema: {e}")
 
         # Initialize SQLAlchemy engine and session
         db_url = f"sqlite:///{self.db_path.as_posix()}"
@@ -379,6 +383,23 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'kj_per_hour_per_kg': {e}")
+            
+            # Add ecp and ew_prime columns to athletes if missing
+            if "ecp" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN ecp REAL DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'ecp' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'ecp': {e}")
+            
+            if "ew_prime" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN ew_prime REAL DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'ew_prime' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'ew_prime': {e}")
             
             # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
@@ -528,6 +549,66 @@ class BTeamStorage:
             athlete.api_key = api_key.strip() or None
             athlete.notes = notes.strip() or None
             self.session.commit()
+
+    def import_power_data_from_intervals(
+        self,
+        athlete_id: int,
+        power_data: Dict
+    ) -> str:
+        """
+        Importa i dati di potenza (CP, W', eCP, eW', Height) da Intervals nel database.
+        
+        Args:
+            athlete_id: ID dell'atleta
+            power_data: Dizionario con chiavi: cp, w_prime, ecp, ew_prime, height_cm
+        
+        Returns:
+            Messaggio di stato
+        """
+        if not power_data:
+            return "❌ Nessun dato power da importare"
+        
+        athlete = self.session.query(Athlete).filter_by(id=athlete_id).first()
+        if not athlete:
+            return f"❌ Atleta {athlete_id} non trovato"
+        
+        try:
+            updates = []
+            
+            # Update CP (FTP da Intervals)
+            if power_data.get('cp'):
+                athlete.cp = float(power_data['cp'])
+                updates.append(f"CP: {athlete.cp} W")
+            
+            # Update W' (W Prime da Intervals)
+            if power_data.get('w_prime'):
+                athlete.w_prime = float(power_data['w_prime'])
+                updates.append(f"W': {athlete.w_prime} J")
+            
+            # Update eCP (estimated CP da mmp_model - read-only in UI)
+            if power_data.get('ecp'):
+                athlete.ecp = float(power_data['ecp'])
+                updates.append(f"eCP: {athlete.ecp} W")
+            
+            # Update eW' (estimated W Prime da mmp_model - read-only in UI)
+            if power_data.get('ew_prime'):
+                athlete.ew_prime = float(power_data['ew_prime'])
+                updates.append(f"eW': {athlete.ew_prime} J")
+            
+            # Update Height
+            if power_data.get('height_cm'):
+                athlete.height_cm = float(power_data['height_cm'])
+                updates.append(f"Height: {athlete.height_cm} cm")
+            
+            if updates:
+                self.session.commit()
+                return f"✅ Importati dati power: {', '.join(updates)}"
+            else:
+                return "ℹ Nessun dato power disponibile da importare"
+        
+        except Exception as e:
+            self.session.rollback()
+            return f"❌ Errore import power data: {str(e)}"
 
     def delete_athlete(self, athlete_id: int) -> None:
         """Delete an athlete."""
