@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -55,6 +55,7 @@ class Athlete(Base):
 
     team = relationship("Team", back_populates="athletes")
     activities = relationship("Activity", back_populates="athlete", cascade="all, delete-orphan")
+    wellness = relationship("Wellness", back_populates="athlete", cascade="all, delete-orphan")
 
     def to_dict(self, with_team_name: bool = True) -> Dict:
         data = {
@@ -184,6 +185,70 @@ class RaceAthlete(Base):
             "kj_per_hour_per_kg": self.kj_per_hour_per_kg,
             "objective": self.objective,
             "joined_at": self.joined_at,
+        }
+
+
+class Wellness(Base):
+    """Dati wellness giornalieri dell'atleta (peso, FC riposo, HRV, etc)"""
+    __tablename__ = "wellness"
+
+    id = Column(Integer, primary_key=True)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    wellness_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    weight_kg = Column(Float, nullable=True)
+    resting_hr = Column(Integer, nullable=True)  # bpm
+    hrv = Column(Float, nullable=True)  # ms
+    steps = Column(Integer, nullable=True)
+    soreness = Column(Integer, nullable=True)  # 1-10
+    fatigue = Column(Integer, nullable=True)  # 1-10
+    stress = Column(Integer, nullable=True)  # 1-10
+    mood = Column(Integer, nullable=True)  # 1-10
+    motivation = Column(Integer, nullable=True)  # 1-10
+    injury = Column(Boolean, nullable=True)
+    kcal = Column(Integer, nullable=True)
+    sleep_secs = Column(Integer, nullable=True)  # Secondi di sonno
+    sleep_score = Column(Integer, nullable=True)  # 1-10
+    sleep_quality = Column(Integer, nullable=True)  # Qualità sonno 1-5
+    avg_sleeping_hr = Column(Float, nullable=True)  # bpm durante sonno
+    menstruation = Column(Boolean, nullable=True)
+    body_fat = Column(Float, nullable=True)  # % grasso corporeo
+    respiration = Column(Float, nullable=True)  # respirazioni al minuto
+    readiness = Column(Float, nullable=True)  # Readiness score 0-100
+    ctl = Column(Float, nullable=True)  # Chronic Training Load
+    atl = Column(Float, nullable=True)  # Acute Training Load
+    ramp_rate = Column(Float, nullable=True)  # Training Ramp Rate
+    created_at = Column(String(255), nullable=False)
+
+    athlete = relationship("Athlete", back_populates="wellness")
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "athlete_id": self.athlete_id,
+            "wellness_date": self.wellness_date,
+            "weight_kg": self.weight_kg,
+            "resting_hr": self.resting_hr,
+            "hrv": self.hrv,
+            "steps": self.steps,
+            "soreness": self.soreness,
+            "fatigue": self.fatigue,
+            "stress": self.stress,
+            "mood": self.mood,
+            "motivation": self.motivation,
+            "injury": self.injury,
+            "kcal": self.kcal,
+            "sleep_secs": self.sleep_secs,
+            "sleep_score": self.sleep_score,
+            "sleep_quality": self.sleep_quality,
+            "avg_sleeping_hr": self.avg_sleeping_hr,
+            "menstruation": self.menstruation,
+            "body_fat": self.body_fat,
+            "respiration": self.respiration,
+            "readiness": self.readiness,
+            "ctl": self.ctl,
+            "atl": self.atl,
+            "ramp_rate": self.ramp_rate,
+            "created_at": self.created_at,
         }
 
 
@@ -766,6 +831,140 @@ class BTeamStorage:
             print(f"[bTeam] Errore lettura gara: {e}")
             return None
 
+    def close(self) -> None:
+        """
+        Close database session and connections.
+        
+        This method should be called explicitly when done with the storage object,
+        or use the storage object as a context manager with 'with' statement.
+        """
+        if hasattr(self, 'session') and self.session:
+            try:
+                self.session.close()
+            except Exception as e:
+                # Log error but don't raise during cleanup
+                print(f"[bTeam] Errore chiusura sessione: {e}")
+        
+        if hasattr(self, 'engine') and self.engine:
+            try:
+                self.engine.dispose()
+            except Exception as e:
+                # Log error but don't raise during cleanup
+                print(f"[bTeam] Errore chiusura engine: {e}")
+
+    # ===== WELLNESS MANAGEMENT =====
+    def add_wellness(
+        self,
+        athlete_id: int,
+        wellness_date: str,  # YYYY-MM-DD
+        weight_kg: Optional[float] = None,
+        resting_hr: Optional[int] = None,
+        hrv: Optional[float] = None,
+        steps: Optional[int] = None,
+        soreness: Optional[int] = None,
+        fatigue: Optional[int] = None,
+        stress: Optional[int] = None,
+        mood: Optional[int] = None,
+        motivation: Optional[int] = None,
+        injury: Optional[bool] = None,
+        kcal: Optional[int] = None,
+        sleep_secs: Optional[int] = None,
+        sleep_score: Optional[int] = None,
+        sleep_quality: Optional[int] = None,
+        avg_sleeping_hr: Optional[float] = None,
+        menstruation: Optional[bool] = None,
+        body_fat: Optional[float] = None,
+        respiration: Optional[float] = None,
+        readiness: Optional[float] = None,
+        ctl: Optional[float] = None,
+        atl: Optional[float] = None,
+        ramp_rate: Optional[float] = None,
+    ) -> bool:
+        """Add or update wellness data for a specific date."""
+        # Check if wellness already exists for this date
+        existing = self.session.query(Wellness).filter_by(
+            athlete_id=athlete_id,
+            wellness_date=wellness_date
+        ).first()
+        
+        now = datetime.utcnow().isoformat()
+        
+        if existing:
+            # Update existing
+            existing.weight_kg = weight_kg if weight_kg is not None else existing.weight_kg
+            existing.resting_hr = resting_hr if resting_hr is not None else existing.resting_hr
+            existing.hrv = hrv if hrv is not None else existing.hrv
+            existing.steps = steps if steps is not None else existing.steps
+            existing.soreness = soreness if soreness is not None else existing.soreness
+            existing.fatigue = fatigue if fatigue is not None else existing.fatigue
+            existing.stress = stress if stress is not None else existing.stress
+            existing.mood = mood if mood is not None else existing.mood
+            existing.motivation = motivation if motivation is not None else existing.motivation
+            existing.injury = injury if injury is not None else existing.injury
+            existing.kcal = kcal if kcal is not None else existing.kcal
+            existing.sleep_secs = sleep_secs if sleep_secs is not None else existing.sleep_secs
+            existing.sleep_score = sleep_score if sleep_score is not None else existing.sleep_score
+            existing.sleep_quality = sleep_quality if sleep_quality is not None else existing.sleep_quality
+            existing.avg_sleeping_hr = avg_sleeping_hr if avg_sleeping_hr is not None else existing.avg_sleeping_hr
+            existing.menstruation = menstruation if menstruation is not None else existing.menstruation
+            existing.body_fat = body_fat if body_fat is not None else existing.body_fat
+            existing.respiration = respiration if respiration is not None else existing.respiration
+            existing.readiness = readiness if readiness is not None else existing.readiness
+            existing.ctl = ctl if ctl is not None else existing.ctl
+            existing.atl = atl if atl is not None else existing.atl
+            existing.ramp_rate = ramp_rate if ramp_rate is not None else existing.ramp_rate
+            self.session.commit()
+            return True
+        else:
+            # Create new
+            wellness = Wellness(
+                athlete_id=athlete_id,
+                wellness_date=wellness_date,
+                weight_kg=weight_kg,
+                resting_hr=resting_hr,
+                hrv=hrv,
+                steps=steps,
+                soreness=soreness,
+                fatigue=fatigue,
+                stress=stress,
+                mood=mood,
+                motivation=motivation,
+                injury=injury,
+                kcal=kcal,
+                sleep_secs=sleep_secs,
+                sleep_score=sleep_score,
+                sleep_quality=sleep_quality,
+                avg_sleeping_hr=avg_sleeping_hr,
+                menstruation=menstruation,
+                body_fat=body_fat,
+                respiration=respiration,
+                readiness=readiness,
+                ctl=ctl,
+                atl=atl,
+                ramp_rate=ramp_rate,
+                created_at=now,
+            )
+            self.session.add(wellness)
+            self.session.commit()
+            return True
+
+    def get_wellness(self, athlete_id: int, days_back: int = 30) -> List[Dict]:
+        """Get wellness records for an athlete (last N days)."""
+        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+        wellness_records = self.session.query(Wellness).filter(
+            Wellness.athlete_id == athlete_id,
+            Wellness.wellness_date >= start_date
+        ).order_by(Wellness.wellness_date.desc()).all()
+        return [w.to_dict() for w in wellness_records]
+
+    def get_latest_weight(self, athlete_id: int) -> Optional[float]:
+        """Get the latest weight for an athlete."""
+        wellness = self.session.query(Wellness).filter(
+            Wellness.athlete_id == athlete_id,
+            Wellness.weight_kg.isnot(None)
+        ).order_by(Wellness.wellness_date.desc()).first()
+        return wellness.weight_kg if wellness else None
+    
     def close(self) -> None:
         """
         Close database session and connections.

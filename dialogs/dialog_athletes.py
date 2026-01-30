@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from intervals_sync import IntervalsSyncService
+from .dialog_wellness import WellnessDialog
 
 
 class SimpleAthleteDialog(QDialog):
@@ -107,6 +108,12 @@ class AthleteDetailsDialog(QDialog):
         btn_import = QPushButton("Importa allenamenti selezionati")
         btn_import.clicked.connect(self._import_selected_workouts)
         api_layout.addWidget(btn_import)
+
+        # Pulsante wellness
+        btn_wellness = QPushButton("❤️ Importa dati Wellness")
+        btn_wellness.setStyleSheet("background-color: #ec4899; color: white; font-weight: bold;")
+        btn_wellness.clicked.connect(self._open_wellness_dialog)
+        api_layout.addWidget(btn_wellness)
 
         layout.addWidget(api_section)
 
@@ -378,6 +385,57 @@ class AthleteDetailsDialog(QDialog):
                 self,
                 "Errore",
                 f"Errore durante la sincronizzazione:\n{str(e)}"
+            )
+
+    def _open_wellness_dialog(self) -> None:
+        """Apre il dialog per importare dati wellness."""
+        api_key = self.api_key_edit.text().strip()
+        if not api_key:
+            QMessageBox.warning(
+                self,
+                "API Key richiesta",
+                "Inserisci una API key valida per importare dati wellness"
+            )
+            return
+        
+        try:
+            # Crea servizio sincronizzazione
+            sync_service = IntervalsSyncService(api_key=api_key)
+            
+            # Verifica connessione
+            if not sync_service.is_connected():
+                QMessageBox.critical(
+                    self,
+                    "Errore connessione",
+                    "Impossibile connettersi a Intervals.icu.\n\n"
+                    "Verifica la API key e la connessione internet."
+                )
+                return
+            
+            # Apri dialog wellness
+            wellness_dialog = WellnessDialog(
+                parent=self,
+                athlete_id=self.athlete_id,
+                athlete_name=f"{self.athlete_id}",
+                storage=self.storage,
+                sync_service=sync_service
+            )
+            
+            if wellness_dialog.exec():
+                # Ricarica il peso aggiornato se è cambiato
+                latest_weight = self.storage.get_latest_weight(self.athlete_id)
+                if latest_weight and latest_weight != (self.weight_spin.value() or 0):
+                    self.weight_spin.setValue(latest_weight)
+                    print(f"[bTeam] Peso aggiornato a {latest_weight:.1f} kg")
+        
+        except Exception as e:
+            print(f"[bTeam] Errore apertura wellness: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Errore",
+                f"Errore durante l'apertura del dialog wellness:\n{str(e)}"
             )
 
     def values(self):
