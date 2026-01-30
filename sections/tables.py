@@ -19,11 +19,26 @@ def refresh_athletes_table(storage, athletes_table, athletes_data) -> list:
     athletes_table.setRowCount(len(athletes))
     
     for row_idx, athlete in enumerate(athletes):
-        athletes_table.setItem(row_idx, 0, QTableWidgetItem(str(athlete["id"])))
+        # Column 0: Name
         rider_name = f"{athlete.get('last_name', '')} {athlete.get('first_name', '')}"
-        athletes_table.setItem(row_idx, 1, QTableWidgetItem(rider_name))
-        athletes_table.setItem(row_idx, 2, QTableWidgetItem(athlete.get("team_name", "")))
-        athletes_table.setItem(row_idx, 3, QTableWidgetItem(athlete.get("notes", "")))
+        athletes_table.setItem(row_idx, 0, QTableWidgetItem(rider_name))
+        
+        # Column 1: Team
+        athletes_table.setItem(row_idx, 1, QTableWidgetItem(athlete.get("team_name", "")))
+        
+        # Column 2: Notes
+        athletes_table.setItem(row_idx, 2, QTableWidgetItem(athlete.get("notes", "")))
+        
+        # Column 3: Period (red background if menstruation=True)
+        from PySide6.QtGui import QColor
+        period_item = QTableWidgetItem()
+        if athlete.get("menstruation", False):
+            period_item.setBackground(QColor("#ff4444"))  # Red background
+            period_item.setText("●")  # Circle symbol
+        athletes_table.setItem(row_idx, 3, period_item)
+        
+        # Column 4: ID (hidden, for reference)
+        athletes_table.setItem(row_idx, 4, QTableWidgetItem(str(athlete["id"])))
     
     return athletes
 
