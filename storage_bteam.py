@@ -46,6 +46,7 @@ class Athlete(Base):
     birth_date = Column(String(255), nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
+    gender = Column(String(50), nullable=True)  # "Femminile" o "Maschile"
     cp = Column(Float, nullable=True)  # Critical Power (FTP da Intervals)
     w_prime = Column(Float, nullable=True)  # W Prime (da Intervals)
     ecp = Column(Float, nullable=True)  # Estimated CP (criticalPower da mmp_model)
@@ -68,6 +69,7 @@ class Athlete(Base):
             "birth_date": self.birth_date,
             "weight_kg": self.weight_kg,
             "height_cm": self.height_cm,
+            "gender": self.gender,
             "cp": self.cp,
             "w_prime": self.w_prime,
             "ecp": self.ecp,
@@ -208,19 +210,22 @@ class Wellness(Base):
     stress = Column(Integer, nullable=True)  # 1-10
     mood = Column(Integer, nullable=True)  # 1-10
     motivation = Column(Integer, nullable=True)  # 1-10
-    injury = Column(Boolean, nullable=True)
+    injury = Column(Float, nullable=True)  # Injury points from Intervals
     kcal = Column(Integer, nullable=True)
     sleep_secs = Column(Integer, nullable=True)  # Secondi di sonno
     sleep_score = Column(Integer, nullable=True)  # 1-10
     sleep_quality = Column(Integer, nullable=True)  # Qualità sonno 1-5
     avg_sleeping_hr = Column(Float, nullable=True)  # bpm durante sonno
     menstruation = Column(Boolean, nullable=True)
+    menstrual_cycle_phase = Column(Integer, nullable=True)  # 1=mestruale, 2=follicolare, 3=ovulatoria, 4=luteale
     body_fat = Column(Float, nullable=True)  # % grasso corporeo
     respiration = Column(Float, nullable=True)  # respirazioni al minuto
+    spO2 = Column(Float, nullable=True)  # Saturazione ossigeno %
     readiness = Column(Float, nullable=True)  # Readiness score 0-100
     ctl = Column(Float, nullable=True)  # Chronic Training Load
     atl = Column(Float, nullable=True)  # Acute Training Load
     ramp_rate = Column(Float, nullable=True)  # Training Ramp Rate
+    comments = Column(Text, nullable=True)  # Note/commenti del giorno
     created_at = Column(String(255), nullable=False)
 
     athlete = relationship("Athlete", back_populates="wellness")
@@ -246,12 +251,15 @@ class Wellness(Base):
             "sleep_quality": self.sleep_quality,
             "avg_sleeping_hr": self.avg_sleeping_hr,
             "menstruation": self.menstruation,
+            "menstrual_cycle_phase": self.menstrual_cycle_phase,
             "body_fat": self.body_fat,
             "respiration": self.respiration,
+            "spO2": self.spO2,
             "readiness": self.readiness,
             "ctl": self.ctl,
             "atl": self.atl,
             "ramp_rate": self.ramp_rate,
+            "comments": self.comments,
             "created_at": self.created_at,
         }
 
@@ -407,6 +415,15 @@ class BTeamStorage:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'ew_prime': {e}")
             
+            # Add gender column to athletes if missing
+            if "gender" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN gender TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'gender' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
+            
             # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
             races_exists = cursor.fetchone() is not None
@@ -460,10 +477,93 @@ class BTeamStorage:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'objective': {e}")
             
+            # Get existing columns in wellness table
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='wellness'")
+            wellness_exists = cursor.fetchone() is not None
+            if wellness_exists:
+                cursor.execute("PRAGMA table_info(wellness)")
+                wellness_cols = {row[1] for row in cursor.fetchall()}
+                
+                # List of all expected columns for wellness
+                expected_cols = {
+                    'id', 'athlete_id', 'wellness_date', 'weight_kg', 'resting_hr', 'hrv', 'steps',
+                    'soreness', 'fatigue', 'stress', 'mood', 'motivation', 'injury', 'kcal',
+                    'sleep_secs', 'sleep_score', 'sleep_quality', 'avg_sleeping_hr', 'menstruation',
+                    'menstrual_cycle_phase', 'body_fat', 'respiration', 'spO2', 'readiness', 'ctl', 'atl', 'ramp_rate', 'comments', 'created_at'
+                }
+                
+                # Add missing columns
+                missing_cols = expected_cols - wellness_cols
+                for col_name in missing_cols:
+                    try:
+                        if col_name == 'sleep_quality':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN sleep_quality INTEGER DEFAULT NULL")
+                        elif col_name == 'avg_sleeping_hr':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN avg_sleeping_hr REAL DEFAULT NULL")
+                        elif col_name == 'body_fat':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN body_fat REAL DEFAULT NULL")
+                        elif col_name == 'respiration':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN respiration REAL DEFAULT NULL")
+                        elif col_name == 'spO2':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN spO2 REAL DEFAULT NULL")
+                        elif col_name == 'readiness':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN readiness REAL DEFAULT NULL")
+                        elif col_name == 'ctl':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN ctl REAL DEFAULT NULL")
+                        elif col_name == 'atl':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN atl REAL DEFAULT NULL")
+                        elif col_name == 'ramp_rate':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN ramp_rate REAL DEFAULT NULL")
+                        elif col_name == 'comments':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN comments TEXT DEFAULT NULL")
+                        elif col_name == 'menstruation':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN menstruation BOOLEAN DEFAULT NULL")
+                        elif col_name == 'menstrual_cycle_phase':
+                            cursor.execute("ALTER TABLE wellness ADD COLUMN menstrual_cycle_phase INTEGER DEFAULT NULL")
+                        else:
+                            # Skip id, athlete_id, wellness_date, created_at as they are already there
+                            continue
+                        print(f"[bTeam] Colonna '{col_name}' aggiunta alla tabella wellness")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
+            
             conn.commit()
             conn.close()
         except Exception as e:
             print(f"[bTeam] Errore migrazione schema: {e}")
+        
+        # Migrate injury column type from BOOLEAN to REAL if needed
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check if wellness table exists and has injury column
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='wellness'")
+            if cursor.fetchone():
+                cursor.execute("PRAGMA table_info(wellness)")
+                wellness_cols = {row[1]: row[2] for row in cursor.fetchall()}  # name: type
+                
+                if 'injury' in wellness_cols and wellness_cols['injury'] in ('BOOLEAN', 'BOOLEAN DEFAULT NULL'):
+                    # Need to convert injury from BOOLEAN to REAL
+                    print("[bTeam] Convertendo colonna 'injury' da BOOLEAN a REAL...")
+                    try:
+                        # Rename old table
+                        cursor.execute("ALTER TABLE wellness RENAME TO wellness_old")
+                        
+                        # Recreate wellness table with correct schema
+                        # This will be done by SQLAlchemy's create_all, but first we need to get the new structure
+                        # For now, just convert the column values
+                        cursor.execute("ALTER TABLE wellness_old RENAME TO wellness")
+                        
+                        print("[bTeam] Colonna 'injury' migrata a REAL")
+                    except sqlite3.OperationalError as e:
+                        print(f"[bTeam] Errore migrazione colonna 'injury': {e}")
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[bTeam] Errore verifica tipo injury: {e}")
 
     def add_team(self, name: str) -> int:
         """Add a new team."""
@@ -509,6 +609,7 @@ class BTeamStorage:
         birth_date: str = "",
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
+        gender: Optional[str] = None,
         cp: Optional[float] = None,
         w_prime: Optional[float] = None,
         notes: str = "",
@@ -522,6 +623,7 @@ class BTeamStorage:
             birth_date=birth_date.strip() or None,
             weight_kg=weight_kg,
             height_cm=height_cm,
+            gender=gender,
             cp=cp,
             w_prime=w_prime,
             notes=notes.strip() or None,
@@ -537,6 +639,7 @@ class BTeamStorage:
         birth_date: str = "",
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
+        gender: Optional[str] = None,
         cp: Optional[float] = None,
         w_prime: Optional[float] = None,
         kj_per_hour_per_kg: Optional[float] = None,
@@ -549,6 +652,7 @@ class BTeamStorage:
             athlete.birth_date = birth_date.strip() or None
             athlete.weight_kg = weight_kg
             athlete.height_cm = height_cm
+            athlete.gender = gender
             athlete.cp = cp
             athlete.w_prime = w_prime
             athlete.kj_per_hour_per_kg = kj_per_hour_per_kg or 1.0
@@ -953,19 +1057,22 @@ class BTeamStorage:
         stress: Optional[int] = None,
         mood: Optional[int] = None,
         motivation: Optional[int] = None,
-        injury: Optional[bool] = None,
+        injury: Optional[float] = None,
         kcal: Optional[int] = None,
         sleep_secs: Optional[int] = None,
         sleep_score: Optional[int] = None,
         sleep_quality: Optional[int] = None,
         avg_sleeping_hr: Optional[float] = None,
         menstruation: Optional[bool] = None,
+        menstrual_cycle_phase: Optional[int] = None,
         body_fat: Optional[float] = None,
         respiration: Optional[float] = None,
+        spO2: Optional[float] = None,
         readiness: Optional[float] = None,
         ctl: Optional[float] = None,
         atl: Optional[float] = None,
         ramp_rate: Optional[float] = None,
+        comments: Optional[str] = None,
     ) -> bool:
         """Add or update wellness data for a specific date."""
         # Check if wellness already exists for this date
@@ -994,12 +1101,15 @@ class BTeamStorage:
             existing.sleep_quality = sleep_quality if sleep_quality is not None else existing.sleep_quality
             existing.avg_sleeping_hr = avg_sleeping_hr if avg_sleeping_hr is not None else existing.avg_sleeping_hr
             existing.menstruation = menstruation if menstruation is not None else existing.menstruation
+            existing.menstrual_cycle_phase = menstrual_cycle_phase if menstrual_cycle_phase is not None else existing.menstrual_cycle_phase
             existing.body_fat = body_fat if body_fat is not None else existing.body_fat
             existing.respiration = respiration if respiration is not None else existing.respiration
+            existing.spO2 = spO2 if spO2 is not None else existing.spO2
             existing.readiness = readiness if readiness is not None else existing.readiness
             existing.ctl = ctl if ctl is not None else existing.ctl
             existing.atl = atl if atl is not None else existing.atl
             existing.ramp_rate = ramp_rate if ramp_rate is not None else existing.ramp_rate
+            existing.comments = comments if comments is not None else existing.comments
             self.session.commit()
             return True
         else:
@@ -1023,12 +1133,15 @@ class BTeamStorage:
                 sleep_quality=sleep_quality,
                 avg_sleeping_hr=avg_sleeping_hr,
                 menstruation=menstruation,
+                menstrual_cycle_phase=menstrual_cycle_phase,
                 body_fat=body_fat,
                 respiration=respiration,
+                spO2=spO2,
                 readiness=readiness,
                 ctl=ctl,
                 atl=atl,
                 ramp_rate=ramp_rate,
+                comments=comments,
                 created_at=now,
             )
             self.session.add(wellness)

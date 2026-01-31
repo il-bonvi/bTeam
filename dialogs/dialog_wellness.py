@@ -47,27 +47,51 @@ class WellnessDialog(QDialog):
         layout.addLayout(header_layout)
         
         # Tabella dati wellness
-        self.wellness_table = QTableWidget(0, 9)
+        self.wellness_table = QTableWidget(0, 21)
         self.wellness_table.setHorizontalHeaderLabels([
-            "Data",
-            "Peso (kg)",
-            "FC Riposo (bpm)",
+            "Date",
+            "Weight (kg)",
+            "Resting HR",
             "HRV (ms)",
-            "Passi",
-            "Sonno (h)",
-            "Sonno Score",
-            "Affaticamento",
-            "Stress"
+            "Sleep (h)",
+            "Sleep Score",
+            "Sleep Quality",
+            "Avg Sleep HR",
+            "Soreness",
+            "Fatigue",
+            "Stress",
+            "Mood",
+            "Motivation",
+            "Injury",
+            "Calories",
+            "Body Fat (%)",
+            "Respiration",
+            "SpO2 (%)",
+            "Menstrual Phase",
+            "Menstruation",
+            "Comments"
         ])
-        self.wellness_table.setColumnWidth(0, 100)
-        self.wellness_table.setColumnWidth(1, 100)
-        self.wellness_table.setColumnWidth(2, 120)
-        self.wellness_table.setColumnWidth(3, 100)
-        self.wellness_table.setColumnWidth(4, 80)
-        self.wellness_table.setColumnWidth(5, 100)
-        self.wellness_table.setColumnWidth(6, 100)
-        self.wellness_table.setColumnWidth(7, 110)
-        self.wellness_table.setColumnWidth(8, 100)
+        self.wellness_table.setColumnWidth(0, 100)   # Date
+        self.wellness_table.setColumnWidth(1, 90)    # Weight
+        self.wellness_table.setColumnWidth(2, 90)    # Resting HR
+        self.wellness_table.setColumnWidth(3, 80)    # HRV
+        self.wellness_table.setColumnWidth(4, 80)    # Sleep
+        self.wellness_table.setColumnWidth(5, 90)    # Sleep Score
+        self.wellness_table.setColumnWidth(6, 90)    # Sleep Quality
+        self.wellness_table.setColumnWidth(7, 90)    # Avg Sleep HR
+        self.wellness_table.setColumnWidth(8, 80)    # Soreness
+        self.wellness_table.setColumnWidth(9, 80)    # Fatigue
+        self.wellness_table.setColumnWidth(10, 80)   # Stress
+        self.wellness_table.setColumnWidth(11, 70)   # Mood
+        self.wellness_table.setColumnWidth(12, 90)   # Motivation
+        self.wellness_table.setColumnWidth(13, 70)   # Injury
+        self.wellness_table.setColumnWidth(14, 80)   # Calories
+        self.wellness_table.setColumnWidth(15, 90)   # Body Fat
+        self.wellness_table.setColumnWidth(16, 90)   # Respiration
+        self.wellness_table.setColumnWidth(17, 80)   # SpO2
+        self.wellness_table.setColumnWidth(18, 100)  # Menstrual Phase
+        self.wellness_table.setColumnWidth(19, 100)  # Menstruation
+        self.wellness_table.setColumnWidth(20, 150)  # Comments
         
         layout.addWidget(self.wellness_table)
         
@@ -87,6 +111,7 @@ class WellnessDialog(QDialog):
         try:
             self.wellness_data = self.storage.get_wellness(self.athlete_id, days_back=30)
             self._populate_table()
+            self._hide_empty_columns()
         except Exception as e:
             print(f"[bTeam] Errore caricamento wellness: {e}")
     
@@ -95,59 +120,178 @@ class WellnessDialog(QDialog):
         self.wellness_table.setRowCount(len(self.wellness_data))
         
         for row_idx, w in enumerate(self.wellness_data):
-            # Data
+            col = 0
+            
+            # 0: Date
             date_item = QTableWidgetItem(w.get("wellness_date", ""))
             date_item.setFlags(date_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 0, date_item)
+            self.wellness_table.setItem(row_idx, col, date_item)
+            col += 1
             
-            # Peso
+            # 1: Weight (kg)
             weight = w.get("weight_kg")
             weight_item = QTableWidgetItem(f"{weight:.1f}" if weight else "")
             weight_item.setFlags(weight_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 1, weight_item)
+            self.wellness_table.setItem(row_idx, col, weight_item)
+            col += 1
             
-            # FC Riposo
+            # 2: Resting HR
             rhr = w.get("resting_hr")
             rhr_item = QTableWidgetItem(str(rhr) if rhr else "")
             rhr_item.setFlags(rhr_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 2, rhr_item)
+            self.wellness_table.setItem(row_idx, col, rhr_item)
+            col += 1
             
-            # HRV
+            # 3: HRV (ms)
             hrv = w.get("hrv")
             hrv_item = QTableWidgetItem(f"{hrv:.1f}" if hrv else "")
             hrv_item.setFlags(hrv_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 3, hrv_item)
+            self.wellness_table.setItem(row_idx, col, hrv_item)
+            col += 1
             
-            # Passi
-            steps = w.get("steps")
-            steps_item = QTableWidgetItem(str(steps) if steps else "")
-            steps_item.setFlags(steps_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 4, steps_item)
-            
-            # Sonno (converti secondi in ore)
+            # 4: Sleep (h) - convert from seconds
             sleep_secs = w.get("sleep_secs")
             sleep_hours = f"{sleep_secs / 3600:.1f}" if sleep_secs else ""
             sleep_item = QTableWidgetItem(sleep_hours)
             sleep_item.setFlags(sleep_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 5, sleep_item)
+            self.wellness_table.setItem(row_idx, col, sleep_item)
+            col += 1
             
-            # Sleep Score
+            # 5: Sleep Score
             sleep_score = w.get("sleep_score")
             sleep_score_item = QTableWidgetItem(str(sleep_score) if sleep_score else "")
             sleep_score_item.setFlags(sleep_score_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 6, sleep_score_item)
+            self.wellness_table.setItem(row_idx, col, sleep_score_item)
+            col += 1
             
-            # Affaticamento
+            # 6: Sleep Quality
+            sleep_quality = w.get("sleep_quality")
+            sleep_quality_item = QTableWidgetItem(str(sleep_quality) if sleep_quality else "")
+            sleep_quality_item.setFlags(sleep_quality_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, sleep_quality_item)
+            col += 1
+            
+            # 7: Avg Sleep HR
+            avg_sleep_hr = w.get("avg_sleeping_hr")
+            avg_sleep_hr_item = QTableWidgetItem(f"{avg_sleep_hr:.1f}" if avg_sleep_hr else "")
+            avg_sleep_hr_item.setFlags(avg_sleep_hr_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, avg_sleep_hr_item)
+            col += 1
+            
+            # 8: Soreness
+            soreness = w.get("soreness")
+            soreness_item = QTableWidgetItem(str(soreness) if soreness else "")
+            soreness_item.setFlags(soreness_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, soreness_item)
+            col += 1
+            
+            # 9: Fatigue
             fatigue = w.get("fatigue")
             fatigue_item = QTableWidgetItem(str(fatigue) if fatigue else "")
             fatigue_item.setFlags(fatigue_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 7, fatigue_item)
+            self.wellness_table.setItem(row_idx, col, fatigue_item)
+            col += 1
             
-            # Stress
+            # 10: Stress
             stress = w.get("stress")
             stress_item = QTableWidgetItem(str(stress) if stress else "")
             stress_item.setFlags(stress_item.flags() & ~Qt.ItemIsEditable)
-            self.wellness_table.setItem(row_idx, 8, stress_item)
+            self.wellness_table.setItem(row_idx, col, stress_item)
+            col += 1
+            
+            # 11: Mood
+            mood = w.get("mood")
+            mood_item = QTableWidgetItem(str(mood) if mood else "")
+            mood_item.setFlags(mood_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, mood_item)
+            col += 1
+            
+            # 12: Motivation
+            motivation = w.get("motivation")
+            motivation_item = QTableWidgetItem(str(motivation) if motivation else "")
+            motivation_item.setFlags(motivation_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, motivation_item)
+            col += 1
+            
+            # 13: Injury
+            injury = w.get("injury")
+            injury_item = QTableWidgetItem(str(int(injury)) if injury else "")
+            injury_item.setFlags(injury_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, injury_item)
+            col += 1
+            
+            # 14: Calories
+            kcal = w.get("kcal")
+            kcal_item = QTableWidgetItem(str(kcal) if kcal else "")
+            kcal_item.setFlags(kcal_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, kcal_item)
+            col += 1
+            
+            # 15: Body Fat (%)
+            body_fat = w.get("body_fat")
+            body_fat_item = QTableWidgetItem(f"{body_fat:.1f}" if body_fat else "")
+            body_fat_item.setFlags(body_fat_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, body_fat_item)
+            col += 1
+            
+            # 16: Respiration
+            respiration = w.get("respiration")
+            respiration_item = QTableWidgetItem(f"{respiration:.1f}" if respiration else "")
+            respiration_item.setFlags(respiration_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, respiration_item)
+            col += 1
+            
+            # 17: SpO2 (%)
+            spO2 = w.get("spO2")
+            spO2_item = QTableWidgetItem(f"{spO2:.1f}" if spO2 else "")
+            spO2_item.setFlags(spO2_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, spO2_item)
+            col += 1
+            
+            # 18: Menstrual Phase
+            menstrual_phase = w.get("menstrual_cycle_phase")
+            phase_names = {1: "Menstrual", 2: "Follicular", 3: "Ovulatory", 4: "Luteal"}
+            phase_item = QTableWidgetItem(phase_names.get(menstrual_phase, "") if menstrual_phase else "")
+            phase_item.setFlags(phase_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, phase_item)
+            col += 1
+            
+            # 19: Menstruation
+            menstruation = w.get("menstruation")
+            menstruation_item = QTableWidgetItem("Yes" if menstruation else ("No" if menstruation is False else ""))
+            menstruation_item.setFlags(menstruation_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, menstruation_item)
+            col += 1
+            
+            # 20: Comments
+            comments = w.get("comments", "")
+            comments_item = QTableWidgetItem(str(comments) if comments else "")
+            comments_item.setFlags(comments_item.flags() & ~Qt.ItemIsEditable)
+            self.wellness_table.setItem(row_idx, col, comments_item)
+    
+    def _hide_empty_columns(self) -> None:
+        """Nascondi le colonne che non contengono dati in nessuna riga."""
+        # Column indices and their keys
+        column_keys = [
+            (0, "wellness_date"), (1, "weight_kg"), (2, "resting_hr"), (3, "hrv"),
+            (4, "sleep_secs"), (5, "sleep_score"), (6, "sleep_quality"), (7, "avg_sleeping_hr"),
+            (8, "soreness"), (9, "fatigue"), (10, "stress"), (11, "mood"),
+            (12, "motivation"), (13, "injury"), (14, "kcal"), (15, "body_fat"),
+            (16, "respiration"), (17, "spO2"), (18, "menstrual_cycle_phase"), (19, "menstruation"), (20, "comments")
+        ]
+        
+        for col_idx, key in column_keys:
+            # Check if all values in this column are empty/None
+            all_empty = True
+            for row_data in self.wellness_data:
+                value = row_data.get(key)
+                if value is not None and value != "" and value is not False:
+                    all_empty = False
+                    break
+            
+            # Hide the column if all values are empty
+            if all_empty:
+                self.wellness_table.setColumnHidden(col_idx, True)
     
     def _import_wellness(self) -> None:
         """Importa i dati wellness da Intervals.icu."""
@@ -200,17 +344,21 @@ class WellnessDialog(QDialog):
                     sleep_score = item.get("sleepScore") or item.get("sleep_score")
                     sleep_quality = item.get("sleepQuality") or item.get("sleep_quality")
                     avg_sleeping_hr = item.get("avgSleepingHR") or item.get("avg_sleeping_hr")
-                    menstruation = item.get("menstrualPhase")
+                    menstrual_phase = item.get("menstrualPhase")  # 1=menstrual, 2=follicular, 3=ovulatory, 4=luteal
+                    menstruation = item.get("menstruation")  # Boolean for menstruation day
                     body_fat = item.get("bodyFat") or item.get("body_fat")
                     respiration = item.get("respiration")
-                    readiness = item.get("readiness")
-                    ctl = item.get("ctl")  # Chronic Training Load
-                    atl = item.get("atl")  # Acute Training Load
-                    ramp_rate = item.get("rampRate") or item.get("ramp_rate")
+                    spO2 = item.get("spO2")
+                    comments = item.get("comments")
                     
-                    # Converti valori booleani (Intervals può inviarli come numeri 0, 1, 2, ecc.)
-                    if injury is not None and not isinstance(injury, bool):
-                        injury = bool(injury) if injury else None
+                    # Converti menstrual_phase a int se numerico
+                    if menstrual_phase is not None and not isinstance(menstrual_phase, int):
+                        try:
+                            menstrual_phase = int(menstrual_phase) if menstrual_phase else None
+                        except (ValueError, TypeError):
+                            menstrual_phase = None
+                    
+                    # Converti menstruation a boolean
                     if menstruation is not None and not isinstance(menstruation, bool):
                         menstruation = bool(menstruation) if menstruation else None
                     
@@ -234,12 +382,11 @@ class WellnessDialog(QDialog):
                         sleep_quality=sleep_quality,
                         avg_sleeping_hr=avg_sleeping_hr,
                         menstruation=menstruation,
+                        menstrual_cycle_phase=menstrual_phase,
                         body_fat=body_fat,
                         respiration=respiration,
-                        readiness=readiness,
-                        ctl=ctl,
-                        atl=atl,
-                        ramp_rate=ramp_rate,
+                        spO2=spO2,
+                        comments=comments,
                     )
                     imported_count += 1
                     
