@@ -5,6 +5,7 @@ custom fase prima... (NON VIENE VISUALIZZATA ANCHE SE DOVREBBE...)
 cambio formati ecc
 unifica sincronizzazione
 FIT di alcuni eventi
+STRAINS: Exponentially weighted moving avg like fitness (default 42 days)
 aggiungere tag auto a race e test
 calendario
 holyday, sick, ritiro ecc
