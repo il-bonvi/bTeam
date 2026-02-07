@@ -221,8 +221,26 @@ class RaceDetailsDialog(QDialog):
             race_date_str = self.details_controls['date_edit'].date().toString("yyyy-MM-dd")
             distance_km = self.details_controls['distance_spin'].value()
             speed_kmh = self.details_controls['speed_spin'].value()
+            elevation_m = self.details_controls['elevation_spin'].value()
+            notes = self.details_controls['notes_edit'].toPlainText().strip()
             
             duration_minutes = (distance_km / speed_kmh) * 60 if speed_kmh > 0 else 0
+            duration_hours = duration_minutes / 60
+            
+            # Calcola KJ basato sugli atleti partecipanti alla gara
+            race_athletes = self.storage.get_race_athletes(self.race_id) or []
+            if race_athletes:
+                total_kj = 0
+                for ra in race_athletes:
+                    athlete_id = ra.get("athlete_id")
+                    athlete = self.storage.get_athlete(athlete_id)
+                    if athlete:
+                        weight_kg = athlete.get("weight_kg", 70) or 70
+                        kj_per_hora_per_kg = ra.get("kj_per_hour_per_kg", athlete.get("kj_per_hour_per_kg", 1.0) or 1.0)
+                        total_kj += kj_per_hora_per_kg * duration_hours * weight_kg
+                predicted_kj = total_kj / len(race_athletes)
+            else:
+                predicted_kj = 0
             
             # La classe viene dall'obiettivo di ogni atleta nei riders
             # Leggi i riders della gara per trovare l'obiettivo
@@ -247,7 +265,7 @@ class RaceDetailsDialog(QDialog):
             
             # Push su Intervals
             print(f"[bTeam] Push race: {name} il {race_date_str}")
-            print(f"[bTeam] Distanza: {distance_km}km, Durata: {duration_minutes:.0f}m")
+            print(f"[bTeam] Distanza: {distance_km}km, Elevazione: {elevation_m}m, Durata: {duration_minutes:.0f}m")
             
             # Map classe atleta a categoria Intervals
             classe_map = {
@@ -258,16 +276,22 @@ class RaceDetailsDialog(QDialog):
             
             intervals_category = classe_map.get(athlete_classe, "RACE_C")
             
+            # Prepara la descrizione con dislivello, KJ e eventuali note aggiuntive in HTML formattato
+            race_description = f'<div><b></b><span class="text-red-darken-2"><b class="">Dislivello</b></span>: {int(elevation_m)}m</div>'
+            race_description += f'<div><b></b><span class="text-green"><b class="">Previsti</b></span>: {predicted_kj:.0f}kJ</div>'
+            if notes:
+                race_description += f'<div><b></b><span class="text-purple"><b class="">Note</b></span>: {notes}</div>'
+            
             result = client.create_event(
                 athlete_id=athlete_id_for_intervals,
                 category=intervals_category,
                 start_date_local=start_date_local,
                 end_date_local=end_date_local,
                 name=name,
+                description=race_description,
                 activity_type='Ride',
                 distance=distance_km * 1000,  # Converti km → metri
-                moving_time=int(duration_seconds),
-                notes=f"{intervals_category.replace('RACE_', '')} Race"
+                moving_time=int(duration_seconds)
             )
             
             print(f"[bTeam] Push completato: {result}")
