@@ -732,6 +732,11 @@ class BTeamStorage:
         athletes = self.session.query(Athlete).order_by(Athlete.created_at.desc()).all()
         return [athlete.to_dict(with_team_name=True) for athlete in athletes]
 
+    def get_athlete(self, athlete_id: int) -> Optional[Dict]:
+        """Get a single athlete by ID."""
+        athlete = self.session.query(Athlete).filter(Athlete.id == athlete_id).first()
+        return athlete.to_dict(with_team_name=True) if athlete else None
+
     def add_activity(
         self,
         athlete_id: int,
@@ -991,6 +996,30 @@ class BTeamStorage:
         except Exception as e:
             print(f"[bTeam] Errore lettura atleti gara: {e}")
             return []
+
+    def update_race_athlete(self, race_id: int, athlete_id: int, **kwargs) -> bool:
+        """Update race athlete data (kj_per_hour_per_kg, objective, etc.)."""
+        try:
+            race_athlete = self.session.query(RaceAthlete).filter(
+                RaceAthlete.race_id == race_id,
+                RaceAthlete.athlete_id == athlete_id
+            ).first()
+            
+            if not race_athlete:
+                print(f"[bTeam] Atleta {athlete_id} non trovato nella gara {race_id}")
+                return False
+            
+            # Update allowed fields
+            for key, value in kwargs.items():
+                if hasattr(race_athlete, key):
+                    setattr(race_athlete, key, value)
+            
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore aggiornamento atleta gara: {e}")
+            self.session.rollback()
+            return False
 
     def delete_race(self, race_id: int) -> bool:
         """Delete a race by ID."""

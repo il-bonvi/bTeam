@@ -119,18 +119,6 @@ def build_details_tab(race_data: dict, storage: BTeamStorage) -> tuple[QWidget, 
     controls['notes_edit'].setMaximumHeight(80)
     layout.addWidget(controls['notes_edit'])
     
-    # KJ previsti (read-only)
-    kj_layout = QHBoxLayout()
-    kj_layout.addWidget(QLabel("KJ previsti (media):"))
-    controls['kj_edit'] = QLineEdit()
-    controls['kj_edit'].setReadOnly(True)
-    controls['kj_edit'].setStyleSheet("background-color: #f0f0f0; color: #60a5fa; font-weight: bold;")
-    kj = race_data.get("predicted_kj", 0)
-    controls['kj_edit'].setText(f"{kj:.0f}" if kj else "--")
-    kj_layout.addWidget(controls['kj_edit'])
-    kj_layout.addStretch()
-    layout.addLayout(kj_layout)
-    
     layout.addStretch()
     return widget, controls
 
@@ -150,14 +138,15 @@ def update_categories(gender_combo: QComboBox, category_combo: QComboBox) -> Non
 
 
 def update_predictions(distance_spin: QDoubleSpinBox, speed_spin: QDoubleSpinBox, 
-                      duration_edit: QLineEdit, kj_edit: QLineEdit, storage: BTeamStorage) -> None:
-    """Aggiorna previsioni di durata e KJ"""
+                      duration_edit: QLineEdit, storage: BTeamStorage, on_duration_changed=None) -> None:
+    """Aggiorna previsioni di durata"""
     distance_km = distance_spin.value()
     speed_kmh = speed_spin.value()
     
     if speed_kmh <= 0:
         duration_edit.setText("--")
-        kj_edit.setText("--")
+        if on_duration_changed:
+            on_duration_changed(0)
         return
     
     # Calcola durata
@@ -166,17 +155,6 @@ def update_predictions(distance_spin: QDoubleSpinBox, speed_spin: QDoubleSpinBox
     minutes = int(duration_minutes % 60)
     duration_edit.setText(f"{hours}h {minutes}m")
     
-    # Calcola KJ
-    duration_hours = duration_minutes / 60
-    athletes = storage.list_athletes()
-    
-    if athletes:
-        total_kj = 0
-        for athlete in athletes:
-            weight_kg = athlete.get("weight_kg", 70) or 70
-            kj_per_hora_per_kg = athlete.get("kj_per_hour_per_kg", 1.0) or 1.0
-            total_kj += kj_per_hora_per_kg * duration_hours * weight_kg
-        avg_kj = total_kj / len(athletes)
-        kj_edit.setText(f"{avg_kj:.0f}")
-    else:
-        kj_edit.setText("--")
+    # Chiama callback con durata in ore
+    if on_duration_changed:
+        on_duration_changed(duration_minutes / 60)

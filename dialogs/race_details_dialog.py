@@ -9,6 +9,7 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QTabWidget
 )
+from PySide6.QtCore import Qt
 from storage_bteam import BTeamStorage
 from config_bteam import get_intervals_api_key, set_intervals_api_key
 from intervals_client_v2 import IntervalsAPIClient
@@ -19,7 +20,8 @@ class RaceDetailsDialog(QDialog):
     
     def __init__(self, parent, storage: BTeamStorage, race_id: int):
         super().__init__(parent)
-        self.setWindowTitle("Modifica Gara")
+        self.setWindowTitle("Dettagli Gara")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowMinimizeButtonHint)
         self.setMinimumSize(1000, 700)
         self.storage = storage
         self.race_id = race_id
@@ -54,14 +56,24 @@ class RaceDetailsDialog(QDialog):
         details_widget, self.details_controls = build_details_tab(self.race_data, self.storage)
         tabs.addTab(details_widget, "📋 Dettagli")
         
+        # Tab 2: Riders
+        riders_widget, self.riders_controls = build_riders_tab(self.storage, self.race_id, None, self.details_controls)
+        tabs.addTab(riders_widget, "🚴 Riders")
+        
+        # Funzione per aggiornare la seconda tab quando cambia la durata
+        def update_riders_tab(duration_hours):
+            from dialogs.races_sections.riders_tab import load_riders
+            load_riders(self.storage, self.race_id, self.riders_controls['riders_table'], 
+                       self.riders_controls['riders_kj_total'], self.details_controls)
+        
         # Connetti gli update alle modifiche
         self.details_controls['distance_spin'].valueChanged.connect(
             lambda: update_predictions(
                 self.details_controls['distance_spin'],
                 self.details_controls['speed_spin'],
                 self.details_controls['duration_edit'],
-                self.details_controls['kj_edit'],
-                self.storage
+                self.storage,
+                update_riders_tab
             )
         )
         self.details_controls['speed_spin'].valueChanged.connect(
@@ -69,14 +81,10 @@ class RaceDetailsDialog(QDialog):
                 self.details_controls['distance_spin'],
                 self.details_controls['speed_spin'],
                 self.details_controls['duration_edit'],
-                self.details_controls['kj_edit'],
-                self.storage
+                self.storage,
+                update_riders_tab
             )
         )
-        
-        # Tab 2: Riders
-        riders_widget, self.riders_controls = build_riders_tab(self.storage, self.race_id, None)
-        tabs.addTab(riders_widget, "🚴 Riders")
         
         # Tab 3: Metrics
         metrics_widget, self.metrics_controls = build_metrics_tab()
@@ -120,18 +128,24 @@ class RaceDetailsDialog(QDialog):
             category = self.details_controls['category_combo'].currentText()
             notes = self.details_controls['notes_edit'].toPlainText().strip()
             
-            # Calcola durata e KJ
+            # Calcola durata
             duration_minutes = (distance_km / speed_kmh) * 60 if speed_kmh > 0 else 0
             duration_hours = duration_minutes / 60
             
-            athletes = self.storage.list_athletes()
-            if athletes:
+            # Calcola KJ basato sugli atleti partecipanti alla gara
+            race_athletes = self.storage.get_race_athletes(self.race_id)
+            if race_athletes:
                 total_kj = 0
-                for athlete in athletes:
-                    weight_kg = athlete.get("weight_kg", 70) or 70
-                    kj_per_hora_per_kg = athlete.get("kj_per_hour_per_kg", 1.0) or 1.0
-                    total_kj += kj_per_hora_per_kg * duration_hours * weight_kg
-                predicted_kj = total_kj / len(athletes)
+                for ra in race_athletes:
+                    athlete_id = ra.get("athlete_id")
+                    # Ottieni i dati dell'atleta
+                    athlete = self.storage.get_athlete(athlete_id)
+                    if athlete:
+                        weight_kg = athlete.get("weight_kg", 70) or 70
+                        # Usa il kJ/h/kg specifico per questa gara
+                        kj_per_hora_per_kg = ra.get("kj_per_hour_per_kg", athlete.get("kj_per_hour_per_kg", 1.0) or 1.0)
+                        total_kj += kj_per_hora_per_kg * duration_hours * weight_kg
+                predicted_kj = total_kj / len(race_athletes)
             else:
                 predicted_kj = 0
             

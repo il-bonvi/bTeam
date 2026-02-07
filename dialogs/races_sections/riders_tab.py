@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from storage_bteam import BTeamStorage
 
 
-def build_riders_tab(storage: BTeamStorage, race_id: int, on_riders_changed) -> tuple[QWidget, dict]:
+def build_riders_tab(storage: BTeamStorage, race_id: int, on_riders_changed, details_controls: dict) -> tuple[QWidget, dict]:
     """Costruisce il tab Riders della gara"""
     widget = QWidget()
     layout = QVBoxLayout(widget)
@@ -26,20 +26,21 @@ def build_riders_tab(storage: BTeamStorage, race_id: int, on_riders_changed) -> 
     
     add_rider_btn = QPushButton("+ Aggiungi Atleta")
     add_rider_btn.setMaximumWidth(150)
-    add_rider_btn.clicked.connect(lambda: on_add_rider(storage, race_id, riders_table, controls))
+    add_rider_btn.clicked.connect(lambda: on_add_rider(storage, race_id, riders_table, controls, details_controls))
     header_layout.addStretch()
     header_layout.addWidget(add_rider_btn)
     layout.addLayout(header_layout)
     
     # Tabella atleti
-    riders_table = QTableWidget(0, 6)
-    riders_table.setHorizontalHeaderLabels(["Nome", "Squadra", "kJ/h/kg", "Obiettivo", "Note", "Azioni"])
+    riders_table = QTableWidget(0, 7)
+    riders_table.setHorizontalHeaderLabels(["Nome", "Squadra", "kJ/h/kg", "KJ Previsti", "Obiettivo", "Note", "Azioni"])
     riders_table.setColumnWidth(0, 200)
     riders_table.setColumnWidth(1, 150)
     riders_table.setColumnWidth(2, 80)
-    riders_table.setColumnWidth(3, 80)
-    riders_table.setColumnWidth(4, 200)
-    riders_table.setColumnWidth(5, 80)
+    riders_table.setColumnWidth(3, 100)
+    riders_table.setColumnWidth(4, 80)
+    riders_table.setColumnWidth(5, 200)
+    riders_table.setColumnWidth(6, 80)
     layout.addWidget(riders_table)
     controls['riders_table'] = riders_table
     
@@ -57,20 +58,22 @@ def build_riders_tab(storage: BTeamStorage, race_id: int, on_riders_changed) -> 
     controls['riders_kj_total'] = riders_kj_total
     
     # Carica atleti
-    load_riders(storage, race_id, riders_table, riders_kj_total)
+    load_riders(storage, race_id, riders_table, riders_kj_total, details_controls)
     
     return widget, controls
 
 
-def load_riders(storage: BTeamStorage, race_id: int, riders_table: QTableWidget, riders_kj_total) -> None:
+def load_riders(storage: BTeamStorage, race_id: int, riders_table: QTableWidget, riders_kj_total, details_controls: dict) -> None:
     """Carica gli atleti partecipanti"""
     race_athletes = storage.get_race_athletes(race_id)
     
-    # Mappa athlete_id -> team_name
+    # Mappa athlete_id -> team_name e weight
     all_athletes = storage.list_athletes()
     athlete_team_map = {}
+    athlete_weight_map = {}
     for athlete in all_athletes:
         athlete_team_map[athlete.get("id")] = athlete.get("team_name", "")
+        athlete_weight_map[athlete.get("id")] = athlete.get("weight_kg", 70) or 70
     
     riders_table.setRowCount(len(race_athletes))
     for row_idx, ra in enumerate(race_athletes):
@@ -91,34 +94,45 @@ def load_riders(storage: BTeamStorage, race_id: int, riders_table: QTableWidget,
         kj_spin.setDecimals(2)
         kj_spin.setValue(kj_per_hour_per_kg)
         kj_spin.valueChanged.connect(
-            lambda new_val, aid=athlete_id, rid=race_id, tbl=riders_table, kj_tot=riders_kj_total: on_kj_changed(storage, rid, aid, new_val, tbl, kj_tot)
+            lambda new_val, aid=athlete_id, rid=race_id, tbl=riders_table, kj_tot=riders_kj_total, det_ctrl=details_controls: on_kj_changed(storage, rid, aid, new_val, tbl, kj_tot, det_ctrl)
         )
         riders_table.setCellWidget(row_idx, 2, kj_spin)
         
-        # Colonna Obiettivo - editable con combobox
-        objective_item = QTableWidgetItem(objective)
-        riders_table.setItem(row_idx, 3, objective_item)
+        # Colonna KJ Previsti - calcolato automaticamente
+        weight_kg = athlete_weight_map.get(athlete_id, 70)
+        # Calcola durata corrente
+        distance_km = details_controls['distance_spin'].value()
+        speed_kmh = details_controls['speed_spin'].value()
+        if speed_kmh <= 0:
+            current_duration_hours = 0
+        else:
+            duration_minutes = (distance_km / speed_kmh) * 60
+            current_duration_hours = duration_minutes / 60
+        predicted_kj = kj_per_hour_per_kg * weight_kg * current_duration_hours
+        kj_predicted_item = QTableWidgetItem(f"{predicted_kj:.0f}")
+        kj_predicted_item.setFlags(kj_predicted_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        riders_table.setItem(row_idx, 3, kj_predicted_item)
         
-        # Crea un combobox per l'obiettivo
+        # Colonna Obiettivo - editable con combobox
         objective_combo = QComboBox()
         objective_combo.addItems(["A", "B", "C"])
         objective_combo.setCurrentText(objective)
         objective_combo.currentTextChanged.connect(
             lambda new_val, aid=athlete_id, rid=race_id: on_objective_changed(storage, rid, aid, new_val)
         )
-        riders_table.setCellWidget(row_idx, 3, objective_combo)
+        riders_table.setCellWidget(row_idx, 4, objective_combo)
         
-        riders_table.setItem(row_idx, 4, QTableWidgetItem(""))
+        riders_table.setItem(row_idx, 5, QTableWidgetItem(""))
         
         delete_btn = QPushButton("Elimina")
         delete_btn.setMaximumWidth(80)
-        delete_btn.clicked.connect(lambda checked, aid=athlete_id: on_remove_rider(storage, race_id, aid, riders_table, riders_kj_total))
-        riders_table.setCellWidget(row_idx, 5, delete_btn)
+        delete_btn.clicked.connect(lambda checked, aid=athlete_id: on_remove_rider(storage, race_id, aid, riders_table, riders_kj_total, details_controls))
+        riders_table.setCellWidget(row_idx, 6, delete_btn)
     
     update_riders_kj_total(riders_table, riders_kj_total)
 
 
-def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget, controls) -> None:
+def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget, controls, details_controls: dict) -> None:
     """Aggiunge atleti alla gara"""
     athletes = storage.list_athletes()
     
@@ -204,7 +218,7 @@ def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget
         if added_count > 0:
             QMessageBox.information(dialog, "Aggiunto", f"{added_count} atleta/i aggiunto/i alla gara!")
             dialog.accept()
-            load_riders(storage, race_id, riders_table, controls['riders_kj_total'])
+            load_riders(storage, race_id, riders_table, controls['riders_kj_total'], details_controls)
         else:
             QMessageBox.warning(dialog, "Errore", "Gli atleti selezionati sono già nella gara")
     
@@ -215,7 +229,7 @@ def on_add_rider(storage: BTeamStorage, race_id: int, riders_table: QTableWidget
 
 
 def on_remove_rider(storage: BTeamStorage, race_id: int, athlete_id: int, 
-                    riders_table: QTableWidget, riders_kj_total) -> None:
+                    riders_table: QTableWidget, riders_kj_total, details_controls: dict) -> None:
     """Rimuove un atleta dalla gara"""
     # Get parent widget from riders_table
     parent = riders_table.window() if riders_table else None
@@ -228,15 +242,16 @@ def on_remove_rider(storage: BTeamStorage, race_id: int, athlete_id: int,
     )
     if confirm == QMessageBox.Yes:
         if storage.remove_athlete_from_race(race_id, athlete_id):
-            load_riders(storage, race_id, riders_table, riders_kj_total)
+            load_riders(storage, race_id, riders_table, riders_kj_total, details_controls)
             QMessageBox.information(parent, "Rimosso", "Atleta rimosso dalla gara!")
 
 
-def on_kj_changed(storage: BTeamStorage, race_id: int, athlete_id: int, new_kj: float, riders_table: QTableWidget, riders_kj_total) -> None:
+def on_kj_changed(storage: BTeamStorage, race_id: int, athlete_id: int, new_kj: float, riders_table: QTableWidget, riders_kj_total, details_controls: dict) -> None:
     """Aggiorna il kJ/h/kg del rider nella race e ricalcola totali"""
     try:
         storage.update_race_athlete(race_id, athlete_id, kj_per_hour_per_kg=new_kj)
-        update_riders_kj_total(riders_table, riders_kj_total)
+        # Ricarica tutti i dati per aggiornare anche i KJ previsti
+        load_riders(storage, race_id, riders_table, riders_kj_total, details_controls)
         print(f"[bTeam] kJ/h/kg atleta {athlete_id} aggiornato a {new_kj}")
     except Exception as e:
         print(f"[bTeam] Errore aggiornamento kJ: {e}")
