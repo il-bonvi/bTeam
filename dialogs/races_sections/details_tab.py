@@ -8,8 +8,9 @@ from __future__ import annotations
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDateEdit, QDoubleSpinBox,
-    QSpinBox, QTextEdit, QComboBox
+    QSpinBox, QTextEdit, QComboBox, QPushButton
 )
+from PySide6.QtWebEngineWidgets import QWebEngineView
 from storage_bteam import BTeamStorage
 
 
@@ -119,6 +120,34 @@ def build_details_tab(race_data: dict, storage: BTeamStorage) -> tuple[QWidget, 
     controls['notes_edit'].setMaximumHeight(80)
     layout.addWidget(controls['notes_edit'])
     
+    # ===== Sezione Traccia =====
+    layout.addWidget(QLabel("📊 Traccia Gara"))
+    
+    trace_layout = QHBoxLayout()
+    trace_layout.addWidget(QLabel("File:"))
+    
+    trace_file_label = QLineEdit()
+    trace_file_label.setReadOnly(True)
+    trace_file_label.setPlaceholderText("Nessun file importato")
+    trace_file_label.setMaximumWidth(200)  # Limita larghezza del campo file
+    trace_layout.addWidget(trace_file_label)
+    controls['trace_file_label'] = trace_file_label
+    
+    import_trace_btn = QPushButton("Importa GPX/FIT/TCX")
+    import_trace_btn.setMaximumWidth(120)  # Ridotto da 150 a 120
+    import_trace_btn.clicked.connect(lambda: on_import_trace(trace_file_label, controls['distance_spin'], controls['elevation_spin'], controls.get('map_view')))
+    trace_layout.addWidget(import_trace_btn)
+    layout.addLayout(trace_layout)
+    
+    # Minimap
+    map_label = QLabel("Mappa traccia:")
+    map_label.setStyleSheet("font-weight: bold;")  # Più piccolo
+    layout.addWidget(map_label)
+    controls['map_view'] = QWebEngineView()
+    controls['map_view'].setMaximumHeight(500)  # Aumentato da 300 a 500
+    controls['map_view'].setHtml("<html><body><p>Importa un file traccia per visualizzare la mappa</p></body></html>")
+    layout.addWidget(controls['map_view'])
+    
     layout.addStretch()
     return widget, controls
 
@@ -158,3 +187,139 @@ def update_predictions(distance_spin: QDoubleSpinBox, speed_spin: QDoubleSpinBox
     # Chiama callback con durata in ore
     if on_duration_changed:
         on_duration_changed(duration_minutes / 60)
+
+
+def on_import_trace(trace_file_label, distance_spin, elevation_spin, map_view=None) -> Optional[str]:
+    """Importa il file traccia GPX/FIT/TCX e aggiorna distanza/dislivello"""
+    from pathlib import Path
+    from typing import Optional
+    from PySide6.QtWidgets import QFileDialog
+    
+    file_path, _ = QFileDialog.getOpenFileName(
+        None,
+        "Seleziona file traccia",
+        "",
+        "GPX Files (*.gpx);;FIT Files (*.fit);;TCX Files (*.tcx);;All Files (*)"
+    )
+    if file_path:
+        filename = Path(file_path).name
+        trace_file_label.setText(filename)
+        
+        # Leggi il file e aggiorna i campi
+        try:
+            ext = Path(file_path).suffix.lower()
+            total_distance = 0.0
+            elevation_gain = 0.0
+            
+            if ext == '.gpx':
+                import gpxpy
+                with open(file_path, 'r', encoding='utf-8') as gpx_file:
+                    gpx = gpxpy.parse(gpx_file)
+                    
+                    prev_elevation = None
+                    for track in gpx.tracks:
+                        for segment in track.segments:
+                            total_distance += segment.length_2d() / 1000  # Convert to km
+                            for point in segment.points:
+                                if point.elevation is not None:
+                                    if prev_elevation is not None:
+                                        diff = point.elevation - prev_elevation
+                                        if diff > 0:
+                                            elevation_gain += diff
+                                    prev_elevation = point.elevation
+                    
+            elif ext == '.fit':
+                from fitparse import FitFile
+                fitfile = FitFile(file_path)
+                records = list(fitfile.get_messages('record'))
+                prev_elevation = None
+                for record in records:
+                    if record.get_value('distance') is not None:
+                        total_distance = max(total_distance, record.get_value('distance') / 1000)  # Convert to km
+                    if record.get_value('altitude') is not None:
+                        elevation = record.get_value('altitude')
+                        if prev_elevation is not None:
+                            diff = elevation - prev_elevation
+                            if diff > 0:
+                                elevation_gain += diff
+                        prev_elevation = elevation
+                    
+            elif ext == '.tcx':
+                import tcxparser
+                tcx = tcxparser.TCXParser(file_path)
+                total_distance = tcx.distance / 1000  # Convert to km
+                # Calculate elevation gain from trackpoints
+                prev_elevation = None
+                for activity in tcx.activity_list:
+                    for lap in activity.laps:
+                        for trackpoint in lap.trackpoints:
+                            if trackpoint.elevation is not None:
+                                elevation = trackpoint.elevation
+                                if prev_elevation is not None:
+                                    diff = elevation - prev_elevation
+                                    if diff > 0:
+                                        elevation_gain += diff
+                                prev_elevation = elevation
+            
+            # Generate map if map_view is provided
+            if map_view and ext == '.gpx':
+                try:
+                    import folium
+                    
+                    # Extract coordinates from GPX
+                    coordinates = []
+                    for track in gpx.tracks:
+                        for segment in track.segments:
+                            for point in segment.points:
+                                coordinates.append([point.latitude, point.longitude])
+                    
+                    if coordinates:
+                        # Calculate bounds for auto-zoom
+                        lats = [coord[0] for coord in coordinates]
+                        lons = [coord[1] for coord in coordinates]
+                        lat_min, lat_max = min(lats), max(lats)
+                        lon_min, lon_max = min(lons), max(lons)
+                        
+                        # Create map with auto-fit bounds
+                        m = folium.Map()
+                        
+                        # Add track
+                        folium.PolyLine(coordinates, color='red', weight=3, opacity=0.7).add_to(m)
+                        
+                        # Add start marker
+                        folium.Marker(coordinates[0], popup='Start', icon=folium.Icon(color='green')).add_to(m)
+                        
+                        # Add end marker
+                        folium.Marker(coordinates[-1], popup='Finish', icon=folium.Icon(color='red')).add_to(m)
+                        
+                        # Fit bounds to show entire track
+                        m.fit_bounds([[lat_min, lon_min], [lat_max, lon_max]])
+                        
+                        # Get HTML directly
+                        html_string = m.get_root().render()
+                        
+                        # Load in QWebEngineView
+                        map_view.setHtml(html_string)
+                        
+                except ImportError:
+                    print("[bTeam] folium non installato. Installa con: pip install folium")
+                    map_view.setHtml("<html><body><p>Installa folium per visualizzare la mappa: pip install folium</p></body></html>")
+                except Exception as e:
+                    print(f"[bTeam] Errore generazione mappa: {e}")
+                    map_view.setHtml(f"<html><body><p>Errore caricamento mappa: {e}</p></body></html>")
+            
+            # Aggiorna i campi
+            if total_distance > 0:
+                distance_spin.setValue(total_distance)
+            if elevation_gain > 0:
+                elevation_spin.setValue(int(elevation_gain))
+                
+            print(f"[bTeam] Traccia importata: {filename}, Distanza: {total_distance:.1f}km, Dislivello: {elevation_gain:.0f}m")
+                
+        except ImportError as e:
+            print(f"[bTeam] Libreria mancante: {e}. Installa con pip install gpxpy fitparse tcxparser")
+        except Exception as e:
+            print(f"[bTeam] Errore lettura traccia: {e}")
+        
+        return file_path
+    return None

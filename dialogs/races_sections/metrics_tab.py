@@ -20,27 +20,6 @@ def build_metrics_tab() -> tuple[QWidget, dict]:
     
     controls = {}
     
-    # ===== Sezione Traccia =====
-    layout.addWidget(QLabel("📊 Traccia Gara"))
-    
-    trace_layout = QHBoxLayout()
-    trace_layout.addWidget(QLabel("File:"))
-    
-    from PySide6.QtWidgets import QLineEdit
-    trace_file_label = QLineEdit()
-    trace_file_label.setReadOnly(True)
-    trace_file_label.setPlaceholderText("Nessun file importato")
-    trace_layout.addWidget(trace_file_label)
-    controls['trace_file_label'] = trace_file_label
-    
-    import_trace_btn = QPushButton("Importa GPX/FIT/TCX")
-    import_trace_btn.setMaximumWidth(150)
-    import_trace_btn.clicked.connect(lambda: on_import_trace(trace_file_label))
-    trace_layout.addWidget(import_trace_btn)
-    layout.addLayout(trace_layout)
-    
-    layout.addWidget(QLabel("-" * 50))
-    
     # ===== Sezione TV (Traguardi Volanti) =====
     layout.addWidget(QLabel("🎯 Traguardi Volanti (TV)"))
     
@@ -104,21 +83,6 @@ def build_metrics_tab() -> tuple[QWidget, dict]:
     layout.addStretch()
     
     return widget, controls
-
-
-def on_import_trace(trace_file_label) -> Optional[str]:
-    """Importa il file traccia GPX/FIT/TCX"""
-    file_path, _ = QFileDialog.getOpenFileName(
-        None,
-        "Seleziona file traccia",
-        "",
-        "Trace Files (*.gpx *.fit *.tcx);;All Files (*)"
-    )
-    if file_path:
-        filename = Path(file_path).name
-        trace_file_label.setText(filename)
-        return file_path
-    return None
 
 
 def on_add_tv(tv_km_spin: QDoubleSpinBox, tv_table: QTableWidget) -> None:

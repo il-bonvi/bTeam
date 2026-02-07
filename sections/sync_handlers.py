@@ -177,8 +177,21 @@ def show_plan_week_dialog(parent, sync_service, on_plan_created) -> None:
 
 def show_races_dialog(parent, storage) -> None:
     """Apre il dialog per gestire gare pianificate"""
+    existing = getattr(parent, "_races_dialog_instance", None) if parent else None
+    if existing and existing.isVisible():
+        existing.raise_()
+        existing.activateWindow()
+        return
+
     races_dialog = RacesDialog(parent, storage)
-    races_dialog.exec()
+    races_dialog.setModal(False)
+    races_dialog.show()
+    races_dialog.raise_()
+    races_dialog.activateWindow()
+
+    if parent:
+        parent._races_dialog_instance = races_dialog
+        races_dialog.finished.connect(lambda: setattr(parent, "_races_dialog_instance", None))
 
 
 def show_export_import_dialog(parent, storage) -> None:
