@@ -163,6 +163,14 @@ class RacesDialog(QDialog):
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
+            # Prima elimina tutti gli atleti associati alla gara
+            if not self.storage.delete_race_athletes_by_race_id(race_id):
+                QMessageBox.warning(self, "Errore", "Errore nell'eliminazione degli atleti dalla gara")
+                return
+            
+            # Poi elimina la gara
             if self.storage.delete_race(race_id):
                 self._load_races()
                 QMessageBox.information(self, "Eliminata", "Gara eliminata con successo!")
+            else:
+                QMessageBox.critical(self, "Errore", "Errore nell'eliminazione della gara")

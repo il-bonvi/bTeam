@@ -1021,6 +1021,17 @@ class BTeamStorage:
             self.session.rollback()
             return False
 
+    def delete_race_athletes_by_race_id(self, race_id: int) -> bool:
+        """Delete all race athletes for a specific race."""
+        try:
+            self.session.query(RaceAthlete).filter(RaceAthlete.race_id == race_id).delete()
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione atleti gara: {e}")
+            self.session.rollback()
+            return False
+
     def delete_race(self, race_id: int) -> bool:
         """Delete a race by ID."""
         try:
