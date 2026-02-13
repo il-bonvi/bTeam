@@ -74,8 +74,7 @@ window.viewRaceDetails = async function(raceId) {
                     class: 'btn-primary',
                     onclick: 'saveRaceChanges()'
                 }
-            ],
-            'xlarge'
+            ]
         );
         
         setTimeout(() => {

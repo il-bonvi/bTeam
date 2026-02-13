@@ -1,9 +1,8 @@
 """Teams API Routes"""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 import sys
 from pathlib import Path
 

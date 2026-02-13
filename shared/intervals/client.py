@@ -6,7 +6,6 @@ Include tutti i 114+ endpoints con type hints completi
 import requests
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date, timedelta
-import base64
 from pathlib import Path
 
 try:
@@ -18,7 +17,6 @@ try:
     PYDANTIC_AVAILABLE = True
 except ImportError:
     PYDANTIC_AVAILABLE = False
-    print("⚠️  Pydantic models non disponibili. Usa dict al posto di modelli.")
 
 
 class IntervalsAPIClient:
@@ -66,8 +64,7 @@ class IntervalsAPIClient:
             }
             self.auth = None
         else:
-            if api_key is None:
-                raise ValueError("api_key non valido")
+            # api_key must be provided if access_token is not
             self.headers = {'Content-Type': 'application/json'}
             self.auth = ('API_KEY', api_key)
 

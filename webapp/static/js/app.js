@@ -110,10 +110,6 @@ async function loadDashboard() {
             api.getRaces()
         ]);
         
-        // Calculate stats
-        const totalDistance = activities.reduce((sum, a) => sum + (a.distance_km || 0), 0);
-        const totalDuration = activities.reduce((sum, a) => sum + (a.duration_minutes || 0), 0);
-        
         contentArea.innerHTML = `
             <div class="stats-grid">
                 <div class="stat-card">

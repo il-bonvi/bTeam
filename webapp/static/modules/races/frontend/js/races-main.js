@@ -86,7 +86,7 @@ function formatDuration(minutes) {
  * Delete race with confirmation dialog
  */
 window.deleteRaceConfirm = function(raceId) {
-    const modal = createModal(
+    createModal(
         '⚠️ Conferma Eliminazione',
         '<p>Sei sicuro di voler eliminare questa gara? L\'azione non può essere annullata.</p>',
         [

@@ -198,7 +198,7 @@ window.syncActivities = async function() {
         showToast(result.message, 'success');
         
         // Show summary
-        const modal = createModal(
+        createModal(
             'Sincronizzazione Completata',
             `
             <div style="text-align: center; padding: 2rem;">
@@ -252,7 +252,7 @@ window.syncWellness = async function() {
         showToast(result.message, 'success');
         
         // Show summary
-        const modal = createModal(
+        createModal(
             'Sincronizzazione Wellness Completata',
             `
             <div style="text-align: center; padding: 2rem;">
