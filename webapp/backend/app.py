@@ -10,14 +10,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
 import sys
+import os
 from pathlib import Path
 
 # Add parent directory to path to import existing modules
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, root_dir)
+# Add webapp directory to sys.path for modules import
+webapp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, webapp_dir)
 
-from storage_bteam import BTeamStorage
-from intervals_client_v2 import IntervalsAPIClient
-from intervals_sync import IntervalsSyncService
+from shared.storage import BTeamStorage
+from shared.intervals import IntervalsAPIClient, IntervalsSyncService
 
 # Initialize FastAPI app
 app = FastAPI(

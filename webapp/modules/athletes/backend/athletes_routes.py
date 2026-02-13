@@ -44,10 +44,9 @@ class AthleteUpdate(BaseModel):
 @router.get("/")
 async def get_athletes(team_id: Optional[int] = None):
     """Get all athletes, optionally filtered by team"""
+    athletes = storage.list_athletes()
     if team_id:
-        athletes = storage.get_athletes_by_team(team_id)
-    else:
-        athletes = storage.get_all_athletes()
+        athletes = [a for a in athletes if a.get('team_id') == team_id]
     return athletes
 
 
@@ -64,17 +63,18 @@ async def get_athlete(athlete_id: int):
 async def create_athlete(athlete: AthleteCreate):
     """Create a new athlete"""
     try:
-        new_athlete = storage.add_athlete(
+        athlete_id = storage.add_athlete(
             first_name=athlete.first_name,
             last_name=athlete.last_name,
             team_id=athlete.team_id,
-            birth_date=athlete.birth_date,
+            birth_date=athlete.birth_date or "",
             weight_kg=athlete.weight_kg,
             height_cm=athlete.height_cm,
             gender=athlete.gender,
-            api_key=athlete.api_key,
-            notes=athlete.notes
+            notes=athlete.notes or ""
         )
+        # Retrieve the created athlete
+        new_athlete = storage.get_athlete(athlete_id)
         return new_athlete
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -89,7 +89,9 @@ async def update_athlete(athlete_id: int, athlete: AthleteUpdate):
     
     try:
         update_data = {k: v for k, v in athlete.dict().items() if v is not None}
-        updated_athlete = storage.update_athlete(athlete_id, **update_data)
+        storage.update_athlete(athlete_id, **update_data)
+        # Return updated athlete
+        updated_athlete = storage.get_athlete(athlete_id)
         return updated_athlete
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

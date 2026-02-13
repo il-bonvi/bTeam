@@ -255,16 +255,11 @@ async function loadActivities() {
 }
 
 async function loadRaces() {
-    const script = document.createElement('script');
-    script.src = '/static/js/races.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
-    
+    // Races module is already loaded in HTML, just call the render function
     if (typeof window.renderRacesPage === 'function') {
-        window.renderRacesPage();
+        await window.renderRacesPage();
+    } else {
+        console.error('Races module not loaded');
     }
 }
 

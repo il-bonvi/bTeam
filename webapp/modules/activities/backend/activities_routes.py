@@ -41,7 +41,7 @@ async def get_activities(
     is_race: Optional[bool] = None
 ):
     """Get all activities with optional filters"""
-    activities = storage.get_all_activities(limit=limit)
+    activities = storage.list_activities()
     
     if athlete_id:
         activities = [a for a in activities if a['athlete_id'] == athlete_id]
@@ -49,7 +49,7 @@ async def get_activities(
     if is_race is not None:
         activities = [a for a in activities if a.get('is_race') == is_race]
     
-    return activities
+    return activities[:limit]
 
 
 @router.get("/{activity_id}")
@@ -65,7 +65,7 @@ async def get_activity(activity_id: int):
 async def create_activity(activity: ActivityCreate):
     """Create a new activity"""
     try:
-        new_activity = storage.add_activity(
+        activity_id = storage.add_activity(
             athlete_id=activity.athlete_id,
             title=activity.title,
             activity_date=activity.activity_date,
@@ -83,6 +83,8 @@ async def create_activity(activity: ActivityCreate):
             intensity=activity.intensity,
             feel=activity.feel
         )
+        # Retrieve the created activity
+        new_activity = storage.get_activity(activity_id)
         return new_activity
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -105,9 +107,10 @@ async def delete_activity(activity_id: int):
 @router.get("/athlete/{athlete_id}/stats")
 async def get_athlete_stats(athlete_id: int):
     """Get statistics for an athlete's activities"""
-    activities = storage.get_activities_by_athlete(athlete_id)
+    activities = storage.list_activities()
+    athlete_activities = [a for a in activities if a['athlete_id'] == athlete_id]
     
-    if not activities:
+    if not athlete_activities:
         return {
             "total_activities": 0,
             "total_distance_km": 0,
@@ -115,13 +118,13 @@ async def get_athlete_stats(athlete_id: int):
             "avg_tss": 0
         }
     
-    total_distance = sum(a.get('distance_km', 0) or 0 for a in activities)
-    total_duration = sum(a.get('duration_minutes', 0) or 0 for a in activities)
-    tss_values = [a.get('tss', 0) or 0 for a in activities if a.get('tss')]
+    total_distance = sum(a.get('distance_km', 0) or 0 for a in athlete_activities)
+    total_duration = sum(a.get('duration_minutes', 0) or 0 for a in athlete_activities)
+    tss_values = [a.get('tss', 0) or 0 for a in athlete_activities if a.get('tss')]
     avg_tss = sum(tss_values) / len(tss_values) if tss_values else 0
     
     return {
-        "total_activities": len(activities),
+        "total_activities": len(athlete_activities),
         "total_distance_km": round(total_distance, 2),
         "total_duration_hours": round(total_duration / 60, 2),
         "avg_tss": round(avg_tss, 2)

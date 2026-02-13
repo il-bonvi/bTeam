@@ -30,7 +30,7 @@ class TeamResponse(BaseModel):
 @router.get("/", response_model=List[TeamResponse])
 async def get_teams():
     """Get all teams"""
-    teams = storage.get_all_teams()
+    teams = storage.list_teams()
     return teams
 
 
@@ -47,7 +47,14 @@ async def get_team(team_id: int):
 async def create_team(team: TeamCreate):
     """Create a new team"""
     try:
-        new_team = storage.add_team(name=team.name)
+        team_id = storage.add_team(name=team.name)
+        # Retrieve the created team to return full object
+        from datetime import datetime
+        new_team = {
+            "id": team_id,
+            "name": team.name,
+            "created_at": datetime.utcnow().isoformat()
+        }
         return new_team
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -56,12 +63,20 @@ async def create_team(team: TeamCreate):
 @router.put("/{team_id}", response_model=TeamResponse)
 async def update_team(team_id: int, team: TeamCreate):
     """Update an existing team"""
-    existing_team = storage.get_team(team_id)
+    # Get teams and check if exists
+    teams = storage.list_teams()
+    existing_team = next((t for t in teams if t['id'] == team_id), None)
     if not existing_team:
         raise HTTPException(status_code=404, detail="Team not found")
     
     try:
-        updated_team = storage.update_team(team_id, name=team.name)
+        storage.update_team(team_id, name=team.name)
+        # Return updated team
+        updated_team = {
+            "id": team_id,
+            "name": team.name,
+            "created_at": existing_team["created_at"]
+        }
         return updated_team
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -70,7 +85,8 @@ async def update_team(team_id: int, team: TeamCreate):
 @router.delete("/{team_id}")
 async def delete_team(team_id: int):
     """Delete a team"""
-    existing_team = storage.get_team(team_id)
+    teams = storage.list_teams()
+    existing_team = next((t for t in teams if t['id'] == team_id), None)
     if not existing_team:
         raise HTTPException(status_code=404, detail="Team not found")
     

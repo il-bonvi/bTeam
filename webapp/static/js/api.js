@@ -22,10 +22,19 @@ class APIClient {
 
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
+            let data;
+            
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                // If JSON parsing fails, get the text response
+                const text = await response.text();
+                console.error('Failed to parse JSON response:', text);
+                throw new Error(`Server returned invalid JSON: ${text.substring(0, 100)}`);
+            }
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Request failed');
+                throw new Error(data.detail || data.message || 'Request failed');
             }
 
             return data;
@@ -133,6 +142,13 @@ class APIClient {
     async createRace(data) {
         return this.request('/races/', {
             method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async updateRace(id, data) {
+        return this.request(`/races/${id}`, {
+            method: 'PUT',
             body: JSON.stringify(data),
         });
     }

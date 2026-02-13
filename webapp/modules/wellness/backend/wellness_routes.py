@@ -36,26 +36,25 @@ class WellnessCreate(BaseModel):
 async def get_wellness(athlete_id: Optional[int] = None, days_back: int = 30):
     """Get wellness data, optionally filtered by athlete"""
     if athlete_id:
-        wellness_data = storage.get_wellness_by_athlete(athlete_id, days_back=days_back)
+        wellness_data = storage.get_wellness(athlete_id, days_back=days_back)
     else:
-        wellness_data = storage.get_all_wellness(days_back=days_back)
+        # Get all athletes and compile their wellness data
+        all_athletes = storage.list_athletes()
+        wellness_data = []
+        for athlete in all_athletes:
+            athlete_wellness = storage.get_wellness(athlete['id'], days_back=days_back)
+            wellness_data.extend(athlete_wellness)
+        # Sort by date descending
+        wellness_data.sort(key=lambda x: x.get('wellness_date', ''), reverse=True)
     return wellness_data
 
-
-@router.get("/{wellness_id}")
-async def get_wellness_entry(wellness_id: int):
-    """Get a specific wellness entry by ID"""
-    wellness = storage.get_wellness_entry(wellness_id)
-    if not wellness:
-        raise HTTPException(status_code=404, detail="Wellness entry not found")
-    return wellness
 
 
 @router.post("/")
 async def create_wellness(wellness: WellnessCreate):
-    """Create a new wellness entry"""
+    """Create or update a wellness entry"""
     try:
-        new_wellness = storage.add_wellness(
+        result = storage.add_wellness(
             athlete_id=wellness.athlete_id,
             wellness_date=wellness.wellness_date,
             weight_kg=wellness.weight_kg,
@@ -71,36 +70,16 @@ async def create_wellness(wellness: WellnessCreate):
             sleep_score=wellness.sleep_score,
             comments=wellness.comments
         )
-        return new_wellness
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.put("/{wellness_id}")
-async def update_wellness(wellness_id: int, wellness: WellnessCreate):
-    """Update an existing wellness entry"""
-    existing_wellness = storage.get_wellness_entry(wellness_id)
-    if not existing_wellness:
-        raise HTTPException(status_code=404, detail="Wellness entry not found")
-    
-    try:
-        update_data = {k: v for k, v in wellness.dict().items() if v is not None and k != 'athlete_id'}
-        updated_wellness = storage.update_wellness(wellness_id, **update_data)
-        return updated_wellness
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.delete("/{wellness_id}")
-async def delete_wellness(wellness_id: int):
-    """Delete a wellness entry"""
-    existing_wellness = storage.get_wellness_entry(wellness_id)
-    if not existing_wellness:
-        raise HTTPException(status_code=404, detail="Wellness entry not found")
-    
-    try:
-        storage.delete_wellness(wellness_id)
-        return {"message": "Wellness entry deleted successfully"}
+        if result:
+            # Retrieve the created/updated wellness data
+            wellness_data = storage.get_wellness(wellness.athlete_id, days_back=30)
+            # Find the entry we just created
+            for entry in wellness_data:
+                if entry.get('wellness_date') == wellness.wellness_date:
+                    return entry
+            return {"message": "Wellness entry created/updated successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Failed to create wellness entry")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -108,7 +87,7 @@ async def delete_wellness(wellness_id: int):
 @router.get("/athlete/{athlete_id}/latest")
 async def get_latest_wellness(athlete_id: int):
     """Get the latest wellness entry for an athlete"""
-    wellness_data = storage.get_wellness_by_athlete(athlete_id, days_back=7)
+    wellness_data = storage.get_wellness(athlete_id, days_back=7)
     if not wellness_data:
         raise HTTPException(status_code=404, detail="No wellness data found")
     

@@ -35,7 +35,7 @@ class RaceAthleteAdd(BaseModel):
 @router.get("/")
 async def get_races():
     """Get all races"""
-    races = storage.get_all_races()
+    races = storage.list_races()
     return races
 
 
@@ -52,7 +52,7 @@ async def get_race(race_id: int):
 async def create_race(race: RaceCreate):
     """Create a new race"""
     try:
-        new_race = storage.add_race(
+        race_id = storage.add_race(
             name=race.name,
             race_date=race.race_date,
             distance_km=race.distance_km,
@@ -62,7 +62,35 @@ async def create_race(race: RaceCreate):
             avg_speed_kmh=race.avg_speed_kmh,
             notes=race.notes
         )
+        # Retrieve the created race
+        new_race = storage.get_race(race_id)
         return new_race
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{race_id}")
+async def update_race(race_id: int, race: RaceCreate):
+    """Update an existing race"""
+    existing_race = storage.get_race(race_id)
+    if not existing_race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        storage.update_race(
+            race_id=race_id,
+            name=race.name,
+            race_date=race.race_date,
+            distance_km=race.distance_km,
+            gender=race.gender,
+            category=race.category,
+            elevation_m=race.elevation_m,
+            avg_speed_kmh=race.avg_speed_kmh,
+            notes=race.notes
+        )
+        # Retrieve the updated race
+        updated_race = storage.get_race(race_id)
+        return updated_race
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
