@@ -19,7 +19,7 @@ class APIClient {
             },
             ...options,
         };
-
+        
         try {
             const response = await fetch(url, config);
             let data;
@@ -60,7 +60,6 @@ class APIClient {
 
             return data;
         } catch (error) {
-            console.error('API Error:', error);
             throw error;
         }
     }
@@ -247,10 +246,11 @@ class APIClient {
     }
 
     async syncWellness(data) {
-        return this.request('/sync/wellness', {
+        const result = await this.request('/sync/wellness', {
             method: 'POST',
             body: JSON.stringify(data),
         });
+        return result;
     }
 
     async pushRace(raceId, athleteId, apiKey) {

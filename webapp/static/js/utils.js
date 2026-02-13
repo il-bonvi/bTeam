@@ -66,11 +66,11 @@ function formatDuration(minutes) {
 }
 
 // Create modal dialog
-function createModal(title, content, actions = []) {
+function createModal(title, content, actions = [], modalClass = '') {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
-        <div class="modal">
+        <div class="modal ${modalClass}">
             <div class="modal-header">
                 <h3>${title}</h3>
                 <button class="btn-close" onclick="this.closest('.modal-overlay').remove()">

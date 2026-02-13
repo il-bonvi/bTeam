@@ -434,3 +434,327 @@ tr:hover {
         grid-template-columns: 1fr;
     }
 }
+
+/* ============================================
+   Wellness Module Styles
+   ============================================ */
+
+.athletes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+}
+
+.athlete-wellness-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease;
+}
+
+.athlete-wellness-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.athlete-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.athlete-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.wellness-content {
+    min-height: 300px;
+}
+
+.no-wellness {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    margin: var(--spacing-lg) 0;
+}
+
+.wellness-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+}
+
+.wellness-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+.wellness-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+}
+
+.section-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: var(--spacing-xs);
+}
+
+.wellness-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.metric-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.wellness-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+}
+
+.wellness-item .label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.wellness-item .value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+}
+
+.table-responsive {
+    overflow-x: auto;
+    margin-top: var(--spacing-md);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: var(--spacing-md);
+}
+
+.table th,
+.table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.large-modal .modal-content {
+    max-width: 98vw;
+    max-height: 95vh;
+    overflow-y: auto;
+    width: 98vw;
+}
+
+.large-modal .table-responsive {
+    overflow-x: auto;
+    margin-top: var(--spacing-md);
+    min-height: 100%;
+}
+
+.large-modal .wellness-table {
+    min-width: 1200px;
+    font-size: 0.9rem;
+}
+
+.large-modal .wellness-table th,
+.large-modal .wellness-table td {
+    padding: 0.4rem 0.5rem;
+    white-space: nowrap;
+}
+
+/* Form enhancements for wellness */
+.form-row {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+.form-section {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.form-section h4 {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Wellness Table Styles */
+.wellness-table {
+    margin-top: var(--spacing-md);
+}
+
+.wellness-table th {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border: none;
+}
+
+.wellness-table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.wellness-row {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.wellness-row:hover {
+    background: var(--bg-secondary);
+}
+
+.wellness-row.active {
+    background: var(--primary-light);
+    color: white;
+}
+
+.wellness-row.active:hover {
+    background: var(--primary-light);
+}
+
+.date-cell {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.actions-cell {
+    text-align: right;
+}
+
+.actions-cell .btn {
+    margin-left: var(--spacing-xs);
+}
+
+.wellness-details-row {
+    background: var(--bg-secondary);
+}
+
+.wellness-details {
+    padding: var(--spacing-md);
+    background: white;
+    border-radius: var(--radius-sm);
+    margin: var(--spacing-sm) 0;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-sm);
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-item.full-width {
+    grid-column: 1 / -1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+}
+/* Wellness Score Colors (1-4 scale) */
+.score-green {
+    color: #48bb78 !important; /* green-500 */
+    font-weight: 600;
+}
+
+.score-black {
+    color: #1a202c !important; /* gray-900 */
+    font-weight: 600;
+}
+
+.score-orange {
+    color: #ed8936 !important; /* orange-500 */
+    font-weight: 600;
+}
+
+.score-red {
+    color: #f56565 !important; /* red-500 */
+    font-weight: 600;
+}
+.detail-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.detail-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Header Actions */
+.header-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}

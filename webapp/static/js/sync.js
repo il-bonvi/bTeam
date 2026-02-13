@@ -72,7 +72,7 @@ window.renderSyncPage = async function() {
                 <div class="form-group">
                     <label class="form-label">Giorni Indietro</label>
                     <input type="number" id="sync-wellness-days-back" class="form-input" 
-                           value="7" min="1" max="90">
+                           value="30" min="1" max="90">
                 </div>
                 
                 <div class="form-group">

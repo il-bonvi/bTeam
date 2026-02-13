@@ -72,24 +72,48 @@ class Activity(BaseModel):
 class Wellness(BaseModel):
     """Dati wellness giornalieri"""
     id: str  # YYYY-MM-DD
+    ctl: Optional[float] = None
+    atl: Optional[float] = None
+    rampRate: Optional[float] = Field(None, alias='ramp_rate')
+    ctlLoad: Optional[float] = Field(None, alias='ctl_load')
+    atlLoad: Optional[float] = Field(None, alias='atl_load')
+    sportInfo: Optional[list] = Field(None, alias='sport_info')
+    updated: Optional[str] = None
     weight: Optional[float] = None
     restingHR: Optional[int] = Field(None, alias='resting_hr')
     hrv: Optional[float] = None
-    rhr: Optional[float] = None
-    steps: Optional[int] = None
+    hrvSDNN: Optional[float] = Field(None, alias='hrv_sdnn')
+    menstrualPhase: Optional[str] = Field(None, alias='menstrual_phase')
+    menstrualPhasePredicted: Optional[str] = Field(None, alias='menstrual_phase_predicted')
+    kcalConsumed: Optional[int] = Field(None, alias='kcal_consumed')
+    sleepSecs: Optional[int] = Field(None, alias='sleep_secs')
+    sleepScore: Optional[float] = Field(None, alias='sleep_score')
+    sleepQuality: Optional[int] = Field(None, alias='sleep_quality')
+    avgSleepingHR: Optional[float] = Field(None, alias='avg_sleeping_hr')
     soreness: Optional[int] = None
     fatigue: Optional[int] = None
     stress: Optional[int] = None
     mood: Optional[int] = None
     motivation: Optional[int] = None
     injury: Optional[float] = None
-    menstruation: Optional[bool] = None
-    menstrualPhase: Optional[int] = Field(None, alias='menstrual_phase')  # 1=mestruale, 2=follicolare, 3=ovulatoria, 4=luteale
-    kcal: Optional[int] = None
-    sleepSecs: Optional[int] = Field(None, alias='sleep_secs')
-    sleepScore: Optional[int] = Field(None, alias='sleep_score')
-    avgSleepingHR: Optional[float] = Field(None, alias='avg_sleeping_hr')
+    spO2: Optional[float] = None
+    systolic: Optional[int] = None
+    diastolic: Optional[int] = None
+    hydration: Optional[int] = None
+    hydrationVolume: Optional[float] = Field(None, alias='hydration_volume')
+    readiness: Optional[float] = None
+    baevskySI: Optional[float] = Field(None, alias='baevsky_si')
+    bloodGlucose: Optional[float] = Field(None, alias='blood_glucose')
+    lactate: Optional[float] = None
+    bodyFat: Optional[float] = Field(None, alias='body_fat')
+    abdomen: Optional[float] = None
+    vo2max: Optional[float] = None
+    comments: Optional[str] = None
+    steps: Optional[int] = None
+    respiration: Optional[float] = None
     locked: Optional[bool] = False
+    tempWeight: Optional[bool] = Field(None, alias='temp_weight')
+    tempRestingHR: Optional[bool] = Field(None, alias='temp_resting_hr')
     
     class Config:
         populate_by_name = True

@@ -30,7 +30,7 @@ class SyncRequest(BaseModel):
 class WellnessSyncRequest(BaseModel):
     athlete_id: int
     api_key: str
-    days_back: int = 7
+    days_back: int = 30
 
 
 class PushRaceRequest(BaseModel):
@@ -134,6 +134,7 @@ async def sync_wellness(request: WellnessSyncRequest):
                 wellness_date = entry.get('id')
                 if not wellness_date:
                     continue  # Skip entries without date
+                body_fat_value = entry.get('bodyFat')
                 storage.add_wellness(
                     athlete_id=request.athlete_id,
                     wellness_date=str(wellness_date),
@@ -143,22 +144,35 @@ async def sync_wellness(request: WellnessSyncRequest):
                     steps=entry.get('steps'),
                     soreness=entry.get('soreness'),
                     fatigue=entry.get('fatigue'),
-                    stress=entry.get('mentalReadiness'),
+                    stress=entry.get('stress'),
                     mood=entry.get('mood'),
                     motivation=entry.get('motivation'),
+                    injury=entry.get('injury'),
+                    kcal=entry.get('kcalConsumed'),
                     sleep_secs=entry.get('sleepSecs'),
                     sleep_score=entry.get('sleepScore'),
+                    sleep_quality=entry.get('sleepQuality'),
+                    avg_sleeping_hr=entry.get('avgSleepingHR'),
+                    menstruation=None,  # Not directly available in API
+                    menstrual_cycle_phase=entry.get('menstrualPhase'),
+                    body_fat=body_fat_value,
+                    respiration=entry.get('respiration'),
+                    spO2=entry.get('spO2'),
+                    readiness=entry.get('readiness'),
+                    ctl=entry.get('ctl'),
+                    atl=entry.get('atl'),
+                    ramp_rate=entry.get('rampRate'),
                     comments=entry.get('comments')
                 )
                 imported_count += 1
             except Exception as e:
-                print(f"Error importing wellness: {e}")
                 continue
         
         return {
             "success": True,
             "message": f"Imported {imported_count} wellness entries",
-            "imported": imported_count
+            "imported": imported_count,
+            "total_found": len(wellness_data)
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
