@@ -35,6 +35,7 @@ class WellnessSyncRequest(BaseModel):
 
 class PushRaceRequest(BaseModel):
     race_id: int
+    athlete_id: int
     api_key: str
 
 
@@ -165,24 +166,71 @@ async def sync_wellness(request: WellnessSyncRequest):
 
 @router.post("/push-race")
 async def push_race(request: PushRaceRequest):
-    """Push a race to Intervals.icu as a planned event"""
+    """Push a race to Intervals.icu as a planned event (matching OLDAPP implementation)"""
     try:
         race = storage.get_race(request.race_id)
         if not race:
             raise HTTPException(status_code=404, detail="Race not found")
         
+        # Get athlete to ensure they exist
+        athlete = storage.get_athlete(request.athlete_id)
+        if not athlete:
+            raise HTTPException(status_code=404, detail="Athlete not found")
+        
         client = IntervalsAPIClient(api_key=request.api_key)
         
-        # Create event on Intervals.icu
-        event_data = {
-            "category": "RACE",
-            "start_date_local": f"{race['race_date']}T10:00:00",
-            "name": race['name'],
-            "type": "Ride",
-            "description": f"Distance: {race['distance_km']}km\nCategory: {race.get('category', 'N/A')}",
-        }
+        # Extract race data with defaults
+        distance_km = race.get('distance_km') or 0
+        elevation_m = race.get('elevation_m') or 0
+        predicted_kj = race.get('predicted_kj') or 0
+        category = race.get('category') or 'C'
+        notes = race.get('notes') or ''
         
-        result = client.create_event(**event_data)
+        # Calculate duration from predicted data or estimate
+        # If we have predicted_duration_minutes, use that, otherwise estimate 4 hours
+        predicted_duration = race.get('predicted_duration_minutes')
+        if predicted_duration:
+            duration_minutes = float(predicted_duration)
+        else:
+            # Default estimate: 25 km/h average speed
+            duration_minutes = (distance_km / 25.0) * 60 if distance_km > 0 else 240
+        
+        duration_seconds = int(duration_minutes * 60)
+        
+        # Calculate end_date_local
+        from datetime import datetime, timedelta
+        start_date_local = f"{race['race_date']}T10:00:00"
+        start_dt = datetime.fromisoformat(start_date_local)
+        end_dt = start_dt + timedelta(seconds=duration_seconds)
+        end_date_local = end_dt.isoformat()
+        
+        # Map category to Intervals category (A/B/C → RACE_A/RACE_B/RACE_C)
+        category_upper = str(category).upper()
+        if category_upper in ['A', 'B', 'C']:
+            intervals_category = f"RACE_{category_upper}"
+        else:
+            intervals_category = "RACE_C"  # Default to C
+        
+        # Build HTML-formatted description like OLDAPP
+        race_description = f'<div><b></b><span class="text-red-darken-2"><b class="">Dislivello</b></span>: {int(elevation_m)}m</div>'
+        race_description += f'<div><b></b><span class="text-green"><b class="">Previsti</b></span>: {int(predicted_kj)}kJ</div>'
+        if notes:
+            race_description += f'<div><b></b><span class="text-purple"><b class="">Note</b></span>: {notes}</div>'
+        
+        # Create event with ALL parameters from OLDAPP
+        # Use "0" for athlete_id (means "current athlete" who owns the API key)
+        # In OLDAPP: athlete.get("intervals_id") or "0"
+        result = client.create_event(
+            athlete_id="0",
+            category=intervals_category,
+            start_date_local=start_date_local,
+            end_date_local=end_date_local,
+            name=race['name'],
+            description=race_description,
+            activity_type='Ride',
+            distance=distance_km * 1000,  # Convert km to meters
+            moving_time=duration_seconds
+        )
         
         return {
             "success": True,

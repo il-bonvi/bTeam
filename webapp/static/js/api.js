@@ -35,7 +35,27 @@ class APIClient {
             }
 
             if (!response.ok) {
-                throw new Error(data.detail || data.message || 'Request failed');
+                let errorMessage = 'Request failed';
+                
+                // Handle different error response formats
+                if (typeof data.detail === 'string') {
+                    errorMessage = data.detail;
+                } else if (typeof data.message === 'string') {
+                    errorMessage = data.message;
+                } else if (Array.isArray(data.detail)) {
+                    // Handle array of validation errors
+                    errorMessage = data.detail
+                        .map(item => typeof item === 'string' ? item : JSON.stringify(item))
+                        .join('; ');
+                } else if (Array.isArray(data.message)) {
+                    errorMessage = data.message
+                        .map(item => typeof item === 'string' ? item : JSON.stringify(item))
+                        .join('; ');
+                } else if (typeof data.detail === 'object' && data.detail !== null) {
+                    errorMessage = JSON.stringify(data.detail);
+                }
+                
+                throw new Error(errorMessage);
             }
 
             return data;
@@ -233,10 +253,10 @@ class APIClient {
         });
     }
 
-    async pushRace(raceId, apiKey) {
+    async pushRace(raceId, athleteId, apiKey) {
         return this.request('/sync/push-race', {
             method: 'POST',
-            body: JSON.stringify({ race_id: raceId, api_key: apiKey }),
+            body: JSON.stringify({ race_id: raceId, athlete_id: athleteId, api_key: apiKey }),
         });
     }
 

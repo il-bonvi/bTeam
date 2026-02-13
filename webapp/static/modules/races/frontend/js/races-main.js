@@ -210,14 +210,22 @@ window.performRacePush = async function(raceId) {
             return;
         }
         
-        const result = await api.pushRace(raceId, athlete.api_key);
+        const result = await api.pushRace(raceId, parseInt(athleteId), athlete.api_key);
         
         showToast('✅ Gara aggiunta a Intervals.icu con successo', 'success');
         document.querySelector('.modal-overlay')?.remove();
         
     } catch (error) {
-        showToast('❌ Errore: ' + error.message, 'error');
-        console.error(error);
+        let errorMsg = 'Errore sconosciuto';
+        if (error instanceof Error) {
+            errorMsg = error.message;
+        } else if (typeof error === 'string') {
+            errorMsg = error;
+        } else if (error && typeof error === 'object') {
+            errorMsg = JSON.stringify(error);
+        }
+        showToast('❌ Errore: ' + errorMsg, 'error');
+        console.error('Full error:', error);
     } finally {
         hideLoading();
     }
