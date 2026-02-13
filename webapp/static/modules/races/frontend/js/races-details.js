@@ -20,6 +20,16 @@ window.viewRaceDetails = async function(raceId) {
         ]);
         
         window.currentRaceData = race;
+        
+        // Load GPX trace data if available
+        if (race.route_file) {
+            try {
+                window.gpxTraceData = JSON.parse(race.route_file);
+            } catch (e) {
+                console.warn('Could not parse GPX data:', e);
+            }
+        }
+        
         const raceAthletes = race.athletes || [];
         
         const modalContent = `
@@ -80,6 +90,24 @@ window.viewRaceDetails = async function(raceId) {
         setTimeout(() => {
             updateDetailCategories();
             updateDetailPredictions();
+            
+            // Load and display GPX map if available
+            if (window.gpxTraceData && window.gpxTraceData.coordinates) {
+                displayGpxMap(window.gpxTraceData.coordinates);
+                const mapContainer = document.getElementById('map-container');
+                if (mapContainer) {
+                    mapContainer.style.display = 'block';
+                }
+                const filenameDisplay = document.getElementById('gpx-filename');
+                if (filenameDisplay) {
+                    filenameDisplay.textContent = '✅ Traccia caricata';
+                    filenameDisplay.style.color = '#22C55E';
+                }
+                const deleteBtn = document.getElementById('gpx-delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.style.display = 'inline-block';
+                }
+            }
         }, 100);
         
     } catch (error) {
@@ -165,6 +193,9 @@ function buildDetailsTab(race) {
                                style="display: none;" onchange="handleGpxImport(event)">
                     </label>
                     <span id="gpx-filename" style="color: #666;">Nessun file importato</span>
+                    <button type="button" class="btn btn-danger btn-sm" id="gpx-delete-btn" style="display: none;" onclick="deleteRaceGpx()">
+                        🗑️ Elimina Traccia
+                    </button>
                 </div>
                 <div id="map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
                     <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
@@ -180,6 +211,35 @@ function buildDetailsTab(race) {
         </div>
     `;
 }
+
+/**
+ * Delete GPX trace from race
+ */
+window.deleteRaceGpx = function() {
+    window.gpxTraceData = null;
+    
+    const filenameDisplay = document.getElementById('gpx-filename');
+    if (filenameDisplay) {
+        filenameDisplay.textContent = 'Nessun file importato';
+        filenameDisplay.style.color = '#666';
+    }
+    
+    const deleteBtn = document.getElementById('gpx-delete-btn');
+    if (deleteBtn) {
+        deleteBtn.style.display = 'none';
+    }
+    
+    const mapContainer = document.getElementById('map-container');
+    if (mapContainer) {
+        mapContainer.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                Importa un file GPX per visualizzare la mappa
+            </div>
+        `;
+    }
+    
+    showToast('✅ Traccia eliminata', 'success');
+};
 
 /**
  * Update detail categories based on gender
@@ -263,6 +323,22 @@ window.saveRaceChanges = async function() {
         return;
     }
     
+    // Calculate predicted KJ if there are athletes
+    let predictedKj = null;
+    const raceAthletes = window.currentRaceData?.athletes || [];
+    if (raceAthletes.length > 0) {
+        let totalKj = 0;
+        const durationHours = (distance / speed) * 60 / 60; // Convert to hours
+        
+        raceAthletes.forEach(ra => {
+            const weight = ra.weight_kg || 70;
+            const kjPerHourPerKg = ra.kj_per_hour_per_kg || 10.0;
+            totalKj += kjPerHourPerKg * weight * durationHours;
+        });
+        
+        predictedKj = totalKj / raceAthletes.length;
+    }
+    
     const data = {
         name: name,
         race_date: raceDate,
@@ -271,7 +347,11 @@ window.saveRaceChanges = async function() {
         gender: document.getElementById('detail-gender')?.value,
         elevation_m: document.getElementById('detail-elevation')?.value ? parseFloat(document.getElementById('detail-elevation').value) : null,
         avg_speed_kmh: speed,
-        notes: document.getElementById('detail-notes')?.value || null
+        predicted_duration_minutes: (distance / speed) * 60,
+        predicted_kj: predictedKj,
+        notes: document.getElementById('detail-notes')?.value || null,
+        // Save GPX trace data if available
+        route_file: window.gpxTraceData ? JSON.stringify(window.gpxTraceData) : null
     };
     
     try {

@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from storage_bteam import BTeamStorage
+from shared.storage import BTeamStorage
 
 router = APIRouter()
 
@@ -23,6 +23,9 @@ class RaceCreate(BaseModel):
     category: Optional[str] = None
     elevation_m: Optional[float] = None
     avg_speed_kmh: Optional[float] = None
+    predicted_duration_minutes: Optional[float] = None
+    predicted_kj: Optional[float] = None
+    route_file: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -60,6 +63,9 @@ async def create_race(race: RaceCreate):
             category=race.category,
             elevation_m=race.elevation_m,
             avg_speed_kmh=race.avg_speed_kmh,
+            predicted_duration_minutes=race.predicted_duration_minutes,
+            predicted_kj=race.predicted_kj,
+            route_file=race.route_file,
             notes=race.notes
         )
         # Retrieve the created race
@@ -86,6 +92,9 @@ async def update_race(race_id: int, race: RaceCreate):
             category=race.category,
             elevation_m=race.elevation_m,
             avg_speed_kmh=race.avg_speed_kmh,
+            predicted_duration_minutes=race.predicted_duration_minutes,
+            predicted_kj=race.predicted_kj,
+            route_file=race.route_file,
             notes=race.notes
         )
         # Retrieve the updated race

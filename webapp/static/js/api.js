@@ -24,11 +24,12 @@ class APIClient {
             const response = await fetch(url, config);
             let data;
             
+            // Read body once to avoid "already consumed" error
+            const text = await response.text();
+            
             try {
-                data = await response.json();
+                data = text ? JSON.parse(text) : {};
             } catch (jsonError) {
-                // If JSON parsing fails, get the text response
-                const text = await response.text();
                 console.error('Failed to parse JSON response:', text);
                 throw new Error(`Server returned invalid JSON: ${text.substring(0, 100)}`);
             }
@@ -236,6 +237,12 @@ class APIClient {
         return this.request('/sync/push-race', {
             method: 'POST',
             body: JSON.stringify({ race_id: raceId, api_key: apiKey }),
+        });
+    }
+
+    async syncAthleteMetrics(athleteId, apiKey) {
+        return this.request(`/sync/athlete-metrics?athlete_id=${athleteId}&api_key=${apiKey}`, {
+            method: 'POST',
         });
     }
 

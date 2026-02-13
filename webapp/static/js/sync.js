@@ -1,8 +1,10 @@
 /**
  * Sync Module - Frontend (Intervals.icu Integration)
+ * Ogni atleta ha la sua API key salvata nel database
  */
 
-let currentApiKey = '';
+// Use window object to avoid scope conflicts
+window.selectedAthleteData = null;
 
 window.renderSyncPage = async function() {
     const contentArea = document.getElementById('content-area');
@@ -12,7 +14,7 @@ window.renderSyncPage = async function() {
         window.availableAthletes = athletes;
         
         const athletesOptions = athletes.map(a => 
-            `<option value="${a.id}">${a.first_name} ${a.last_name}</option>`
+            `<option value="${a.id}" data-api-key="${a.api_key || ''}">${a.first_name} ${a.last_name}</option>`
         ).join('');
         
         contentArea.innerHTML = `
@@ -23,34 +25,23 @@ window.renderSyncPage = async function() {
                     </h3>
                 </div>
                 
-                <div class="form-group">
-                    <label class="form-label">
-                        <i class="fas fa-key"></i> API Key Intervals.icu
-                    </label>
-                    <input type="password" id="intervals-api-key" class="form-input" 
-                           placeholder="Inserisci la tua API key">
-                    <small>Ottieni la tua API key da: <a href="https://intervals.icu/settings" target="_blank">intervals.icu/settings</a></small>
+                <div style="background: #f0f8ff; border-left: 4px solid #3b82f6; padding: 1rem; border-radius: 5px; margin-bottom: 1rem;">
+                    <strong>ℹ️ Nota:</strong> Ogni atleta ha una sua API key salvata. Seleziona l'atleta per sincronizzare i suoi dati da Intervals.icu
                 </div>
                 
-                <div class="form-group">
-                    <button class="btn btn-primary" onclick="testIntervalsConnection()">
-                        <i class="fas fa-check-circle"></i> Testa Connessione
-                    </button>
-                </div>
-                
-                <div id="connection-status"></div>
-                
-                <hr style="margin: 2rem 0;">
+                <hr style="margin: 1rem 0;">
                 
                 <h4><i class="fas fa-running"></i> Sincronizza Attività</h4>
                 
                 <div class="form-group">
-                    <label class="form-label">Atleta di Destinazione</label>
-                    <select id="sync-athlete" class="form-input">
+                    <label class="form-label">Atleta</label>
+                    <select id="sync-athlete" class="form-input" onchange="onAthleteSelected('activities')">
                         <option value="">Seleziona atleta</option>
                         ${athletesOptions}
                     </select>
                 </div>
+                
+                <div id="athlete-api-status-activities" style="display: none; margin-bottom: 1rem;"></div>
                 
                 <div class="form-group">
                     <label class="form-label">Giorni Indietro</label>
@@ -59,7 +50,7 @@ window.renderSyncPage = async function() {
                 </div>
                 
                 <div class="form-group">
-                    <button class="btn btn-success" onclick="syncActivities()">
+                    <button class="btn btn-success" onclick="testAndSyncActivities()">
                         <i class="fas fa-download"></i> Sincronizza Attività
                     </button>
                 </div>
@@ -69,12 +60,14 @@ window.renderSyncPage = async function() {
                 <h4><i class="fas fa-heartbeat"></i> Sincronizza Wellness</h4>
                 
                 <div class="form-group">
-                    <label class="form-label">Atleta di Destinazione</label>
-                    <select id="sync-wellness-athlete" class="form-input">
+                    <label class="form-label">Atleta</label>
+                    <select id="sync-wellness-athlete" class="form-input" onchange="onAthleteSelected('wellness')">
                         <option value="">Seleziona atleta</option>
                         ${athletesOptions}
                     </select>
                 </div>
+                
+                <div id="athlete-api-status-wellness" style="display: none; margin-bottom: 1rem;"></div>
                 
                 <div class="form-group">
                     <label class="form-label">Giorni Indietro</label>
@@ -83,7 +76,7 @@ window.renderSyncPage = async function() {
                 </div>
                 
                 <div class="form-group">
-                    <button class="btn btn-success" onclick="syncWellness()">
+                    <button class="btn btn-success" onclick="testAndSyncWellness()">
                         <i class="fas fa-download"></i> Sincronizza Wellness
                     </button>
                 </div>
@@ -98,12 +91,11 @@ window.renderSyncPage = async function() {
                 <div>
                     <h4>Come Usare</h4>
                     <ol>
-                        <li>Ottieni la tua API key da <a href="https://intervals.icu/settings" target="_blank">Intervals.icu Settings</a></li>
-                        <li>Incolla l'API key nel campo sopra</li>
-                        <li>Clicca "Testa Connessione" per verificare</li>
-                        <li>Seleziona l'atleta di destinazione nel database bTeam</li>
-                        <li>Imposta il numero di giorni da sincronizzare</li>
-                        <li>Clicca "Sincronizza" per importare i dati</li>
+                        <li>Vai su <a href="https://intervals.icu/settings" target="_blank">Intervals.icu Settings</a> e copia la tua API key</li>
+                        <li>Modifica il tuo atleta e incolla l'API key nel campo "API Key Intervals.icu"</li>
+                        <li>Salva i dati dell'atleta</li>
+                        <li>Torna a questa pagina e seleziona il tuo atleta</li>
+                        <li>Clicca "Sincronizza Attività" o "Sincronizza Wellness"</li>
                     </ol>
                     
                     <h4>Dati Sincronizzati</h4>
@@ -112,10 +104,10 @@ window.renderSyncPage = async function() {
                     
                     <h4>Note Importanti</h4>
                     <ul>
-                        <li>L'API key è personale e non deve essere condivisa</li>
+                        <li>L'API key è personale e salvata nel database</li>
                         <li>I dati vengono salvati nel database locale bTeam</li>
                         <li>La sincronizzazione non modifica i dati su Intervals.icu</li>
-                        <li>Limite di circa 100 richieste al minuto</li>
+                        <li>Limite di circa 100 richieste al minuto su Intervals.icu</li>
                     </ul>
                 </div>
             </div>
@@ -127,61 +119,114 @@ window.renderSyncPage = async function() {
     }
 };
 
-window.testIntervalsConnection = async function() {
-    const apiKey = document.getElementById('intervals-api-key').value.trim();
+window.onAthleteSelected = function(type) {
+    const selectId = type === 'wellness' ? 'sync-wellness-athlete' : 'sync-athlete';
+    const statusId = type === 'wellness' ? 'athlete-api-status-wellness' : 'athlete-api-status-activities';
     
-    if (!apiKey) {
-        showToast('Inserisci l\'API key', 'warning');
+    const athleteId = document.getElementById(selectId).value;
+    const statusDiv = document.getElementById(statusId);
+    
+    if (!athleteId) {
+        statusDiv.style.display = 'none';
         return;
     }
     
-    currentApiKey = apiKey;
+    const athlete = window.availableAthletes.find(a => a.id === parseInt(athleteId));
+    window.selectedAthleteData = athlete;
+    
+    if (athlete.api_key) {
+        statusDiv.innerHTML = `
+            <div style="padding: 0.75rem; background: rgba(72, 187, 120, 0.1); 
+                        border-left: 4px solid #48bb78; border-radius: 5px;">
+                <strong style="color: #48bb78;">✅ API Key Salvata</strong>
+                <p>Sincronizzerai i dati personali di <strong>${athlete.first_name} ${athlete.last_name}</strong></p>
+            </div>
+        `;
+    } else {
+        statusDiv.innerHTML = `
+            <div style="padding: 0.75rem; background: rgba(245, 101, 101, 0.1); 
+                        border-left: 4px solid #f56565; border-radius: 5px;">
+                <strong style="color: #f56565;">⚠️ API Key Mancante</strong>
+                <p>Aggiungi l'API key per <strong>${athlete.first_name} ${athlete.last_name}</strong> prima di sincronizzare</p>
+                <button class="btn btn-warning btn-sm" onclick="editAthleteApiKey(${athlete.id})">
+                    <i class="fas fa-edit"></i> Aggiungi API Key
+                </button>
+            </div>
+        `;
+    }
+    
+    statusDiv.style.display = 'block';
+};
+
+window.editAthleteApiKey = async function(athleteId) {
+    try {
+        const athlete = await api.getAthlete(athleteId);
+        
+        createModal(
+            `Aggiungi API Key - ${athlete.first_name} ${athlete.last_name}`,
+            `
+            <p>Inserisci la tua API key di Intervals.icu</p>
+            <div class="form-group">
+                <label class="form-label">API Key Intervals.icu</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" id="quick-api-key" class="form-input" value="${athlete.api_key || ''}" 
+                           placeholder="Da: intervals.icu/settings" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" onclick="toggleApiKeyVisibility('quick-api-key')" style="padding: 8px 12px;">
+                        👁️
+                    </button>
+                </div>
+                <small><a href="https://intervals.icu/settings" target="_blank">Ottieni la tua API key</a></small>
+            </div>
+            `,
+            [
+                {
+                    label: 'Annulla',
+                    class: 'btn-secondary',
+                    onclick: 'this.closest(".modal-overlay").remove()'
+                },
+                {
+                    label: '💾 Salva',
+                    class: 'btn-primary',
+                    onclick: `saveAthleteApiKey(${athleteId})`
+                }
+            ]
+        );
+    } catch (error) {
+        showToast('Errore nel caricamento', 'error');
+    }
+};
+
+window.saveAthleteApiKey = async function(athleteId) {
+    const apiKey = document.getElementById('quick-api-key').value.trim();
     
     try {
         showLoading();
-        const result = await api.testConnection(apiKey);
+        await api.updateAthlete(athleteId, { api_key: apiKey });
+        showToast('✅ API Key salvata', 'success');
         
-        document.getElementById('connection-status').innerHTML = `
-            <div style="padding: 1rem; background: rgba(72, 187, 120, 0.1); 
-                        border-left: 4px solid #48bb78; border-radius: 0.5rem; margin-top: 1rem;">
-                <strong style="color: #48bb78;">
-                    <i class="fas fa-check-circle"></i> Connessione Riuscita!
-                </strong>
-                <p>Atleta: ${result.athlete_name}</p>
-            </div>
-        `;
-        
-        showToast('Connessione a Intervals.icu riuscita', 'success');
-        
+        // Reload sync page
+        document.querySelector('.modal-overlay').remove();
+        await window.renderSyncPage();
     } catch (error) {
-        document.getElementById('connection-status').innerHTML = `
-            <div style="padding: 1rem; background: rgba(245, 101, 101, 0.1); 
-                        border-left: 4px solid #f56565; border-radius: 0.5rem; margin-top: 1rem;">
-                <strong style="color: #f56565;">
-                    <i class="fas fa-exclamation-circle"></i> Connessione Fallita
-                </strong>
-                <p>${error.message}</p>
-            </div>
-        `;
-        
-        showToast('Errore nella connessione: ' + error.message, 'error');
+        showToast('Errore nel salvataggio: ' + error.message, 'error');
     } finally {
         hideLoading();
     }
 };
 
-window.syncActivities = async function() {
-    const apiKey = document.getElementById('intervals-api-key').value.trim();
+window.testAndSyncActivities = async function() {
     const athleteId = document.getElementById('sync-athlete').value;
     const daysBack = document.getElementById('sync-days-back').value;
     
-    if (!apiKey) {
-        showToast('Inserisci l\'API key', 'warning');
+    if (!athleteId) {
+        showToast('Seleziona un atleta', 'warning');
         return;
     }
     
-    if (!athleteId) {
-        showToast('Seleziona un atleta', 'warning');
+    const athlete = window.availableAthletes.find(a => a.id === parseInt(athleteId));
+    
+    if (!athlete.api_key) {
+        showToast('L\'atleta non ha un\'API key salvata', 'warning');
         return;
     }
     
@@ -190,7 +235,7 @@ window.syncActivities = async function() {
         
         const result = await api.syncActivities({
             athlete_id: parseInt(athleteId),
-            api_key: apiKey,
+            api_key: athlete.api_key,
             days_back: parseInt(daysBack),
             include_intervals: true
         });
@@ -225,18 +270,19 @@ window.syncActivities = async function() {
     }
 };
 
-window.syncWellness = async function() {
-    const apiKey = document.getElementById('intervals-api-key').value.trim();
+window.testAndSyncWellness = async function() {
     const athleteId = document.getElementById('sync-wellness-athlete').value;
     const daysBack = document.getElementById('sync-wellness-days-back').value;
     
-    if (!apiKey) {
-        showToast('Inserisci l\'API key', 'warning');
+    if (!athleteId) {
+        showToast('Seleziona un atleta', 'warning');
         return;
     }
     
-    if (!athleteId) {
-        showToast('Seleziona un atleta', 'warning');
+    const athlete = window.availableAthletes.find(a => a.id === parseInt(athleteId));
+    
+    if (!athlete.api_key) {
+        showToast('L\'atleta non ha un\'API key salvata', 'warning');
         return;
     }
     
@@ -245,7 +291,7 @@ window.syncWellness = async function() {
         
         const result = await api.syncWellness({
             athlete_id: parseInt(athleteId),
-            api_key: apiKey,
+            api_key: athlete.api_key,
             days_back: parseInt(daysBack)
         });
         

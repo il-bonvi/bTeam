@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from storage_bteam import BTeamStorage
+from shared.storage import BTeamStorage
 
 router = APIRouter()
 
@@ -23,6 +23,8 @@ class AthleteCreate(BaseModel):
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
     gender: Optional[str] = None
+    cp: Optional[float] = None
+    max_hr: Optional[float] = None
     api_key: Optional[str] = None
     notes: Optional[str] = None
 
@@ -36,7 +38,9 @@ class AthleteUpdate(BaseModel):
     height_cm: Optional[float] = None
     gender: Optional[str] = None
     cp: Optional[float] = None
+    max_hr: Optional[float] = None
     w_prime: Optional[float] = None
+    kj_per_hour_per_kg: Optional[float] = None
     api_key: Optional[str] = None
     notes: Optional[str] = None
 
@@ -71,6 +75,8 @@ async def create_athlete(athlete: AthleteCreate):
             weight_kg=athlete.weight_kg,
             height_cm=athlete.height_cm,
             gender=athlete.gender,
+            cp=athlete.cp,
+            max_hr=athlete.max_hr,
             notes=athlete.notes or ""
         )
         # Retrieve the created athlete

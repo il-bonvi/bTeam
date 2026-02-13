@@ -181,7 +181,11 @@ window.createRace = async function() {
         gender: document.getElementById('race-gender').value,
         elevation_m: document.getElementById('race-elevation').value ? parseFloat(document.getElementById('race-elevation').value) : null,
         avg_speed_kmh: speed,
-        notes: document.getElementById('race-notes').value || null
+        predicted_duration_minutes: (distance / speed) * 60,
+        predicted_kj: null, // Will be calculated when athletes are added
+        notes: document.getElementById('race-notes').value || null,
+        // Save GPX trace data if available
+        route_file: window.gpxTraceData ? JSON.stringify(window.gpxTraceData) : null
     };
     
     try {

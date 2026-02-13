@@ -65,6 +65,7 @@ class IntervalsAPIClient:
             self.auth = None
         else:
             # api_key must be provided if access_token is not
+            assert api_key is not None
             self.headers = {'Content-Type': 'application/json'}
             self.auth = ('API_KEY', api_key)
 

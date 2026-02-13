@@ -50,6 +50,7 @@ class Athlete(Base):
     height_cm = Column(Float, nullable=True)
     gender = Column(String(50), nullable=True)  # "Femminile" o "Maschile"
     cp = Column(Float, nullable=True)  # Critical Power (FTP da Intervals)
+    max_hr = Column(Float, nullable=True)  # Frequenza cardiaca massima (da Intervals)
     w_prime = Column(Float, nullable=True)  # W Prime (da Intervals)
     ecp = Column(Float, nullable=True)  # Estimated CP (criticalPower da mmp_model)
     ew_prime = Column(Float, nullable=True)  # Estimated W Prime (wPrime da mmp_model)
@@ -73,6 +74,7 @@ class Athlete(Base):
             "height_cm": self.height_cm,
             "gender": self.gender,
             "cp": self.cp,
+            "max_hr": self.max_hr,
             "w_prime": self.w_prime,
             "ecp": self.ecp,
             "ew_prime": self.ew_prime,
@@ -425,6 +427,15 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
+
+            # Add max_hr column to athletes if missing
+            if "max_hr" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN max_hr REAL DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'max_hr' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'max_hr': {e}")
             
             # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
@@ -589,6 +600,11 @@ class BTeamStorage:
         teams = self.session.query(Team).order_by(Team.name.asc()).all()
         return [team.to_dict() for team in teams]
 
+    def get_team(self, team_id: int) -> Optional[Dict]:
+        """Get a single team by ID."""
+        team = self.session.query(Team).filter_by(id=team_id).first()
+        return team.to_dict() if team else None
+
     def update_team(self, team_id: int, name: str) -> None:
         """Update a team name."""
         team = self.session.query(Team).filter_by(id=team_id).first()
@@ -638,28 +654,55 @@ class BTeamStorage:
     def update_athlete(
         self,
         athlete_id: int,
-        birth_date: str = "",
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        team_id: Optional[int] = None,
+        birth_date: Optional[str] = None,
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
         gender: Optional[str] = None,
         cp: Optional[float] = None,
+        max_hr: Optional[float] = None,
         w_prime: Optional[float] = None,
+        ecp: Optional[float] = None,
+        ew_prime: Optional[float] = None,
         kj_per_hour_per_kg: Optional[float] = None,
-        api_key: str = "",
-        notes: str = "",
+        api_key: Optional[str] = None,
+        notes: Optional[str] = None,
     ) -> None:
         """Update athlete details."""
         athlete = self.session.query(Athlete).filter_by(id=athlete_id).first()
         if athlete:
-            athlete.birth_date = birth_date.strip() or None
-            athlete.weight_kg = weight_kg
-            athlete.height_cm = height_cm
-            athlete.gender = gender
-            athlete.cp = cp
-            athlete.w_prime = w_prime
-            athlete.kj_per_hour_per_kg = kj_per_hour_per_kg or 1.0
-            athlete.api_key = api_key.strip() or None
-            athlete.notes = notes.strip() or None
+            if first_name is not None:
+                athlete.first_name = first_name.strip()
+            if last_name is not None:
+                athlete.last_name = last_name.strip()
+            if team_id is not None:
+                athlete.team_id = team_id
+            if birth_date is not None:
+                athlete.birth_date = birth_date.strip() or None
+            if weight_kg is not None:
+                athlete.weight_kg = weight_kg
+            if height_cm is not None:
+                athlete.height_cm = height_cm
+            if gender is not None:
+                athlete.gender = gender
+            if cp is not None:
+                athlete.cp = cp
+            if max_hr is not None:
+                athlete.max_hr = max_hr
+            if w_prime is not None:
+                athlete.w_prime = w_prime
+            if ecp is not None:
+                athlete.ecp = ecp
+            if ew_prime is not None:
+                athlete.ew_prime = ew_prime
+            if kj_per_hour_per_kg is not None:
+                athlete.kj_per_hour_per_kg = kj_per_hour_per_kg
+            if api_key is not None:
+                athlete.api_key = api_key.strip() or None
+            if notes is not None:
+                athlete.notes = notes.strip() or None
             self.session.commit()
 
     def import_power_data_from_intervals(

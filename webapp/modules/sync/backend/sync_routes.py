@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from intervals_sync import IntervalsSyncService
-from intervals_client_v2 import IntervalsAPIClient
-from storage_bteam import BTeamStorage
+from shared.intervals.sync import IntervalsSyncService
+from shared.intervals.client import IntervalsAPIClient
+from shared.storage import BTeamStorage
 
 router = APIRouter()
 
@@ -44,6 +44,7 @@ async def test_connection(request: APIKeyRequest):
     try:
         sync_service = IntervalsSyncService(api_key=request.api_key)
         if sync_service.is_connected():
+            assert sync_service.client is not None
             athlete_data = sync_service.client.get_athlete()
             return {
                 "success": True,
@@ -119,6 +120,7 @@ async def sync_wellness(request: WellnessSyncRequest):
         if not sync_service.is_connected():
             raise HTTPException(status_code=401, detail="Not connected to Intervals.icu")
         
+        assert sync_service.client is not None
         wellness_data = sync_service.client.get_wellness(days_back=request.days_back)
         
         if not wellness_data:
@@ -128,9 +130,12 @@ async def sync_wellness(request: WellnessSyncRequest):
         imported_count = 0
         for entry in wellness_data:
             try:
+                wellness_date = entry.get('id')
+                if not wellness_date:
+                    continue  # Skip entries without date
                 storage.add_wellness(
                     athlete_id=request.athlete_id,
-                    wellness_date=entry.get('id'),
+                    wellness_date=str(wellness_date),
                     weight_kg=entry.get('weight'),
                     resting_hr=entry.get('restingHR'),
                     hrv=entry.get('hrv'),
@@ -183,6 +188,73 @@ async def push_race(request: PushRaceRequest):
             "success": True,
             "message": "Race pushed to Intervals.icu successfully",
             "event_id": result.get('id')
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/athlete-metrics")
+async def sync_athlete_metrics(athlete_id: int, api_key: str):
+    """Sync athlete metrics (weight, FTP, max HR, W', eCP, eW') from Intervals.icu"""
+    try:
+        client = IntervalsAPIClient(api_key=api_key)
+        athlete_data = client.get_athlete()
+
+        sport_settings = athlete_data.get('sportSettings') or []
+        cycling_settings = sport_settings[0] if sport_settings else {}
+        mmp_model = cycling_settings.get('mmp_model') or {}
+
+        # Height from athlete data (in meters, convert to cm)
+        height_cm = None
+        if athlete_data.get('height') is not None:
+            height_m = athlete_data.get('height')
+            if isinstance(height_m, (int, float)) and height_m > 0:
+                height_cm = height_m * 100
+
+        # Weight: always try to get from wellness first (most up-to-date), then fallback to athlete profile
+        weight_kg = None
+        try:
+            # Get latest wellness entry with weight
+            wellness_data = client.get_wellness(days_back=90)
+            if wellness_data and isinstance(wellness_data, list):
+                # Iterate in REVERSE to get the MOST RECENT weight (last entry is most recent)
+                for i in range(len(wellness_data) - 1, -1, -1):
+                    entry = wellness_data[i]
+                    # Try different field names for weight
+                    weight_value = entry.get('weight') or entry.get('weight_kg') or entry.get('weightKg')
+                    if weight_value:
+                        weight_kg = weight_value
+                        break  # Take the most recent one with weight
+        except Exception as e:
+            pass  # Fall back to athlete profile if wellness fails
+        
+        # If no weight from wellness, try athlete profile
+        if not weight_kg:
+            weight_kg = athlete_data.get('weight') or athlete_data.get('weight_kg')
+
+        # Extract metrics with fallbacks
+        metrics = {
+            'weight_kg': weight_kg,
+            'height_cm': height_cm,
+            'cp': cycling_settings.get('ftp') or cycling_settings.get('cp'),
+            'w_prime': cycling_settings.get('w_prime') or cycling_settings.get('wPrime'),
+            'ecp': mmp_model.get('criticalPower') or mmp_model.get('cp'),
+            'ew_prime': mmp_model.get('wPrime') or mmp_model.get('w_prime'),
+            'max_hr': athlete_data.get('maxHeartRate') or athlete_data.get('maxHR') or athlete_data.get('max_hr'),
+        }
+        
+        # Update athlete in storage (only non-None values)
+        update_data = {k: v for k, v in metrics.items() if v is not None}
+        if update_data:
+            storage.update_athlete(athlete_id, **update_data)
+        
+        updated_athlete = storage.get_athlete(athlete_id)
+        
+        return {
+            "success": True,
+            "message": "Athlete metrics synced successfully",
+            "athlete": updated_athlete,
+            "synced_fields": update_data
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

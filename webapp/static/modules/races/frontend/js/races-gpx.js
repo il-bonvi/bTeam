@@ -169,6 +169,12 @@ function updateDetailFormFromGpx(totalDistance, elevationGain) {
     if (elevationGain > 0 && detailElevationEl) {
         detailElevationEl.value = Math.round(elevationGain);
     }
+    
+    // Show delete button since GPX is now loaded
+    const deleteBtn = document.getElementById('gpx-delete-btn');
+    if (deleteBtn) {
+        deleteBtn.style.display = 'inline-block';
+    }
 }
 
 /**
