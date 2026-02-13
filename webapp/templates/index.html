@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bTeam - Gestione Team Ciclismo</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-bicycle"></i>
+                <h1>bTeam</h1>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-page="teams">
+                    <i class="fas fa-users"></i>
+                    <span>Squadre</span>
+                </li>
+                <li class="nav-item" data-page="athletes">
+                    <i class="fas fa-user-circle"></i>
+                    <span>Atleti</span>
+                </li>
+                <li class="nav-item" data-page="activities">
+                    <i class="fas fa-running"></i>
+                    <span>Attività</span>
+                </li>
+                <li class="nav-item" data-page="races">
+                    <i class="fas fa-flag-checkered"></i>
+                    <span>Gare</span>
+                </li>
+                <li class="nav-item" data-page="wellness">
+                    <i class="fas fa-heartbeat"></i>
+                    <span>Wellness</span>
+                </li>
+                <li class="nav-item" data-page="sync">
+                    <i class="fas fa-sync"></i>
+                    <span>Sincronizzazione</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-bar">
+                <h2 id="page-title">Dashboard</h2>
+                <div class="top-bar-actions">
+                    <button class="btn btn-icon" title="Notifiche">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                    <button class="btn btn-icon" title="Impostazioni">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div id="content-area" class="content-area">
+                <!-- Dynamic content loaded here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
