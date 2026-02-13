@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
 import sys
 from pathlib import Path
 
@@ -10,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from intervals_sync import IntervalsSyncService
 from intervals_client_v2 import IntervalsAPIClient
 from storage_bteam import BTeamStorage
-from config_bteam import get_intervals_api_key, set_intervals_api_key
 
 router = APIRouter()
 
@@ -195,7 +193,11 @@ async def get_power_curve(athlete_id: int, api_key: str, days_back: int = 90):
     """Get power curve data from Intervals.icu"""
     try:
         client = IntervalsAPIClient(api_key=api_key)
-        power_curve = client.get_power_curve(days_back=days_back)
+        # Calculate dates for oldest/newest parameters based on days_back
+        from datetime import datetime, timedelta
+        newest = datetime.now().strftime('%Y-%m-%d')
+        oldest = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+        power_curve = client.get_power_curve(athlete_id=str(athlete_id), oldest=oldest, newest=newest)
         
         return {
             "success": True,

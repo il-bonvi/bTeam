@@ -97,7 +97,7 @@ function createModal(title, content, actions = []) {
 
 // Confirm dialog
 function confirmDialog(message, onConfirm) {
-    const modal = createModal(
+    createModal(
         'Conferma',
         `<p>${message}</p>`,
         [

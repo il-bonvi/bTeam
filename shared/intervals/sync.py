@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
 import json
 
 from .client import IntervalsAPIClient
@@ -328,7 +327,7 @@ class IntervalsSyncService:
             # Converte data in datetime con ora 10:00
             start_time = f"{date}T10:00:00"
             
-            result = self.client.create_event(
+            self.client.create_event(
                 category='WORKOUT',
                 start_date_local=start_time,
                 name=name,
@@ -423,7 +422,7 @@ class IntervalsSyncService:
             try:
                 saved = 0
                 for activity in activities:
-                    formatted = self.format_activity_for_storage(activity)
+                    self.format_activity_for_storage(activity)
                     # Il metodo add_activity sarà aggiornato per gestire questi dati
                     saved += 1
                 

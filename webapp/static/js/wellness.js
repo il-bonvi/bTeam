@@ -68,7 +68,7 @@ window.showCreateWellnessDialog = function() {
         `<option value="${a.id}">${a.first_name} ${a.last_name}</option>`
     ).join('');
     
-    const modal = createModal(
+    createModal(
         'Nuovo Entry Wellness',
         `
         <div class="form-group">
@@ -188,7 +188,7 @@ window.editWellness = async function(wellnessId) {
         const wellness = await api.getWellnessEntry(wellnessId);
         const sleepHours = wellness.sleep_secs ? (wellness.sleep_secs / 3600).toFixed(1) : '';
         
-        const modal = createModal(
+        createModal(
             'Modifica Wellness',
             `
             <div class="form-group">

@@ -9,7 +9,7 @@
 window.showCreateRaceDialog = function() {
     const today = new Date().toISOString().split('T')[0];
     
-    const modal = createModal(
+    createModal(
         '✨ Crea Nuova Gara',
         `
         <div class="form-group">
@@ -92,8 +92,7 @@ window.showCreateRaceDialog = function() {
                 class: 'btn-primary',
                 onclick: 'createRace()'
             }
-        ],
-        'large'
+        ]
     );
     
     setTimeout(() => {

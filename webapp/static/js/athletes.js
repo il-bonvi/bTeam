@@ -68,7 +68,7 @@ window.showCreateAthleteDialog = function() {
         `<option value="${t.id}">${t.name}</option>`
     ).join('');
     
-    const modal = createModal(
+    createModal(
         'Nuovo Atleta',
         `
         <div class="form-group">
@@ -167,7 +167,7 @@ window.editAthlete = async function(athleteId) {
             `<option value="${t.id}" ${t.id === athlete.team_id ? 'selected' : ''}>${t.name}</option>`
         ).join('');
         
-        const modal = createModal(
+        createModal(
             'Modifica Atleta',
             `
             <div class="form-group">

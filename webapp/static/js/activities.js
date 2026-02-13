@@ -71,7 +71,7 @@ window.showCreateActivityDialog = function() {
         `<option value="${a.id}">${a.first_name} ${a.last_name}</option>`
     ).join('');
     
-    const modal = createModal(
+    createModal(
         'Nuova Attività',
         `
         <div class="form-group">
@@ -184,7 +184,7 @@ window.filterActivities = function() {
         `<option value="${a.id}">${a.first_name} ${a.last_name}</option>`
     ).join('');
     
-    const modal = createModal(
+    createModal(
         'Filtra Attività',
         `
         <div class="form-group">

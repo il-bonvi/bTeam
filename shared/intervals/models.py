@@ -3,7 +3,7 @@ Modelli auto-generati dall'OpenAPI spec di Intervals.icu
 Usa questi modelli per type checking e validazione automatica
 """
 
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from pydantic import BaseModel, Field
 from enum import Enum

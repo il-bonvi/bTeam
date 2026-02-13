@@ -4,11 +4,10 @@ bTeam WebApp - Main Backend Application
 FastAPI-based REST API for cycling team management
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from sqlalchemy.orm import Session
 import sys
 import os
 from pathlib import Path
@@ -21,7 +20,6 @@ webapp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, webapp_dir)
 
 from shared.storage import BTeamStorage
-from shared.intervals import IntervalsAPIClient, IntervalsSyncService
 
 # Initialize FastAPI app
 app = FastAPI(

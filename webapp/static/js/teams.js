@@ -54,7 +54,7 @@ window.renderTeamsPage = async function() {
 };
 
 window.showCreateTeamDialog = function() {
-    const modal = createModal(
+    createModal(
         'Nuova Squadra',
         `
         <div class="form-group">
@@ -102,7 +102,7 @@ window.editTeam = async function(teamId) {
     try {
         const team = await api.getTeam(teamId);
         
-        const modal = createModal(
+        createModal(
             'Modifica Squadra',
             `
             <div class="form-group">
