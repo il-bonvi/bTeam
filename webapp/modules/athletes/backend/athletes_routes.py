@@ -11,38 +11,32 @@ from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent / "data"
+storage_dir = Path(__file__).parent.parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 
 class AthleteCreate(BaseModel):
     first_name: str
     last_name: str
-    team_id: Optional[int] = None
     birth_date: Optional[str] = None
-    weight_kg: Optional[float] = None
-    height_cm: Optional[float] = None
     gender: Optional[str] = None
-    cp: Optional[float] = None
-    max_hr: Optional[float] = None
+    team_id: Optional[int] = None
     api_key: Optional[str] = None
-    notes: Optional[str] = None
 
 
 class AthleteUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     team_id: Optional[int] = None
-    birth_date: Optional[str] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
-    gender: Optional[str] = None
     cp: Optional[float] = None
     max_hr: Optional[float] = None
     w_prime: Optional[float] = None
+    ecp: Optional[float] = None
+    ew_prime: Optional[float] = None
     kj_per_hour_per_kg: Optional[float] = None
     api_key: Optional[str] = None
-    notes: Optional[str] = None
 
 
 @router.get("/")
@@ -70,14 +64,10 @@ async def create_athlete(athlete: AthleteCreate):
         athlete_id = storage.add_athlete(
             first_name=athlete.first_name,
             last_name=athlete.last_name,
-            team_id=athlete.team_id,
             birth_date=athlete.birth_date or "",
-            weight_kg=athlete.weight_kg,
-            height_cm=athlete.height_cm,
             gender=athlete.gender,
-            cp=athlete.cp,
-            max_hr=athlete.max_hr,
-            notes=athlete.notes or ""
+            team_id=athlete.team_id,
+            api_key=athlete.api_key
         )
         # Retrieve the created athlete
         new_athlete = storage.get_athlete(athlete_id)

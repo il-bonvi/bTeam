@@ -184,17 +184,39 @@ async def sync_wellness(request: WellnessSyncRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/debug/races")
+async def debug_list_races():
+    """Debug endpoint to list all races in database"""
+    try:
+        from shared.storage import Race
+        races = storage.session.query(Race.id, Race.name, Race.race_date).all()
+        return {
+            "total": len(races),
+            "races": [{"id": r.id, "name": r.name, "date": r.race_date} for r in races]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/push-race")
 async def push_race(request: PushRaceRequest):
     """Push a race to Intervals.icu as a planned event (matching OLDAPP implementation)"""
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[PUSH-RACE] Received request: race_id={request.race_id}, athlete_id={request.athlete_id}")
+        
         race = storage.get_race(request.race_id)
+        logger.info(f"[PUSH-RACE] Query result: race={race}")
+        
         if not race:
-            raise HTTPException(status_code=404, detail="Race not found")
+            logger.error(f"[PUSH-RACE] Race with ID {request.race_id} not found in database")
+            raise HTTPException(status_code=404, detail=f"Race not found (ID: {request.race_id})")
         
         # Get athlete to ensure they exist
         athlete = storage.get_athlete(request.athlete_id)
         if not athlete:
+            logger.error(f"[PUSH-RACE] Athlete with ID {request.athlete_id} not found")
             raise HTTPException(status_code=404, detail="Athlete not found")
         
         client = IntervalsAPIClient(api_key=request.api_key)
@@ -261,9 +283,32 @@ async def push_race(request: PushRaceRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/debug/athlete-data/{api_key}")
+async def debug_athlete_data(api_key: str):
+    """Debug endpoint to see raw athlete data from Intervals.icu"""
+    try:
+        client = IntervalsAPIClient(api_key=api_key)
+        athlete_data = client.get_athlete()
+        
+        # Extract just the fields we care about
+        debug_info = {
+            "gender_field_value": athlete_data.get('gender'),
+            "sex_field_value": athlete_data.get('sex'),
+            "athleteGender_field_value": athlete_data.get('athleteGender'),
+            "birthDate_field_value": athlete_data.get('birthDate'),
+            "dateOfBirth_field_value": athlete_data.get('dateOfBirth'),
+            "birth_date_field_value": athlete_data.get('birth_date'),
+            "all_keys": list(athlete_data.keys()),
+            "full_athlete_data": athlete_data
+        }
+        return debug_info
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/athlete-metrics")
 async def sync_athlete_metrics(athlete_id: int, api_key: str):
-    """Sync athlete metrics (weight, FTP, max HR, W', eCP, eW') from Intervals.icu"""
+    """Sync athlete metrics (weight, FTP, max HR, W', eCP, eW', gender, birth date) from Intervals.icu"""
     try:
         client = IntervalsAPIClient(api_key=api_key)
         athlete_data = client.get_athlete()
@@ -300,6 +345,16 @@ async def sync_athlete_metrics(athlete_id: int, api_key: str):
         if not weight_kg:
             weight_kg = athlete_data.get('weight') or athlete_data.get('weight_kg')
 
+        # Gender: try multiple field names
+        gender = None
+        sex_value = athlete_data.get('sex')
+        if sex_value:
+            # Converts "M" -> "Maschile", "F" -> "Femminile"
+            gender = "Maschile" if sex_value.upper() == 'M' else "Femminile" if sex_value.upper() == 'F' else sex_value
+        
+        # Birth date: use the correct field name
+        birth_date = athlete_data.get('icu_date_of_birth')
+
         # Extract metrics with fallbacks
         metrics = {
             'weight_kg': weight_kg,
@@ -309,6 +364,8 @@ async def sync_athlete_metrics(athlete_id: int, api_key: str):
             'ecp': mmp_model.get('criticalPower') or mmp_model.get('cp'),
             'ew_prime': mmp_model.get('wPrime') or mmp_model.get('w_prime'),
             'max_hr': athlete_data.get('maxHeartRate') or athlete_data.get('maxHR') or athlete_data.get('max_hr'),
+            'gender': gender,
+            'birth_date': birth_date,
         }
         
         # Update athlete in storage (only non-None values)

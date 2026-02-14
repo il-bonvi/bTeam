@@ -635,6 +635,7 @@ class BTeamStorage:
         gender: Optional[str] = None,
         cp: Optional[float] = None,
         w_prime: Optional[float] = None,
+        api_key: Optional[str] = None,
         notes: str = "",
     ) -> int:
         """Add a new athlete."""
@@ -649,6 +650,7 @@ class BTeamStorage:
             gender=gender,
             cp=cp,
             w_prime=w_prime,
+            api_key=api_key,
             notes=notes.strip() or None,
             created_at=now,
         )

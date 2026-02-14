@@ -329,12 +329,26 @@ window.showCreateAthleteDialog = function() {
         'Nuovo Atleta',
         `
         <div class="form-group">
-            <label class="form-label">Nome</label>
+            <label class="form-label">Nome <span style="color: red;">*</span></label>
             <input type="text" id="athlete-first-name" class="form-input" required>
         </div>
         <div class="form-group">
-            <label class="form-label">Cognome</label>
+            <label class="form-label">Cognome <span style="color: red;">*</span></label>
             <input type="text" id="athlete-last-name" class="form-input" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+                <label class="form-label">Data di Nascita</label>
+                <input type="date" id="athlete-birth-date" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Genere</label>
+                <select id="athlete-gender" class="form-input">
+                    <option value="">Seleziona</option>
+                    <option value="Maschile">Maschile</option>
+                    <option value="Femminile">Femminile</option>
+                </select>
+            </div>
         </div>
         <div class="form-group">
             <label class="form-label">Squadra</label>
@@ -343,41 +357,19 @@ window.showCreateAthleteDialog = function() {
                 ${teamsOptions}
             </select>
         </div>
-        <div class="form-group">
-            <label class="form-label">Data di Nascita</label>
-            <input type="date" id="athlete-birth-date" class="form-input">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Genere</label>
-            <select id="athlete-gender" class="form-input">
-                <option value="">Seleziona</option>
-                <option value="Maschile">Maschile</option>
-                <option value="Femminile">Femminile</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Peso (kg)</label>
-            <input type="number" id="athlete-weight" class="form-input" step="0.1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Altezza (cm)</label>
-            <input type="number" id="athlete-height" class="form-input" step="0.1">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Note</label>
-            <textarea id="athlete-notes" class="form-input" rows="3"></textarea>
-        </div>
-        <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem;">
-            <h4>Sincronizzazione Intervals.icu</h4>
+        <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem; margin-bottom: 1rem;">
+            <p style="color: #666; font-size: 0.9rem; margin: 0 0 1rem 0;">
+                <strong>Nota:</strong> Gli altri dati (peso, altezza, FC max, FTP) possono essere sincronizzati direttamente da Intervals.icu
+            </p>
             <div class="form-group">
-                <label class="form-label">API Key Intervals.icu</label>
+                <label class="form-label">API Key Intervals.icu <span style="color: #999;">(opzionale)</span></label>
                 <div style="display: flex; gap: 8px;">
                     <input type="password" id="athlete-api-key" class="form-input" placeholder="Da: intervals.icu/settings" style="flex: 1;">
                     <button type="button" class="btn btn-secondary" onclick="toggleApiKeyVisibility('athlete-api-key')" style="padding: 8px 12px;">
                         👁️
                     </button>
                 </div>
-                <small>La API key è usata per sincronizzare attività e wellness di questo atleta</small>
+                <small style="color: #666;">Consente la sincronizzazione automatica di attività e metriche</small>
             </div>
         </div>
         `,
@@ -408,12 +400,9 @@ window.createAthlete = async function() {
     const data = {
         first_name: firstName,
         last_name: lastName,
-        team_id: document.getElementById('athlete-team').value ? parseInt(document.getElementById('athlete-team').value) : null,
         birth_date: document.getElementById('athlete-birth-date').value || null,
         gender: document.getElementById('athlete-gender').value || null,
-        weight_kg: document.getElementById('athlete-weight').value ? parseFloat(document.getElementById('athlete-weight').value) : null,
-        height_cm: document.getElementById('athlete-height').value ? parseFloat(document.getElementById('athlete-height').value) : null,
-        notes: document.getElementById('athlete-notes').value || null,
+        team_id: document.getElementById('athlete-team').value ? parseInt(document.getElementById('athlete-team').value) : null,
         api_key: document.getElementById('athlete-api-key').value.trim() || null
     };
     
@@ -449,51 +438,26 @@ window.editAthlete = async function(athleteId) {
                 <label class="form-label">Cognome</label>
                 <input type="text" id="athlete-last-name-edit" class="form-input" value="${athlete.last_name}" required>
             </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Data di Nascita</label>
+                    <input type="date" id="athlete-birth-date-edit" class="form-input" value="${athlete.birth_date || ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Genere</label>
+                    <select id="athlete-gender-edit" class="form-input">
+                        <option value="">Seleziona</option>
+                        <option value="Maschile" ${athlete.gender === 'Maschile' ? 'selected' : ''}>Maschile</option>
+                        <option value="Femminile" ${athlete.gender === 'Femminile' ? 'selected' : ''}>Femminile</option>
+                    </select>
+                </div>
+            </div>
             <div class="form-group">
                 <label class="form-label">Squadra</label>
                 <select id="athlete-team-edit" class="form-input">
                     <option value="">Nessuna squadra</option>
                     ${teamsOptions}
                 </select>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                    <label class="form-label">Peso (kg)</label>
-                    <input type="number" id="athlete-weight-edit" class="form-input" value="${athlete.weight_kg || ''}" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Altezza (cm)</label>
-                    <input type="number" id="athlete-height-edit" class="form-input" value="${athlete.height_cm || ''}" step="1">
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                    <label class="form-label">FTP (watts)</label>
-                    <input type="number" id="athlete-cp-edit" class="form-input" value="${athlete.cp || ''}" step="1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">eCP (watts) <small style="color: #666;">da Intervals</small></label>
-                    <input type="number" id="athlete-ecp-edit" class="form-input" value="${athlete.ecp || ''}" step="1" disabled style="background: #f3f4f6; color: #666;">
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                    <label class="form-label">W' (joule)</label>
-                    <input type="number" id="athlete-w-prime-edit" class="form-input" value="${athlete.w_prime || ''}" step="1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">eW' (joule) <small style="color: #666;">da Intervals</small></label>
-                    <input type="number" id="athlete-ew-prime-edit" class="form-input" value="${athlete.ew_prime || ''}" step="1" disabled style="background: #f3f4f6; color: #666;">
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">FC Massima (bpm)</label>
-                <input type="number" id="athlete-max-hr-edit" class="form-input" value="${athlete.max_hr || ''}" step="1">
-            </div>
-            <div class="form-group">
-                <label class="form-label">kJ/h/kg (consumo energetico)</label>
-                <input type="number" id="athlete-kj-edit" class="form-input" value="${athlete.kj_per_hour_per_kg || 10}" step="0.1" min="0.5" max="50">
-                <small style="color: #666;">Default: 10 donna, 15 uomo</small>
             </div>
             <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem;">
                 <h4>Sincronizzazione Intervals.icu</h4>
@@ -505,8 +469,13 @@ window.editAthlete = async function(athleteId) {
                             👁️
                         </button>
                     </div>
-                    <small>La API key è usata per sincronizzare attività e wellness</small>
+                    <small style="color: #666;">Consente la sincronizzazione di attività, metriche e dati di wellness</small>
                 </div>
+            </div>
+            <div style="margin-top: 1rem; padding: 1rem; background: #f0f4f8; border-radius: 4px;">
+                <p style="margin: 0; color: #15803d; font-size: 0.9rem;">
+                    <strong>💡 Suggerimento:</strong> Usa il bottone <strong>"Sincronizza Metriche"</strong> nel profilo atleta per aggiornare automaticamente peso, altezza, FTP e FC max da Intervals.icu
+                </p>
             </div>
             `,
             [
@@ -531,13 +500,9 @@ window.updateAthlete = async function(athleteId) {
     const data = {
         first_name: document.getElementById('athlete-first-name-edit').value.trim(),
         last_name: document.getElementById('athlete-last-name-edit').value.trim(),
+        birth_date: document.getElementById('athlete-birth-date-edit').value || null,
+        gender: document.getElementById('athlete-gender-edit').value || null,
         team_id: document.getElementById('athlete-team-edit').value ? parseInt(document.getElementById('athlete-team-edit').value) : null,
-        weight_kg: document.getElementById('athlete-weight-edit').value ? parseFloat(document.getElementById('athlete-weight-edit').value) : null,
-        height_cm: document.getElementById('athlete-height-edit').value ? parseFloat(document.getElementById('athlete-height-edit').value) : null,
-        cp: document.getElementById('athlete-cp-edit').value ? parseFloat(document.getElementById('athlete-cp-edit').value) : null,
-        w_prime: document.getElementById('athlete-w-prime-edit').value ? parseFloat(document.getElementById('athlete-w-prime-edit').value) : null,
-        max_hr: document.getElementById('athlete-max-hr-edit').value ? parseFloat(document.getElementById('athlete-max-hr-edit').value) : null,
-        kj_per_hour_per_kg: document.getElementById('athlete-kj-edit').value ? parseFloat(document.getElementById('athlete-kj-edit').value) : null,
         api_key: document.getElementById('athlete-api-key-edit').value.trim() || null
     };
     

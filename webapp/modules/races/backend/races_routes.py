@@ -11,7 +11,7 @@ from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent / "data"
+storage_dir = Path(__file__).parent.parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 

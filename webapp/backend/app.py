@@ -76,6 +76,12 @@ async def health_check():
     return {"status": "ok", "message": "bTeam API is running"}
 
 
+@app.get("/debug/test")
+async def debug_test():
+    """Test endpoint for debugging"""
+    return {"status": "ok", "message": "Test endpoint works"}
+
+
 # Import route modules
 from modules.teams.backend import teams_routes
 from modules.athletes.backend import athletes_routes
