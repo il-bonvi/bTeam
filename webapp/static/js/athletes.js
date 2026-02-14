@@ -123,8 +123,11 @@ function createAthleteCard(athlete) {
                 <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editAthlete(${athlete.id})" title="Modifica">
                     <i class="bi bi-pencil"></i>
                 </button>
-                <button class="btn btn-info btn-sm" onclick="event.stopPropagation(); syncAthleteMetrics(${athlete.id})" title="Sync Intervals">
+                <button class="btn btn-info btn-sm" onclick="event.stopPropagation(); syncAthleteMetrics(${athlete.id})" title="Metriche">
                     <i class="bi bi-arrow-repeat"></i>
+                </button>
+                <button class="btn btn-success btn-sm" onclick="event.stopPropagation(); syncAthleteFullSync(${athlete.id}, '${athlete.first_name} ${athlete.last_name}')" title="Attività + Wellness">
+                    <i class="bi bi-download"></i>
                 </button>
                 <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteAthleteConfirm(${athlete.id})" title="Elimina">
                     <i class="bi bi-trash"></i>
@@ -284,16 +287,33 @@ window.switchAthleteTab = function(tabName) {
         tabContent.innerHTML = `
             <div style="padding: 2rem;">
                 <h4>Sincronizzazione Intervals.icu</h4>
-                <div style="margin-top: 1rem;">
+                
+                <!-- Metriche -->
+                <div style="margin-top: 1.5rem; padding: 1rem; background: #f0f8ff; border-radius: 8px;">
+                    <h5 style="margin-bottom: 0.75rem; color: #3b82f6;">📊 Metriche</h5>
                     <button class="btn btn-primary" onclick="syncAthleteMetrics(${athleteId})">
                         <i class="bi bi-arrow-repeat"></i> Sincronizza Metriche
                     </button>
-                    <button class="btn btn-info" onclick="syncAthleteActivities(${athleteId})" style="margin-left: 0.5rem;">
-                        <i class="bi bi-download"></i> Sincronizza Attività
-                    </button>
+                    <p style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;">Power data, FTP, soglie...</p>
                 </div>
-                <div style="margin-top: 1rem;">
+                
+                <!-- Attività + Wellness -->
+                <div style="margin-top: 1.5rem; padding: 1rem; background: #f0fdf4; border-radius: 8px;">
+                    <h5 style="margin-bottom: 0.75rem; color: #10b981;">🏃 Attività e Wellness</h5>
+                    <button class="btn btn-success" onclick="syncAthleteFullSync(${athleteId}, '${athlete.first_name} ${athlete.last_name}')">
+                        <i class="bi bi-download"></i> Sincronizza Tutto (31 giorni)
+                    </button>
+                    <p style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;">Attività + Wellness ultimi 31 giorni</p>
+                </div>
+                
+                <!-- API Key Status -->
+                <div style="margin-top: 1.5rem; padding: 1rem; background: ${athlete.api_key ? 'rgba(72, 187, 120, 0.1)' : 'rgba(245, 101, 101, 0.1)'}; border-radius: 8px;">
                     <p><strong>API Key:</strong> ${athlete.api_key ? '✅ Configurata' : '❌ Non configurata'}</p>
+                    ${!athlete.api_key ? `
+                        <button class="btn btn-warning btn-sm" onclick="editAthleteApiKeyQuick(${athleteId})" style="margin-top: 0.5rem;">
+                            <i class="bi bi-pencil"></i> Aggiungi API Key
+                        </button>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -645,6 +665,133 @@ window.syncAthleteActivities = async function(athleteId) {
         }
     } catch (error) {
         showToast('Errore sync attività: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+/**
+ * Sync athlete activities + wellness from Intervals.icu in one shot
+ */
+window.syncAthleteFullSync = async function(athleteId, athleteName) {
+    try {
+        const athlete = await api.getAthlete(athleteId);
+        
+        if (!athlete.api_key) {
+            showToast('L\'atleta non ha una API key configurata', 'warning');
+            editAthleteApiKeyQuick(athleteId);
+            return;
+        }
+        
+        showLoading();
+        const daysBack = 31;
+        
+        // Sync activities
+        const activitiesResult = await api.syncActivities({
+            athlete_id: athleteId,
+            api_key: athlete.api_key,
+            days_back: daysBack,
+            include_intervals: true
+        });
+        
+        // Sync wellness
+        const wellnessResult = await api.syncWellness({
+            athlete_id: athleteId,
+            api_key: athlete.api_key,
+            days_back: daysBack
+        });
+        
+        hideLoading();
+        
+        // Show comprehensive success modal
+        createModal(
+            `✅ Sincronizzazione Completata - ${athleteName}`,
+            `
+            <div style="padding: 1rem;">
+                <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f0fdf4; border-radius: 6px;">
+                    <h4 style="color: #10b981; margin-bottom: 0.5rem;">📊 Attività</h4>
+                    <p>${activitiesResult.message || `Importate ${activitiesResult.imported || 0} su ${activitiesResult.total || 0} attività`}</p>
+                </div>
+                <div style="padding: 1rem; background: #f0f8ff; border-radius: 6px;">
+                    <h4 style="color: #3b82f6; margin-bottom: 0.5rem;">❤️ Wellness</h4>
+                    <p>${wellnessResult.message || `Importati ${wellnessResult.imported || 0} record wellness`}</p>
+                </div>
+            </div>
+            `,
+            [
+                {
+                    label: 'OK',
+                    class: 'btn-primary',
+                    onclick: 'this.closest(".modal-overlay").remove(); window.renderAthletesPage();'
+                }
+            ]
+        );
+    } catch (error) {
+        hideLoading();
+        showToast('Errore sincronizzazione: ' + error.message, 'error');
+    }
+};
+
+/**
+ * Edit athlete API key from detail view
+ */
+window.editAthleteApiKeyQuick = async function(athleteId) {
+    try {
+        const athlete = await api.getAthlete(athleteId);
+        
+        createModal(
+            `API Key Intervals.icu - ${athlete.first_name} ${athlete.last_name}`,
+            `
+            <p style="margin-bottom: 1rem;">Inserisci la tua API key di Intervals.icu</p>
+            <div class="form-group">
+                <label class="form-label">API Key</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" id="athlete-api-key-input" class="form-input" value="${athlete.api_key || ''}" 
+                           placeholder="Da: intervals.icu/settings" style="flex: 1;">
+                    <button type="button" class="btn btn-secondary" onclick="toggleApiKeyVisibility('athlete-api-key-input')" style="padding: 8px 12px;">
+                        👁️
+                    </button>
+                </div>
+                <small><a href="https://intervals.icu/settings" target="_blank" style="color: #3b82f6;">Ottieni la tua API key</a></small>
+            </div>
+            `,
+            [
+                {
+                    label: 'Annulla',
+                    class: 'btn-secondary',
+                    onclick: 'this.closest(".modal-overlay").remove()'
+                },
+                {
+                    label: '💾 Salva',
+                    class: 'btn-primary',
+                    onclick: `saveAthleteApiKeyQuick(${athleteId})`
+                }
+            ]
+        );
+    } catch (error) {
+        showToast('Errore nel caricamento', 'error');
+    }
+};
+
+/**
+ * Save athlete API key from quick edit
+ */
+window.saveAthleteApiKeyQuick = async function(athleteId) {
+    const apiKey = document.getElementById('athlete-api-key-input').value.trim();
+    
+    if (!apiKey) {
+        showToast('L\'API key non può essere vuota', 'warning');
+        return;
+    }
+    
+    try {
+        showLoading();
+        await api.updateAthlete(athleteId, { api_key: apiKey });
+        showToast('API key salvata con successo', 'success');
+        document.querySelector('.modal-overlay').remove();
+        window.renderAthletesPage();
+    } catch (error) {
+        showToast('Errore nel salvataggio: ' + error.message, 'error');
     } finally {
         hideLoading();
     }
