@@ -43,3 +43,4 @@ INFO/
 .env.*.local
 *.key
 *.pem
+*.log

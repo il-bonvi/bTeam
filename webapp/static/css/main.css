@@ -1,0 +1,1037 @@
+/* ============================================
+   bTeam WebApp - Main Styles
+   Modern and Clean Design for Cycling Team Management
+   ============================================ */
+
+:root {
+    /* Color Palette */
+    --primary-color: #2c7a7b;
+    --primary-dark: #234e52;
+    --primary-light: #38b2ac;
+    --secondary-color: #ed8936;
+    --accent-color: #4299e1;
+    
+    --success-color: #48bb78;
+    --warning-color: #ed8936;
+    --danger-color: #f56565;
+    --info-color: #4299e1;
+    
+    --bg-primary: #f7fafc;
+    --bg-secondary: #edf2f7;
+    --bg-card: #ffffff;
+    
+    --text-primary: #2d3748;
+    --text-secondary: #718096;
+    --text-muted: #a0aec0;
+    
+    --border-color: #e2e8f0;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+    
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    
+    /* Border Radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 1rem;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+}
+
+/* ============================================
+   Layout
+   ============================================ */
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background: linear-gradient(180deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+}
+
+.sidebar-header {
+    padding: var(--spacing-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-header i {
+    font-size: 2rem;
+}
+
+.sidebar-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.nav-menu {
+    list-style: none;
+    padding: var(--spacing-md);
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.nav-item.active {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    font-weight: 600;
+}
+
+.nav-item i {
+    font-size: 1.2rem;
+    width: 24px;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.top-bar {
+    background: white;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.top-bar h2 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+}
+
+.top-bar-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.content-area {
+    flex: 1;
+    padding: var(--spacing-xl);
+    overflow-y: auto;
+    background: var(--bg-primary);
+}
+
+/* ============================================
+   Components
+   ============================================ */
+
+/* Buttons */
+.btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-icon {
+    padding: var(--spacing-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 50%;
+}
+
+.btn-icon:hover {
+    background-color: var(--bg-secondary);
+}
+
+/* Cards */
+.card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-lg);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+}
+
+.card-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Table */
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+thead {
+    background-color: var(--bg-secondary);
+}
+
+th {
+    padding: var(--spacing-md);
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-color);
+}
+
+td {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+tr:hover {
+    background-color: var(--bg-primary);
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: var(--spacing-lg);
+}
+
+.form-label {
+    display: block;
+    margin-bottom: var(--spacing-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(44, 122, 123, 0.1);
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.stat-card {
+    background: var(--bg-card);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-icon.primary { background: rgba(44, 122, 123, 0.1); color: var(--primary-color); }
+.stat-icon.success { background: rgba(72, 187, 120, 0.1); color: var(--success-color); }
+.stat-icon.warning { background: rgba(237, 137, 54, 0.1); color: var(--warning-color); }
+.stat-icon.info { background: rgba(66, 153, 225, 0.1); color: var(--info-color); }
+
+.stat-content h3 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-content p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: var(--spacing-xl);
+    right: var(--spacing-xl);
+    z-index: 10000;
+}
+
+.toast {
+    background: white;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    margin-bottom: var(--spacing-sm);
+    min-width: 300px;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.toast.success { border-left: 4px solid var(--success-color); }
+.toast.error { border-left: 4px solid var(--danger-color); }
+.toast.warning { border-left: 4px solid var(--warning-color); }
+.toast.info { border-left: 4px solid var(--info-color); }
+
+/* Utility Classes */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.mt-1 { margin-top: var(--spacing-md); }
+.mb-1 { margin-bottom: var(--spacing-md); }
+.ml-auto { margin-left: auto; }
+.flex { display: flex; }
+.gap-1 { gap: var(--spacing-md); }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 70px;
+    }
+    
+    .sidebar-header h1,
+    .nav-item span {
+        display: none;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================
+   Wellness Module Styles
+   ============================================ */
+
+.athletes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+}
+
+.athlete-wellness-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease;
+}
+
+.athlete-wellness-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.athlete-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.athlete-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.wellness-content {
+    min-height: 300px;
+}
+
+.no-wellness {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    margin: var(--spacing-lg) 0;
+}
+
+.wellness-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+}
+
+.wellness-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+.wellness-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+}
+
+.section-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: var(--spacing-xs);
+}
+
+.wellness-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.metric-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.metric-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.wellness-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+}
+
+.wellness-item .label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.wellness-item .value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius-sm);
+}
+
+.table-responsive {
+    overflow-x: auto;
+    margin-top: var(--spacing-md);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: var(--spacing-md);
+}
+
+.table th,
+.table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.table th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.large-modal .modal-content {
+    max-width: 98vw;
+    max-height: 95vh;
+    overflow-y: auto;
+    width: 98vw;
+}
+
+.large-modal .table-responsive {
+    overflow-x: auto;
+    margin-top: var(--spacing-md);
+    min-height: 100%;
+}
+
+.large-modal .wellness-table {
+    min-width: 1200px;
+    font-size: 0.9rem;
+}
+
+.large-modal .wellness-table th,
+.large-modal .wellness-table td {
+    padding: 0.4rem 0.5rem;
+    white-space: nowrap;
+}
+
+/* Form enhancements for wellness */
+.form-row {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+.form-section {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.form-section h4 {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Wellness Table Styles */
+.wellness-table {
+    margin-top: var(--spacing-md);
+}
+
+.wellness-table th {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    border: none;
+}
+
+.wellness-table td {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.wellness-row {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.wellness-row:hover {
+    background: var(--bg-secondary);
+}
+
+.wellness-row.active {
+    background: var(--primary-light);
+    color: white;
+}
+
+.wellness-row.active:hover {
+    background: var(--primary-light);
+}
+
+.date-cell {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.actions-cell {
+    text-align: right;
+}
+
+.actions-cell .btn {
+    margin-left: var(--spacing-xs);
+}
+
+.wellness-details-row {
+    background: var(--bg-secondary);
+}
+
+.wellness-details {
+    padding: var(--spacing-md);
+    background: white;
+    border-radius: var(--radius-sm);
+    margin: var(--spacing-sm) 0;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-sm);
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-item.full-width {
+    grid-column: 1 / -1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+}
+/* Wellness Score Colors (1-4 scale) */
+.score-green {
+    color: #48bb78 !important; /* green-500 */
+    font-weight: 600;
+}
+
+.score-black {
+    color: #1a202c !important; /* gray-900 */
+    font-weight: 600;
+}
+
+.score-orange {
+    color: #ed8936 !important; /* orange-500 */
+    font-weight: 600;
+}
+
+.score-red {
+    color: #f56565 !important; /* red-500 */
+    font-weight: 600;
+}
+.detail-label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.detail-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Header Actions */
+.header-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+/* ============================================
+   Athlete Cards & Dashboard Styles
+   ============================================ */
+
+.stat-card {
+    background: var(--bg-card);
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.athlete-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+}
+
+.athlete-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+}
+
+.athlete-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+
+.athlete-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+}
+
+.athlete-info {
+    flex: 1;
+}
+
+.athlete-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.athlete-team {
+    font-size: 0.875rem;
+    opacity: 0.9;
+}
+
+.athlete-card-body {
+    padding: var(--spacing-lg);
+}
+
+.athlete-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.athlete-stat-row:last-child {
+    border-bottom: none;
+}
+
+.athlete-stat-label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.athlete-stat-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.athlete-card-footer {
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+}
+
+/* ============================================
+   Tabs System
+   ============================================ */
+
+.tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: var(--spacing-lg);
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: var(--spacing-md) var(--spacing-lg);
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+}
+
+.tab-button:hover {
+    color: var(--primary-color);
+    background: var(--bg-secondary);
+}
+
+.tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* Badge */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.badge.intervals {
+    background: var(--info-color);
+    color: white;
+}
+
+.badge.manual {
+    background: var(--text-muted);
+    color: white;
+}
+
+/* ============================================
+   Filter Pills for Activities
+   ============================================ */
+
+.athlete-filter-pills {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0;
+}
+
+.filter-pill {
+    padding: 0.625rem 1.25rem;
+    border: none;
+    background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+    border-radius: 50px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+
+.filter-pill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-color) 100%);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.filter-pill:hover::before {
+    opacity: 0.1;
+}
+
+.filter-pill:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 4px 12px rgba(44, 122, 123, 0.2);
+    color: var(--primary-color);
+}
+
+.filter-pill.active {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(44, 122, 123, 0.4);
+    transform: translateY(-1px);
+}
+
+.filter-pill.active::before {
+    opacity: 0;
+}
+
+.filter-pill.active:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(44, 122, 123, 0.5);
+}
+
+.filter-pill i {
+    font-size: 0.875rem;
+    transition: transform 0.3s;
+}
+
+.filter-pill:hover i {
+    transform: scale(1.1);
+}
+
+.filter-pill.active i {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Badge variants */
+.badge-intervals {
+    background: var(--info-color);
+    color: white;
+}
+
+.badge-manual {
+    background: var(--text-muted);
+    color: white;
+}
+
+.badge-strava {
+    background: #fc4c02;
+    color: white;
+}
+
+.badge-garmin {
+    background: #007cc3;
+    color: white;
+}
+
+.badge-wahoo {
+    background: #3a5199;
+    color: white;
+}
+
