@@ -30,6 +30,7 @@ bteam.db
 bteam_data/
 Database/
 INFO/
+OLDAPP/
 
 # Config files with sensitive data (specifici, ma non *.json che escluderebbe API_GUIDE.md config sections)
 *.env
