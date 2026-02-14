@@ -14,7 +14,7 @@ window.renderTeamsPage = async function() {
                 <div class="card-header">
                     <h3 class="card-title">Gestione Squadre</h3>
                     <button class="btn btn-primary" onclick="showCreateTeamDialog()">
-                        <i class="fas fa-plus"></i> Nuova Squadra
+                        <i class="bi bi-plus"></i> Nuova Squadra
                     </button>
                 </div>
                 <div id="teams-table"></div>
@@ -32,10 +32,10 @@ window.renderTeamsPage = async function() {
                     label: 'Azioni',
                     format: (_, row) => `
                         <button class="btn btn-secondary" onclick="editTeam(${row.id})">
-                            <i class="fas fa-edit"></i> Modifica
+                            <i class="bi bi-pencil"></i> Modifica
                         </button>
                         <button class="btn btn-danger" onclick="deleteTeamConfirm(${row.id})">
-                            <i class="fas fa-trash"></i> Elimina
+                            <i class="bi bi-trash"></i> Elimina
                         </button>
                     `
                 }
@@ -150,19 +150,34 @@ window.updateTeam = async function(teamId) {
 };
 
 window.deleteTeamConfirm = function(teamId) {
-    confirmDialog(
-        'Sei sicuro di voler eliminare questa squadra? Questa azione non può essere annullata.',
-        async () => {
-            try {
-                showLoading();
-                await api.deleteTeam(teamId);
-                showToast('Squadra eliminata con successo', 'success');
-                window.renderTeamsPage();
-            } catch (error) {
-                showToast('Errore nell\'eliminazione: ' + error.message, 'error');
-            } finally {
-                hideLoading();
+    createModal(
+        '⚠️ Conferma Eliminazione',
+        '<p>Sei sicuro di voler eliminare questa squadra? Questa azione non può essere annullata.</p>',
+        [
+            {
+                label: 'Annulla',
+                class: 'btn-secondary',
+                onclick: 'this.closest(".modal-overlay").remove()'
+            },
+            {
+                label: 'Elimina Squadra',
+                class: 'btn-danger',
+                onclick: `deleteTeamExecute(${teamId})`
             }
-        }
+        ]
     );
+};
+
+window.deleteTeamExecute = async function(teamId) {
+    try {
+        showLoading();
+        await api.deleteTeam(teamId);
+        showToast('Squadra eliminata con successo', 'success');
+        document.querySelector('.modal-overlay')?.remove();
+        window.renderTeamsPage();
+    } catch (error) {
+        showToast('Errore nell\'eliminazione: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
 };

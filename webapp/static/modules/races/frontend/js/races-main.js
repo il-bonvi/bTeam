@@ -28,7 +28,7 @@ window.renderRacesPage = async function() {
                 <div class="card-header">
                     <h3 class="card-title">Gestione Gare</h3>
                     <button class="btn btn-primary" onclick="showCreateRaceDialog()">
-                        <i class="fas fa-plus"></i> Nuova Gara
+                        <i class="bi bi-plus"></i> Nuova Gara
                     </button>
                 </div>
                 <div id="races-table"></div>
@@ -51,13 +51,13 @@ window.renderRacesPage = async function() {
                     label: 'Azioni',
                     format: (_, row) => `
                         <button class="btn btn-secondary btn-sm" onclick="viewRaceDetails(${row.id})" style="margin-right: 5px;">
-                            <i class="fas fa-eye"></i> Dettagli
+                            <i class="bi bi-eye"></i> Dettagli
                         </button>
                         <button class="btn btn-info btn-sm" onclick="pushRaceToIntervals(${row.id})" style="margin-right: 5px;">
-                            <i class="fas fa-cloud-upload-alt"></i> Intervals
+                            <i class="bi bi-cloud-arrow-up"></i> Intervals
                         </button>
                         <button class="btn btn-danger btn-sm" onclick="deleteRaceConfirm(${row.id})">
-                            <i class="fas fa-trash"></i>
+                            <i class="bi bi-trash"></i>
                         </button>
                     `
                 }

@@ -42,10 +42,10 @@ window.renderWellnessPage = async function() {
                     <h3 class="card-title">Athlete Wellness</h3>
                     <div class="header-actions">
                         <button class="btn btn-secondary" onclick="syncWellnessData()">
-                            <i class="fas fa-sync"></i> Sync from Intervals
+                            <i class="bi bi-arrow-repeat"></i> Sync from Intervals
                         </button>
                         <button class="btn btn-primary" onclick="showCreateWellnessDialog()">
-                            <i class="fas fa-plus"></i> Nuovo Entry
+                            <i class="bi bi-plus"></i> Nuovo Entry
                         </button>
                     </div>
                 </div>
@@ -152,7 +152,7 @@ function renderAthletesWellnessGrid(athletesWithWellness) {
                 <div class="athlete-header">
                     <h4>${athleteName}</h4>
                     <button class="btn btn-secondary btn-sm" onclick="viewAthleteWellnessDetails(${athlete.id}, '${athleteName}')">
-                        <i class="fas fa-chart-line"></i> Details
+                        <i class="bi bi-graph-up"></i> Details
                     </button>
                 </div>
                 <div class="wellness-content">
@@ -234,10 +234,10 @@ function createWellnessTable(wellnessData) {
                                 <td>${readiness}</td>
                                 <td class="actions-cell">
                                     <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editWellness(${entry.id})">
-                                        <i class="fas fa-edit"></i>
+                                        <i class="bi bi-pencil"></i>
                                     </button>
                                     <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteWellnessConfirm(${entry.id})">
-                                        <i class="fas fa-trash"></i>
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -631,21 +631,36 @@ window.updateWellness = async function(wellnessId, athleteId, wellnessDate) {
 };
 
 window.deleteWellnessConfirm = function(wellnessId) {
-    confirmDialog(
-        'Are you sure you want to delete this wellness entry?',
-        async () => {
-            try {
-                showLoading();
-                await api.deleteWellness(wellnessId);
-                showToast('Wellness deleted successfully', 'success');
-                window.renderWellnessPage();
-            } catch (error) {
-                showToast('Error deleting: ' + error.message, 'error');
-            } finally {
-                hideLoading();
+    createModal(
+        '⚠️ Conferma Eliminazione',
+        '<p>Sei sicuro di voler eliminare questa entry wellness?</p>',
+        [
+            {
+                label: 'Annulla',
+                class: 'btn-secondary',
+                onclick: 'this.closest(".modal-overlay").remove()'
+            },
+            {
+                label: 'Elimina Entry',
+                class: 'btn-danger',
+                onclick: `deleteWellnessExecute(${wellnessId})`
             }
-        }
+        ]
     );
+};
+
+window.deleteWellnessExecute = async function(wellnessId) {
+    try {
+        showLoading();
+        await api.deleteWellness(wellnessId);
+        showToast('Wellness deleted successfully', 'success');
+        document.querySelector('.modal-overlay')?.remove();
+        window.renderWellnessPage();
+    } catch (error) {
+        showToast('Error deleting: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
 };
 
 window.syncWellnessData = async function() {

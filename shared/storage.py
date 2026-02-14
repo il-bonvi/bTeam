@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,10 +18,14 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, Boolean, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker, Session as SQLAlchemySession
+from sqlalchemy.orm import relationship, sessionmaker, Session as SQLAlchemySession, joinedload
 
 
 Base = declarative_base()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+_logger = logging.getLogger(__name__)
 
 
 class Team(Base):
@@ -101,6 +106,7 @@ class Activity(Base):
     distance_km = Column(Float, nullable=True)
     tss = Column(Float, nullable=True)
     source = Column(String(255), nullable=True)  # WAHOO, STRAVA, GARMIN, etc
+    intervals_id = Column(String(100), nullable=True)  # ID attività da Intervals
     # ✨ NUOVI CAMPI PER GARE E TAG
     is_race = Column(Boolean, default=False)  # È una gara?
     tags = Column(Text, nullable=True)  # JSON array: ["race", "test", "long-ride"]
@@ -118,7 +124,7 @@ class Activity(Base):
 
     athlete = relationship("Athlete", back_populates="activities")
 
-    def to_dict(self, with_athlete_name: bool = True) -> Dict:
+    def to_dict(self, with_athlete_name: bool = False) -> Dict:
         # Parse tags from JSON string to list
         tags = []
         if self.tags:
@@ -136,6 +142,7 @@ class Activity(Base):
             "distance_km": self.distance_km,
             "tss": self.tss,
             "source": self.source,
+            "intervals_id": self.intervals_id,
             "is_race": self.is_race,
             "tags": tags,  # Ritorna come lista, non come JSON string
             "avg_watts": self.avg_watts,
@@ -151,9 +158,6 @@ class Activity(Base):
             "intervals_payload": self.intervals_payload,
             "created_at": self.created_at,
         }
-        if with_athlete_name:
-            athlete_name = f"{self.athlete.first_name} {self.athlete.last_name}" if self.athlete else "Unknown"
-            data["athlete_name"] = athlete_name
         return data
 
 
@@ -365,6 +369,7 @@ class BTeamStorage:
             
             # Define new columns for activities
             activity_columns = [
+                ("intervals_id", "TEXT"),
                 ("is_race", "BOOLEAN DEFAULT 0"),
                 ("tags", "TEXT DEFAULT '[]'"),
                 ("avg_watts", "REAL"),
@@ -806,23 +811,56 @@ class BTeamStorage:
         calories: Optional[float] = None,
         activity_type: Optional[str] = None,
     ) -> Tuple[int, bool]:
-        """Add a new activity, avoiding duplicates for Intervals imports.
+        """Add a new activity, avoiding duplicates.
         
         Returns:
             Tuple (activity_id, is_new) - is_new True if activity was newly created
         """
-        # Controlla se l'attività da Intervals esiste già
-        if source == "intervals" and intervals_id:
+        # Log activity being added
+        _logger.info(f"[DUPLICATE CHECK] Adding activity: athlete_id={athlete_id}, title='{title}', "
+                f"date={activity_date}, source={source}, intervals_id={intervals_id}")
+        
+        # Check for duplicates
+        existing = None
+        
+        # First priority: check by intervals_id if provided (strongest check)
+        if intervals_id:
+            _logger.debug(f"[DUPLICATE CHECK] Checking by intervals_id={intervals_id}")
+            existing = self.session.query(Activity).filter(
+                Activity.intervals_id == intervals_id
+            ).first()
+            if existing:
+                _logger.info(f"[DUPLICATE] Found existing activity by intervals_id (ID: {existing.id})")
+                return existing.id, False
+            _logger.debug(f"[DUPLICATE CHECK] No existing activity by intervals_id")
+        
+        # Second priority: For Intervals imports, also check by athlete, source, title, and date
+        # This catches duplicates even if intervals_id somehow differs
+        if source and source.lower() == "intervals":
+            _logger.debug(f"[DUPLICATE CHECK] Intervals source - checking by athlete+source+title+date")
             existing = self.session.query(Activity).filter(
                 Activity.athlete_id == athlete_id,
-                Activity.source == "intervals",
+                Activity.source == source,
                 Activity.title == title.strip(),
                 Activity.activity_date == activity_date
             ).first()
-            
             if existing:
-                # Attività già esiste, non aggiungere duplicato
+                _logger.info(f"[DUPLICATE] Found existing Intervals activity by athlete+source+title+date (ID: {existing.id})")
                 return existing.id, False
+            _logger.debug(f"[DUPLICATE CHECK] No existing Intervals activity by athlete+source+title+date")
+        
+        # Third priority: For manual activities, check by athlete, title, and date
+        _logger.debug(f"[DUPLICATE CHECK] Fallback check by athlete+title+date")
+        if not existing:
+            existing = self.session.query(Activity).filter(
+                Activity.athlete_id == athlete_id,
+                Activity.title == title.strip(),
+                Activity.activity_date == activity_date
+            ).first()
+            if existing:
+                _logger.info(f"[DUPLICATE] Found existing activity by athlete+title+date (ID: {existing.id})")
+                return existing.id, False
+            _logger.debug(f"[DUPLICATE CHECK] No existing activity by athlete+title+date - creating new")
         
         now = datetime.utcnow().isoformat()
         payload = json.dumps(list(intervals_payload), ensure_ascii=False) if intervals_payload else None
@@ -836,6 +874,7 @@ class BTeamStorage:
             distance_km=distance_km,
             tss=tss,
             source=source,
+            intervals_id=intervals_id,
             intervals_payload=payload,
             is_race=is_race,
             tags=tags_json,
@@ -853,6 +892,7 @@ class BTeamStorage:
         )
         self.session.add(activity)
         self.session.commit()
+        _logger.info(f"[NEW ACTIVITY] Created activity ID={activity.id}, source={source}, intervals_id={intervals_id}")
         return activity.id, True
 
     def delete_activity(self, activity_id: int) -> bool:
@@ -879,22 +919,59 @@ class BTeamStorage:
             Activity dict with all details, or None if not found
         """
         try:
-            activity = self.session.query(Activity).filter(Activity.id == activity_id).first()
+            activity = (
+                self.session.query(Activity)
+                .options(joinedload(Activity.athlete))
+                .filter(Activity.id == activity_id)
+                .first()
+            )
             if activity:
-                return activity.to_dict(with_athlete_name=True)
+                activity_dict = activity.to_dict(with_athlete_name=False)
+                athlete_name = "Unknown"
+                if activity.athlete_id:
+                    athlete = (
+                        self.session.query(Athlete)
+                        .filter(Athlete.id == activity.athlete_id)
+                        .first()
+                    )
+                    if athlete:
+                        athlete_name = f"{athlete.first_name} {athlete.last_name}"
+                activity_dict["athlete_name"] = athlete_name
+                return activity_dict
             return None
         except Exception as e:
-            print(f"[bTeam] Errore lettura attività: {e}")
+            _logger.error(f"Errore lettura attività: {e}")
             return None
 
     def list_activities(self) -> List[Dict[str, str]]:
         """List all activities with athlete names."""
+        _logger.debug("[list_activities] Starting query")
         activities = (
             self.session.query(Activity)
             .order_by(Activity.activity_date.desc(), Activity.created_at.desc())
             .all()
         )
-        return [activity.to_dict(with_athlete_name=True) for activity in activities]
+        _logger.info(f"[list_activities] Loaded {len(activities)} activities")
+
+        athlete_rows = self.session.query(Athlete.id, Athlete.first_name, Athlete.last_name).all()
+        athlete_lookup = {
+            athlete_id: f"{first_name} {last_name}"
+            for athlete_id, first_name, last_name in athlete_rows
+        }
+
+        result = []
+        for activity in activities:
+            activity_dict = activity.to_dict(with_athlete_name=False)
+            athlete_name = athlete_lookup.get(activity.athlete_id, "Unknown")
+            if athlete_name == "Unknown":
+                _logger.warning(
+                    f"[list_activities] Activity {activity.id}: athlete_id={activity.athlete_id} not found in athletes"
+                )
+            activity_dict["athlete_name"] = athlete_name
+            result.append(activity_dict)
+        
+        _logger.debug(f"[list_activities] Converted to dict, first activity athlete_name: {result[0].get('athlete_name') if result else 'N/A'}")
+        return result
 
     def stats(self) -> Dict[str, int]:
         """Get database statistics."""

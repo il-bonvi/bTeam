@@ -21,7 +21,7 @@ window.renderSyncPage = async function() {
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">
-                        <i class="fas fa-sync"></i> Sincronizzazione Intervals.icu
+                        <i class="bi bi-arrow-repeat"></i> Sincronizzazione Intervals.icu
                     </h3>
                 </div>
                 
@@ -31,7 +31,7 @@ window.renderSyncPage = async function() {
                 
                 <hr style="margin: 1rem 0;">
                 
-                <h4><i class="fas fa-running"></i> Sincronizza Attività</h4>
+                <h4><i class="bi bi-activity"></i> Sincronizza Attività</h4>
                 
                 <div class="form-group">
                     <label class="form-label">Atleta</label>
@@ -51,13 +51,13 @@ window.renderSyncPage = async function() {
                 
                 <div class="form-group">
                     <button class="btn btn-success" onclick="testAndSyncActivities()">
-                        <i class="fas fa-download"></i> Sincronizza Attività
+                        <i class="bi bi-download"></i> Sincronizza Attività
                     </button>
                 </div>
                 
                 <hr style="margin: 2rem 0;">
                 
-                <h4><i class="fas fa-heartbeat"></i> Sincronizza Wellness</h4>
+                <h4><i class="bi bi-heart-pulse"></i> Sincronizza Wellness</h4>
                 
                 <div class="form-group">
                     <label class="form-label">Atleta</label>
@@ -77,7 +77,7 @@ window.renderSyncPage = async function() {
                 
                 <div class="form-group">
                     <button class="btn btn-success" onclick="testAndSyncWellness()">
-                        <i class="fas fa-download"></i> Sincronizza Wellness
+                        <i class="bi bi-download"></i> Sincronizza Wellness
                     </button>
                 </div>
             </div>
@@ -85,7 +85,7 @@ window.renderSyncPage = async function() {
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">
-                        <i class="fas fa-info-circle"></i> Informazioni
+                        <i class="bi bi-info-circle"></i> Informazioni
                     </h3>
                 </div>
                 <div>
@@ -149,7 +149,7 @@ window.onAthleteSelected = function(type) {
                 <strong style="color: #f56565;">⚠️ API Key Mancante</strong>
                 <p>Aggiungi l'API key per <strong>${athlete.first_name} ${athlete.last_name}</strong> prima di sincronizzare</p>
                 <button class="btn btn-warning btn-sm" onclick="editAthleteApiKey(${athlete.id})">
-                    <i class="fas fa-edit"></i> Aggiungi API Key
+                    <i class="bi bi-pencil"></i> Aggiungi API Key
                 </button>
             </div>
         `;
@@ -247,7 +247,7 @@ window.testAndSyncActivities = async function() {
             'Sincronizzazione Completata',
             `
             <div style="text-align: center; padding: 2rem;">
-                <i class="fas fa-check-circle" style="font-size: 4rem; color: #48bb78;"></i>
+                <i class="bi bi-check-circle" style="font-size: 4rem; color: #48bb78;"></i>
                 <h3 style="margin-top: 1rem;">${result.message}</h3>
                 <p style="margin-top: 1rem; font-size: 1.2rem;">
                     Importate <strong>${result.imported}</strong> attività su ${result.total}
@@ -302,7 +302,7 @@ window.testAndSyncWellness = async function() {
             'Sincronizzazione Wellness Completata',
             `
             <div style="text-align: center; padding: 2rem;">
-                <i class="fas fa-check-circle" style="font-size: 4rem; color: #48bb78;"></i>
+                <i class="bi bi-check-circle" style="font-size: 4rem; color: #48bb78;"></i>
                 <h3 style="margin-top: 1rem;">${result.message}</h3>
                 <p style="margin-top: 1rem; font-size: 1.2rem;">
                     Importati <strong>${result.imported}</strong> entry wellness

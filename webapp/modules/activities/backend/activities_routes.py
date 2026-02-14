@@ -11,7 +11,7 @@ from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent / "data"
+storage_dir = Path(__file__).parent.parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 
@@ -65,7 +65,7 @@ async def get_activity(activity_id: int):
 async def create_activity(activity: ActivityCreate):
     """Create a new activity"""
     try:
-        activity_id = storage.add_activity(
+        activity_id, is_new = storage.add_activity(
             athlete_id=activity.athlete_id,
             title=activity.title,
             activity_date=activity.activity_date,
@@ -83,7 +83,8 @@ async def create_activity(activity: ActivityCreate):
             intensity=activity.intensity,
             feel=activity.feel
         )
-        # Retrieve the created activity
+        
+        # Retrieve and return the activity (skip if already exists)
         new_activity = storage.get_activity(activity_id)
         return new_activity
     except Exception as e:

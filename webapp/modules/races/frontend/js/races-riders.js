@@ -14,7 +14,7 @@ function buildRidersTab(race, allAthletes) {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h4>🚴 Atleti Partecipanti</h4>
                 <button class="btn btn-primary" onclick="showAddRidersDialog()">
-                    <i class="fas fa-plus"></i> Aggiungi Atleti
+                    <i class="bi bi-plus"></i> Aggiungi Atleti
                 </button>
             </div>
             
@@ -86,7 +86,7 @@ function buildRiderRow(rider) {
             </td>
             <td>
                 <button class="btn btn-danger btn-sm" onclick="removeRiderFromRace(${rider.id})" title="Rimuovi atleta">
-                    <i class="fas fa-trash"></i>
+                    <i class="bi bi-trash"></i>
                 </button>
             </td>
         </tr>

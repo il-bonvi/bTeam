@@ -1,9 +1,15 @@
 /**
  * Athletes Module - Frontend
+ * Multi-athlete dashboard with individual athlete detail views
  */
+
+// Global state
+window.currentAthleteView = null; // null = dashboard, number = athlete ID
 
 window.renderAthletesPage = async function() {
     const contentArea = document.getElementById('content-area');
+    
+    console.log('[ATHLETES] renderAthletesPage started. currentAthleteView:', window.currentAthleteView);
     
     try {
         showLoading();
@@ -12,60 +18,285 @@ window.renderAthletesPage = async function() {
             api.getTeams()
         ]);
         
-        // Store teams globally for use in dialogs
+        console.log('[ATHLETES] Loaded', athletes.length, 'athletes');
+        
+        // Store globally
         window.availableTeams = teams;
+        window.allAthletes = athletes;
         
-        contentArea.innerHTML = `
-            <div class="card">
-                <div class="card-header">
-                    <h3 class="card-title">Gestione Atleti</h3>
-                    <button class="btn btn-primary" onclick="showCreateAthleteDialog()">
-                        <i class="fas fa-plus"></i> Nuovo Atleta
-                    </button>
-                </div>
-                <div id="athletes-table"></div>
-            </div>
-        `;
-        
-        // Render athletes table
-        const tableHtml = createTable(
-            [
-                { key: 'id', label: 'ID' },
-                { key: 'first_name', label: 'Nome' },
-                { key: 'last_name', label: 'Cognome' },
-                { key: 'team_name', label: 'Squadra' },
-                { key: 'gender', label: 'Genere', format: v => v || '-' },
-                { key: 'weight_kg', label: 'Peso (kg)', format: v => formatNumber(v, 1) },
-                { key: 'height_cm', label: 'Alt. (cm)', format: v => v ? formatNumber(v, 0) : '-' },
-                { key: 'cp', label: 'FTP', format: v => v ? formatNumber(v, 0) : '-' },
-                { key: 'ecp', label: 'eCP', format: v => v ? formatNumber(v, 0) : '-' },
-                { key: 'w_prime', label: "W'", format: v => v ? formatNumber(v, 0) : '-' },
-                {
-                    key: 'actions',
-                    label: 'Azioni',
-                    format: (_, row) => `
-                        <button class="btn btn-secondary" onclick="editAthlete(${row.id})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-info" onclick="syncAthleteMetrics(${row.id})" title="Sincronizza metriche da Intervals.icu">
-                            <i class="fas fa-sync"></i> Sync
-                        </button>
-                        <button class="btn btn-danger" onclick="deleteAthleteConfirm(${row.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    `
-                }
-            ],
-            athletes
-        );
-        
-        document.getElementById('athletes-table').innerHTML = tableHtml;
+        // Render based on current view
+        if (window.currentAthleteView === null) {
+            console.log('[ATHLETES] Rendering dashboard view');
+            renderAthletesDashboard(athletes, contentArea);
+        } else {
+            console.log('[ATHLETES] Rendering detail view for athlete', window.currentAthleteView);
+            renderAthleteDetail(window.currentAthleteView, athletes, contentArea);
+        }
         
     } catch (error) {
+        console.error('[ATHLETES] Error:', error);
         showToast('Errore nel caricamento degli atleti', 'error');
         console.error(error);
     } finally {
         hideLoading();
+    }
+};
+
+function renderAthletesDashboard(athletes, contentArea) {
+    // Create stats summary
+    const totalAthletes = athletes.length;
+    const maleCount = athletes.filter(a => a.gender === 'Maschile').length;
+    const femaleCount = athletes.filter(a => a.gender === 'Femminile').length;
+    const avgFtp = athletes.filter(a => a.cp).reduce((sum, a) => sum + a.cp, 0) / athletes.filter(a => a.cp).length || 0;
+    
+    contentArea.innerHTML = `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">📊 Dashboard Atleti</h3>
+                <button class="btn btn-primary" onclick="showCreateAthleteDialog()">
+                    <i class="bi bi-plus"></i> Nuovo Atleta
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- Summary Stats -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="stat-card">
+                        <div class="stat-label">Totale Atleti</div>
+                        <div class="stat-value">${totalAthletes}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">👨 Maschile</div>
+                        <div class="stat-value">${maleCount}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">👩 Femminile</div>
+                        <div class="stat-value">${femaleCount}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">FTP Medio</div>
+                        <div class="stat-value">${avgFtp > 0 ? Math.round(avgFtp) + 'W' : '-'}</div>
+                    </div>
+                </div>
+                
+                <!-- Athletes Grid -->
+                <h4 style="margin-bottom: 1rem;">Atleti</h4>
+                <div id="athletes-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+                    ${athletes.map(athlete => createAthleteCard(athlete)).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createAthleteCard(athlete) {
+    const initials = `${athlete.first_name[0] || ''}${athlete.last_name[0] || ''}`;
+    const genderIcon = athlete.gender === 'Maschile' ? '👨' : athlete.gender === 'Femminile' ? '👩' : '🧑';
+    
+    return `
+        <div class="athlete-card" onclick="showAthleteDetail(${athlete.id})" style="cursor: pointer;">
+            <div class="athlete-card-header">
+                <div class="athlete-avatar">${initials}</div>
+                <div class="athlete-info">
+                    <div class="athlete-name">${athlete.first_name} ${athlete.last_name}</div>
+                    <div class="athlete-team">${genderIcon} ${athlete.team_name || 'Nessuna squadra'}</div>
+                </div>
+            </div>
+            <div class="athlete-card-body">
+                <div class="athlete-stat-row">
+                    <span class="athlete-stat-label">FTP:</span>
+                    <span class="athlete-stat-value">${athlete.cp ? Math.round(athlete.cp) + 'W' : '-'}</span>
+                </div>
+                <div class="athlete-stat-row">
+                    <span class="athlete-stat-label">W':</span>
+                    <span class="athlete-stat-value">${athlete.w_prime ? Math.round(athlete.w_prime) + 'J' : '-'}</span>
+                </div>
+                <div class="athlete-stat-row">
+                    <span class="athlete-stat-label">Peso:</span>
+                    <span class="athlete-stat-value">${athlete.weight_kg ? athlete.weight_kg + 'kg' : '-'}</span>
+                </div>
+                <div class="athlete-stat-row">
+                    <span class="athlete-stat-label">W/kg:</span>
+                    <span class="athlete-stat-value">${athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(1) : '-'}</span>
+                </div>
+            </div>
+            <div class="athlete-card-footer">
+                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editAthlete(${athlete.id})" title="Modifica">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-info btn-sm" onclick="event.stopPropagation(); syncAthleteMetrics(${athlete.id})" title="Sync Intervals">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteAthleteConfirm(${athlete.id})" title="Elimina">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+window.showAthleteDetail = async function(athleteId) {
+    window.currentAthleteView = athleteId;
+    await renderAthletesPage();
+};
+
+window.backToAthletesDashboard = function() {
+    window.currentAthleteView = null;
+    renderAthletesPage();
+};
+
+async function renderAthleteDetail(athleteId, athletes, contentArea) {
+    const athlete = athletes.find(a => a.id === athleteId);
+    if (!athlete) {
+        showToast('Atleta non trovato', 'error');
+        window.currentAthleteView = null;
+        return renderAthletesPage();
+    }
+    
+    // Load athlete activities
+    try {
+        const activities = await api.getActivities({ athlete_id: athleteId, limit: 50 });
+        
+        contentArea.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <button class="btn btn-secondary" onclick="backToAthletesDashboard()">
+                            <i class="bi bi-arrow-left"></i> Dashboard
+                        </button>
+                        <h3 class="card-title">${athlete.first_name} ${athlete.last_name}</h3>
+                    </div>
+                    <button class="btn btn-primary" onclick="editAthlete(${athlete.id})">
+                        <i class="bi bi-pencil"></i> Modifica
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Athlete Info Section -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; padding: 1rem; background: #f5f5f5; border-radius: 8px;">
+                        <div>
+                            <strong>Squadra:</strong> ${athlete.team_name || '-'}
+                        </div>
+                        <div>
+                            <strong>Genere:</strong> ${athlete.gender || '-'}
+                        </div>
+                        <div>
+                            <strong>Peso:</strong> ${athlete.weight_kg ? athlete.weight_kg + ' kg' : '-'}
+                        </div>
+                        <div>
+                            <strong>Altezza:</strong> ${athlete.height_cm ? athlete.height_cm + ' cm' : '-'}
+                        </div>
+                        <div>
+                            <strong>FTP/CP:</strong> ${athlete.cp ? Math.round(athlete.cp) + ' W' : '-'}
+                        </div>
+                        <div>
+                            <strong>W':</strong> ${athlete.w_prime ? Math.round(athlete.w_prime) + ' J' : '-'}
+                        </div>
+                        <div>
+                            <strong>W/kg:</strong> ${athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-'}
+                        </div>
+                        <div>
+                            <strong>Data Nascita:</strong> ${athlete.birth_date || '-'}
+                        </div>
+                    </div>
+                    
+                    <!-- Tabs -->
+                    <div class="tabs">
+                        <button class="tab-button active" onclick="switchAthleteTab('activities')">
+                            Attività (${activities.length})
+                        </button>
+                        <button class="tab-button" onclick="switchAthleteTab('stats')">
+                            Statistiche
+                        </button>
+                        <button class="tab-button" onclick="switchAthleteTab('sync')">
+                            Sincronizzazione
+                        </button>
+                    </div>
+                    
+                    <!-- Tab Content -->
+                    <div id="athlete-tab-content">
+                        ${renderActivitiesTab(activities)}
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        showToast('Errore caricamento attività', 'error');
+        console.error(error);
+    }
+}
+
+function renderActivitiesTab(activities) {
+    if (activities.length === 0) {
+        return '<p style="text-align: center; padding: 2rem; color: #666;">Nessuna attività registrata</p>';
+    }
+    
+    let html = '<div class="table-container"><table><thead><tr>';
+    html += '<th>Data</th><th>Titolo</th><th>Tipo</th><th>Distanza</th><th>Durata</th><th>TSS</th><th>Potenza</th><th>Fonte</th>';
+    html += '</tr></thead><tbody>';
+    
+    activities.forEach(activity => {
+        const date = formatDate(activity.activity_date);
+        const distance = activity.distance_km ? formatNumber(activity.distance_km, 1) + ' km' : '-';
+        const duration = formatDuration(activity.duration_minutes);
+        const tss = activity.tss ? formatNumber(activity.tss, 0) : '-';
+        const watts = activity.avg_watts ? formatNumber(activity.avg_watts, 0) + 'W' : '-';
+        
+        html += `
+            <tr>
+                <td>${date}</td>
+                <td>${activity.title}</td>
+                <td>${activity.activity_type || '-'}</td>
+                <td>${distance}</td>
+                <td>${duration}</td>
+                <td>${tss}</td>
+                <td>${watts}</td>
+                <td><span class="badge">${activity.source || 'manual'}</span></td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    return html;
+}
+
+window.switchAthleteTab = function(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    const athleteId = window.currentAthleteView;
+    const athlete = window.allAthletes.find(a => a.id === athleteId);
+    
+    const tabContent = document.getElementById('athlete-tab-content');
+    
+    if (tabName === 'activities') {
+        // Already loaded, just re-fetch if needed
+        api.getActivities({ athlete_id: athleteId, limit: 50 }).then(activities => {
+            tabContent.innerHTML = renderActivitiesTab(activities);
+        });
+    } else if (tabName === 'stats') {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <h4>Statistiche Atleta</h4>
+                <p style="color: #666;">Statistiche dettagliate in arrivo...</p>
+            </div>
+        `;
+    } else if (tabName === 'sync') {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem;">
+                <h4>Sincronizzazione Intervals.icu</h4>
+                <div style="margin-top: 1rem;">
+                    <button class="btn btn-primary" onclick="syncAthleteMetrics(${athleteId})">
+                        <i class="bi bi-arrow-repeat"></i> Sincronizza Metriche
+                    </button>
+                    <button class="btn btn-info" onclick="syncAthleteActivities(${athleteId})" style="margin-left: 0.5rem;">
+                        <i class="bi bi-download"></i> Sincronizza Attività
+                    </button>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <p><strong>API Key:</strong> ${athlete.api_key ? '✅ Configurata' : '❌ Non configurata'}</p>
+                </div>
+            </div>
+        `;
     }
 };
 
@@ -304,21 +535,36 @@ window.updateAthlete = async function(athleteId) {
 };
 
 window.deleteAthleteConfirm = function(athleteId) {
-    confirmDialog(
-        'Sei sicuro di voler eliminare questo atleta? Verranno eliminate anche tutte le sue attività.',
-        async () => {
-            try {
-                showLoading();
-                await api.deleteAthlete(athleteId);
-                showToast('Atleta eliminato con successo', 'success');
-                window.renderAthletesPage();
-            } catch (error) {
-                showToast('Errore nell\'eliminazione: ' + error.message, 'error');
-            } finally {
-                hideLoading();
+    createModal(
+        '⚠️ Conferma Eliminazione',
+        '<p>Sei sicuro di voler eliminare questo atleta? Verranno eliminate anche tutte le sue attività.</p>',
+        [
+            {
+                label: 'Annulla',
+                class: 'btn-secondary',
+                onclick: 'this.closest(".modal-overlay").remove()'
+            },
+            {
+                label: 'Elimina Atleta',
+                class: 'btn-danger',
+                onclick: `deleteAthleteExecute(${athleteId})`
             }
-        }
+        ]
     );
+};
+
+window.deleteAthleteExecute = async function(athleteId) {
+    try {
+        showLoading();
+        await api.deleteAthlete(athleteId);
+        showToast('Atleta eliminato con successo', 'success');
+        document.querySelector('.modal-overlay')?.remove();
+        window.renderAthletesPage();
+    } catch (error) {
+        showToast('Errore nell\'eliminazione: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
 };
 
 /**
@@ -370,3 +616,37 @@ window.syncAthleteMetrics = async function(athleteId) {
         hideLoading();
     }
 };
+
+/**
+ * Sync athlete activities from Intervals.icu
+ */
+window.syncAthleteActivities = async function(athleteId) {
+    try {
+        const athlete = await api.getAthlete(athleteId);
+        
+        if (!athlete.api_key) {
+            showToast('L\'atleta non ha una API key configurata. Modificalo per aggiungerne una.', 'warning');
+            return;
+        }
+        
+        // Ask for number of days
+        const days = prompt('Quanti giorni di attività vuoi sincronizzare?', '30');
+        if (!days || isNaN(days)) return;
+        
+        showLoading();
+        const result = await api.syncActivities(athleteId, athlete.api_key, parseInt(days));
+        
+        const message = result.message || `Sincronizzate ${result.imported || 0} attività, saltate ${result.skipped || 0} duplicati`;
+        showToast(message, 'success');
+        
+        // Refresh athlete detail view if we're on it
+        if (window.currentAthleteView === athleteId) {
+            window.renderAthletesPage();
+        }
+    } catch (error) {
+        showToast('Errore sync attività: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+

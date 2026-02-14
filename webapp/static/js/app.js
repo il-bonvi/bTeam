@@ -85,7 +85,7 @@ async function loadPage(pageName) {
         contentArea.innerHTML = `
             <div class="card">
                 <p style="color: var(--danger-color);">
-                    <i class="fas fa-exclamation-circle"></i> 
+                    <i class="bi bi-exclamation-circle"></i> 
                     Errore nel caricamento della pagina: ${error.message}
                 </p>
             </div>
@@ -114,7 +114,7 @@ async function loadDashboard() {
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon primary">
-                        <i class="fas fa-users"></i>
+                        <i class="bi bi-people-fill"></i>
                     </div>
                     <div class="stat-content">
                         <h3>${teams.length}</h3>
@@ -124,7 +124,7 @@ async function loadDashboard() {
                 
                 <div class="stat-card">
                     <div class="stat-icon success">
-                        <i class="fas fa-user-circle"></i>
+                        <i class="bi bi-person-circle"></i>
                     </div>
                     <div class="stat-content">
                         <h3>${athletes.length}</h3>
@@ -134,7 +134,7 @@ async function loadDashboard() {
                 
                 <div class="stat-card">
                     <div class="stat-icon warning">
-                        <i class="fas fa-running"></i>
+                        <i class="bi bi-activity"></i>
                     </div>
                     <div class="stat-content">
                         <h3>${activities.length}</h3>
@@ -144,7 +144,7 @@ async function loadDashboard() {
                 
                 <div class="stat-card">
                     <div class="stat-icon info">
-                        <i class="fas fa-flag-checkered"></i>
+                        <i class="bi bi-flag-fill"></i>
                     </div>
                     <div class="stat-content">
                         <h3>${races.length}</h3>
@@ -157,7 +157,7 @@ async function loadDashboard() {
                 <div class="card-header">
                     <h3 class="card-title">Attività Recenti</h3>
                     <button class="btn btn-primary" onclick="loadPage('activities')">
-                        <i class="fas fa-eye"></i> Vedi Tutte
+                        <i class="bi bi-eye"></i> Vedi Tutte
                     </button>
                 </div>
                 <div id="recent-activities"></div>
@@ -167,7 +167,7 @@ async function loadDashboard() {
                 <div class="card-header">
                     <h3 class="card-title">Prossime Gare</h3>
                     <button class="btn btn-primary" onclick="loadPage('races')">
-                        <i class="fas fa-eye"></i> Vedi Tutte
+                        <i class="bi bi-eye"></i> Vedi Tutte
                     </button>
                 </div>
                 <div id="upcoming-races"></div>

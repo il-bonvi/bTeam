@@ -53,7 +53,7 @@ window.showCreateRaceDialog = function() {
         <!-- GPX Import Section -->
         <div class="form-group" style="border: 2px dashed #ccc; padding: 15px; border-radius: 8px; margin: 15px 0;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                <i class="fas fa-route" style="color: #3b82f6; font-size: 18px;"></i>
+                <i class="bi bi-map" style="color: #3b82f6; font-size: 18px;"></i>
                 <label class="form-label" style="margin: 0;">Import traccia GPX/FIT/TCX (Optional)</label>
             </div>
             <input type="file" id="gpx-file" accept=".gpx,.fit,.tcx" onchange="handleGpxImport()" style="margin-bottom: 10px;">

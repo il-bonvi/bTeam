@@ -74,16 +74,16 @@ function createModal(title, content, actions = [], modalClass = '') {
             <div class="modal-header">
                 <h3>${title}</h3>
                 <button class="btn-close" onclick="this.closest('.modal-overlay').remove()">
-                    <i class="fas fa-times"></i>
+                    <i class="bi bi-x"></i>
                 </button>
             </div>
             <div class="modal-body">
                 ${content}
             </div>
             <div class="modal-footer">
-                ${actions.map(action => `
+                ${actions.map((action, idx) => `
                     <button class="btn ${action.class || 'btn-secondary'}" 
-                            onclick="${action.onclick}">
+                            data-action="${idx}">
                         ${action.label}
                     </button>
                 `).join('')}
@@ -92,11 +92,31 @@ function createModal(title, content, actions = [], modalClass = '') {
     `;
     
     document.body.appendChild(modal);
+    
+    // Attach click handlers to buttons
+    actions.forEach((action, idx) => {
+        const btn = modal.querySelector(`button[data-action="${idx}"]`);
+        if (btn) {
+            btn.addEventListener('click', function(e) {
+                try {
+                    // Execute the onclick code
+                    eval(action.onclick);
+                } catch (error) {
+                    console.error('Error executing button action:', error);
+                }
+            });
+        }
+    });
+    
     return modal;
 }
 
 // Confirm dialog
+window._pendingConfirmCallback = null;
+
 function confirmDialog(message, onConfirm) {
+    window._pendingConfirmCallback = onConfirm;
+    
     createModal(
         'Conferma',
         `<p>${message}</p>`,
@@ -104,12 +124,12 @@ function confirmDialog(message, onConfirm) {
             {
                 label: 'Annulla',
                 class: 'btn-secondary',
-                onclick: 'this.closest(".modal-overlay").remove()'
+                onclick: 'this.closest(".modal-overlay").remove(); window._pendingConfirmCallback = null;'
             },
             {
                 label: 'Conferma',
                 class: 'btn-danger',
-                onclick: `(${onConfirm.toString()})(); this.closest(".modal-overlay").remove()`
+                onclick: 'if(window._pendingConfirmCallback) { window._pendingConfirmCallback(); } this.closest(".modal-overlay").remove(); window._pendingConfirmCallback = null;'
             }
         ]
     );

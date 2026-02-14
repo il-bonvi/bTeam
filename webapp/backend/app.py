@@ -10,7 +10,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 import sys
 import os
+import logging
 from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import existing modules
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -45,6 +53,7 @@ app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 storage_dir = Path(__file__).parent.parent / "data"
 storage_dir.mkdir(exist_ok=True)
 storage = BTeamStorage(storage_dir)
+logger.info(f"[bTeam] Storage initialized at {storage_dir}")
 
 
 def get_db():

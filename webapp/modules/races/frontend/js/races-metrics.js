@@ -22,10 +22,10 @@ function buildMetricsTab(race) {
                     <input type="number" id="tv-km" class="form-input" placeholder="Inserisci km" 
                            step="0.1" min="0" style="width: 150px;">
                     <button class="btn btn-secondary" onclick="addTV()" style="white-space: nowrap;">
-                        <i class="fas fa-plus"></i> Aggiungi TV
+                        <i class="bi bi-plus"></i> Aggiungi TV
                     </button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="clearAllTV()" title="Rimuovi tutti i TV">
-                        <i class="fas fa-trash-alt"></i> Cancella tutti
+                        <i class="bi bi-trash"></i> Cancella tutti
                     </button>
                 </div>
                 <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
@@ -68,10 +68,10 @@ function buildMetricsTab(race) {
                         <option value="HC">HC</option>
                     </select>
                     <button class="btn btn-secondary" onclick="addGPM()" style="white-space: nowrap;">
-                        <i class="fas fa-plus"></i> Aggiungi GPM
+                        <i class="bi bi-plus"></i> Aggiungi GPM
                     </button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="clearAllGPM()" title="Rimuovi tutti i GPM">
-                        <i class="fas fa-trash-alt"></i> Cancella tutti
+                        <i class="bi bi-trash"></i> Cancella tutti
                     </button>
                 </div>
                 <div style="max-height: 200px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
@@ -156,7 +156,7 @@ function refreshTVTable() {
             </td>
             <td>
                 <button class="btn btn-danger btn-sm" onclick="removeTV(${index})" title="Rimuovi TV">
-                    <i class="fas fa-trash"></i>
+                    <i class="bi bi-trash"></i>
                 </button>
             </td>
         </tr>
@@ -264,7 +264,7 @@ function refreshGPMTable() {
             </td>
             <td>
                 <button class="btn btn-danger btn-sm" onclick="removeGPM(${index})" title="Rimuovi GPM">
-                    <i class="fas fa-trash"></i>
+                    <i class="bi bi-trash"></i>
                 </button>
             </td>
         </tr>

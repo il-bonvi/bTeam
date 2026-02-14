@@ -12,7 +12,7 @@ from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent / "data"
+storage_dir = Path(__file__).parent.parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 
@@ -77,10 +77,11 @@ async def sync_activities(request: SyncRequest):
         
         # Import activities into database
         imported_count = 0
+        skipped_count = 0
         for activity in activities:
             try:
                 formatted = IntervalsSyncService.format_activity_for_storage(activity)
-                storage.add_activity(
+                activity_id, is_new = storage.add_activity(
                     athlete_id=request.athlete_id,
                     title=formatted['name'],
                     activity_date=formatted['start_date'],
@@ -88,7 +89,8 @@ async def sync_activities(request: SyncRequest):
                     duration_minutes=formatted.get('moving_time_minutes'),
                     distance_km=formatted.get('distance_km'),
                     tss=formatted.get('training_load'),
-                    source='INTERVALS',
+                    source='intervals',
+                    intervals_id=formatted.get('intervals_id'),
                     avg_watts=formatted.get('avg_watts'),
                     normalized_watts=formatted.get('normalized_watts'),
                     avg_hr=formatted.get('avg_hr'),
@@ -97,15 +99,19 @@ async def sync_activities(request: SyncRequest):
                     intensity=formatted.get('intensity'),
                     feel=formatted.get('feel')
                 )
-                imported_count += 1
+                if is_new:
+                    imported_count += 1
+                else:
+                    skipped_count += 1
             except Exception as e:
                 print(f"Error importing activity: {e}")
                 continue
         
         return {
             "success": True,
-            "message": f"Imported {imported_count} activities",
+            "message": f"Imported {imported_count} activities, skipped {skipped_count} duplicates",
             "imported": imported_count,
+            "skipped": skipped_count,
             "total": len(activities)
         }
     except Exception as e:
