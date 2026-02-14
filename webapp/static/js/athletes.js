@@ -118,6 +118,10 @@ function createAthleteCard(athlete) {
                     <span class="athlete-stat-label">W/kg:</span>
                     <span class="athlete-stat-value">${athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(1) : '-'}</span>
                 </div>
+                <div class="athlete-stat-row">
+                    <span class="athlete-stat-label">kJ/h/kg:</span>
+                    <span class="athlete-stat-value">${athlete.kj_per_hour_per_kg ? athlete.kj_per_hour_per_kg.toFixed(1) : '10.0'}</span>
+                </div>
             </div>
             <div class="athlete-card-footer">
                 <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editAthlete(${athlete.id})" title="Modifica">
@@ -195,6 +199,9 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                         </div>
                         <div>
                             <strong>W/kg:</strong> ${athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-'}
+                        </div>
+                        <div>
+                            <strong>kJ/h/kg:</strong> ${athlete.kj_per_hour_per_kg ? athlete.kj_per_hour_per_kg.toFixed(1) : '10.0'}
                         </div>
                         <div>
                             <strong>Data Nascita:</strong> ${athlete.birth_date || '-'}
@@ -357,6 +364,10 @@ window.showCreateAthleteDialog = function() {
                 ${teamsOptions}
             </select>
         </div>
+        <div class="form-group">
+            <label class="form-label">kJ/h/kg (default)</label>
+            <input type="number" id="athlete-kj-per-hour-per-kg" class="form-input" value="10.0" step="0.1" min="0.5" max="50">
+        </div>
         <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem; margin-bottom: 1rem;">
             <p style="color: #666; font-size: 0.9rem; margin: 0 0 1rem 0;">
                 <strong>Nota:</strong> Gli altri dati (peso, altezza, FC max, FTP) possono essere sincronizzati direttamente da Intervals.icu
@@ -403,6 +414,7 @@ window.createAthlete = async function() {
         birth_date: document.getElementById('athlete-birth-date').value || null,
         gender: document.getElementById('athlete-gender').value || null,
         team_id: document.getElementById('athlete-team').value ? parseInt(document.getElementById('athlete-team').value) : null,
+        kj_per_hour_per_kg: parseFloat(document.getElementById('athlete-kj-per-hour-per-kg').value) || 10.0,
         api_key: document.getElementById('athlete-api-key').value.trim() || null
     };
     
@@ -459,6 +471,10 @@ window.editAthlete = async function(athleteId) {
                     ${teamsOptions}
                 </select>
             </div>
+            <div class="form-group">
+                <label class="form-label">kJ/h/kg (default)</label>
+                <input type="number" id="athlete-kj-per-hour-per-kg-edit" class="form-input" value="${athlete.kj_per_hour_per_kg || 10.0}" step="0.1" min="0.5" max="50">
+            </div>
             <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem;">
                 <h4>Sincronizzazione Intervals.icu</h4>
                 <div class="form-group">
@@ -503,6 +519,7 @@ window.updateAthlete = async function(athleteId) {
         birth_date: document.getElementById('athlete-birth-date-edit').value || null,
         gender: document.getElementById('athlete-gender-edit').value || null,
         team_id: document.getElementById('athlete-team-edit').value ? parseInt(document.getElementById('athlete-team-edit').value) : null,
+        kj_per_hour_per_kg: parseFloat(document.getElementById('athlete-kj-per-hour-per-kg-edit').value) || 10.0,
         api_key: document.getElementById('athlete-api-key-edit').value.trim() || null
     };
     

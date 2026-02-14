@@ -105,7 +105,8 @@ window.showCreateRaceDialog = function() {
  * Update categories based on selected gender
  */
 window.updateCategories = function() {
-    const gender = document.getElementById('race-gender').value;
+    const genderSelect = document.getElementById('race-gender');
+    const gender = genderSelect?.value || 'Femminile';
     const categorySelect = document.getElementById('race-category');
     
     const categories = {
@@ -113,7 +114,8 @@ window.updateCategories = function() {
         'Maschile': ['U23']
     };
     
-    categorySelect.innerHTML = categories[gender].map(cat => 
+    const categoryList = categories[gender] || [...categories.Femminile, ...categories.Maschile];
+    categorySelect.innerHTML = categoryList.map(cat => 
         `<option value="${cat}">${cat}</option>`
     ).join('');
 };

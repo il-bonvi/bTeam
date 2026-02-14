@@ -17,6 +17,8 @@ function buildRidersTab(race, allAthletes) {
                     <i class="bi bi-plus"></i> Aggiungi Atleti
                 </button>
             </div>
+
+            <div id="add-riders-panel" style="display: none; margin-bottom: 15px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa;"></div>
             
             <table id="riders-table" class="data-table" style="width: 100%;">
                 <thead>
@@ -153,16 +155,25 @@ window.showAddRidersDialog = async function() {
         const raceAthleteIds = raceAthletes.map(ra => ra.id);
         
         const availableAthletes = allAthletes.filter(a => !raceAthleteIds.includes(a.id));
+        window.availableRaceAthletes = availableAthletes;
         
         if (availableAthletes.length === 0) {
             showToast('Tutti gli atleti sono già stati aggiunti alla gara', 'info');
             return;
         }
         
-        createModal(
-            'Aggiungi Atleti alla Gara',
-            `
-            <div style="max-height: 400px; overflow-y: auto;">
+        const panel = document.getElementById('add-riders-panel');
+        if (!panel) {
+            showToast('Errore apertura pannello atleti', 'error');
+            return;
+        }
+
+        panel.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong>Aggiungi Atleti alla Gara</strong>
+                <button class="btn btn-secondary btn-sm" onclick="hideAddRidersPanel()">Chiudi</button>
+            </div>
+            <div style="max-height: 300px; overflow-y: auto;">
                 <table class="data-table" style="width: 100%;">
                     <thead>
                         <tr>
@@ -170,6 +181,7 @@ window.showAddRidersDialog = async function() {
                             <th>Nome</th>
                             <th>Squadra</th>
                             <th>Peso</th>
+                            <th>kJ/h/kg</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -179,6 +191,7 @@ window.showAddRidersDialog = async function() {
                                 <td>${athlete.first_name} ${athlete.last_name}</td>
                                 <td>${athlete.team_name || '-'}</td>
                                 <td>${athlete.weight_kg || '-'} kg</td>
+                                <td>${athlete.kj_per_hour_per_kg || '10.0'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -192,26 +205,24 @@ window.showAddRidersDialog = async function() {
                     <option value="C" selected style="background-color: #fbbf24;">C - Priorità Bassa (Finire)</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label class="form-label">kJ/h/kg predefinito per atleti selezionati</label>
-                <input type="number" id="default-kj" class="form-input" value="10.0" step="0.1" min="0.5" max="50">
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary" onclick="hideAddRidersPanel()">Annulla</button>
+                <button class="btn btn-primary" onclick="addSelectedRiders()">✓ Aggiungi Selezionati</button>
             </div>
-            `,
-            [
-                {
-                    label: 'Annulla',
-                    class: 'btn-secondary',
-                    onclick: 'this.closest(".modal-overlay").remove()'
-                },
-                {
-                    label: '✓ Aggiungi Selezionati',
-                    class: 'btn-primary',
-                    onclick: 'addSelectedRiders()'
-                }
-            ]
-        );
+        `;
+
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (error) {
         showToast('Errore nel caricamento degli atleti', 'error');
+    }
+};
+
+window.hideAddRidersPanel = function() {
+    const panel = document.getElementById('add-riders-panel');
+    if (panel) {
+        panel.innerHTML = '';
+        panel.style.display = 'none';
     }
 };
 
@@ -231,7 +242,6 @@ window.toggleAllRiders = function() {
 window.addSelectedRiders = async function() {
     const selectedCheckboxes = document.querySelectorAll('.rider-checkbox:checked');
     const objective = document.getElementById('default-objective').value;
-    const kjPerHourPerKg = parseFloat(document.getElementById('default-kj').value) || 10.0;
     
     if (selectedCheckboxes.length === 0) {
         showToast('Seleziona almeno un atleta', 'warning');
@@ -243,18 +253,21 @@ window.addSelectedRiders = async function() {
         
         for (const checkbox of selectedCheckboxes) {
             const athleteId = parseInt(checkbox.value);
+            const athlete = window.availableRaceAthletes?.find(a => a.id === athleteId);
+            // Each athlete uses their personal kJ/h/kg value
+            const athleteKj = athlete?.kj_per_hour_per_kg || 10.0;
             await api.addAthleteToRace(currentRaceId, {
                 athlete_id: athleteId,
-                kj_per_hour_per_kg: kjPerHourPerKg,
+                kj_per_hour_per_kg: athleteKj,
                 objective: objective
             });
         }
         
         showToast(`✅ ${selectedCheckboxes.length} atleta/i aggiunto/i alla gara`, 'success');
-        document.querySelector('.modal-overlay').remove();
+        hideAddRidersPanel();
         
-        // Refresh race details
-        viewRaceDetails(currentRaceId);
+        // Refresh only the riders table instead of reloading entire dialog
+        refreshRidersTable(currentRaceId);
         
     } catch (error) {
         showToast('Errore nell\'aggiunta degli atleti: ' + error.message, 'error');
@@ -294,6 +307,36 @@ window.updateRiderObjective = function(athleteId, newObjective) {
 };
 
 /**
+ * Refresh riders table content without reloading entire dialog
+ */
+window.refreshRidersTable = async function(raceId) {
+    try {
+        // Reload race data from server
+        window.currentRaceData = await api.getRace(raceId);
+        const raceAthletes = window.currentRaceData.athletes || [];
+        const ridersTableBody = document.querySelector('#riders-table tbody');
+        
+        if (!ridersTableBody) return;
+        
+        // Update table content
+        if (raceAthletes.length === 0) {
+            ridersTableBody.innerHTML = `
+                <tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">
+                    Nessun atleta registrato. Clicca "Aggiungi Atleti" per iniziare.
+                </td></tr>
+            `;
+        } else {
+            ridersTableBody.innerHTML = raceAthletes.map(ra => buildRiderRow(ra)).join('');
+        }
+        
+        // Update KJ totals
+        refreshRidersKJ();
+    } catch (error) {
+        showToast('Errore nel refresh della tabella atleti', 'error');
+    }
+};
+
+/**
  * Remove rider from race
  */
 window.removeRiderFromRace = async function(athleteId) {
@@ -304,11 +347,8 @@ window.removeRiderFromRace = async function(athleteId) {
         await api.removeAthleteFromRace(currentRaceId, athleteId);
         showToast('✅ Atleta rimosso dalla gara', 'success');
         
-        // Update local data
-        currentRaceData.athletes = currentRaceData.athletes.filter(a => a.id !== athleteId);
-        
-        // Refresh race details
-        viewRaceDetails(currentRaceId);
+        // Refresh only the riders table instead of reloading entire dialog
+        refreshRidersTable(window.currentRaceId);
         
     } catch (error) {
         showToast('Errore nella rimozione: ' + error.message, 'error');

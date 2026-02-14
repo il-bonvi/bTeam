@@ -296,7 +296,12 @@ class Race(Base):
         athletes = [
             {
                 "id": ra.athlete_id,
-                "name": f"{ra.athlete.last_name} {ra.athlete.first_name}" if ra.athlete else f"[Deleted Athlete #{ra.athlete_id}]"
+                "first_name": ra.athlete.first_name if ra.athlete else "Unknown",
+                "last_name": ra.athlete.last_name if ra.athlete else "Unknown",
+                "weight_kg": ra.athlete.weight_kg if ra.athlete else None,
+                "team_name": ra.athlete.team.name if ra.athlete and ra.athlete.team else None,
+                "kj_per_hour_per_kg": ra.kj_per_hour_per_kg,
+                "objective": ra.objective,
             }
             for ra in self.athletes_assoc
         ]
@@ -635,6 +640,7 @@ class BTeamStorage:
         gender: Optional[str] = None,
         cp: Optional[float] = None,
         w_prime: Optional[float] = None,
+        kj_per_hour_per_kg: Optional[float] = None,
         api_key: Optional[str] = None,
         notes: str = "",
     ) -> int:
@@ -650,6 +656,7 @@ class BTeamStorage:
             gender=gender,
             cp=cp,
             w_prime=w_prime,
+            kj_per_hour_per_kg=kj_per_hour_per_kg,
             api_key=api_key,
             notes=notes.strip() or None,
             created_at=now,
@@ -1168,14 +1175,18 @@ class BTeamStorage:
 
     def list_races(self) -> List[Dict]:
         """List all races (not filtered by athlete - races are standalone)."""
-        query = self.session.query(Race).order_by(Race.race_date.asc())
+        query = self.session.query(Race).options(
+            joinedload(Race.athletes_assoc).joinedload(RaceAthlete.athlete).joinedload(Athlete.team)
+        ).order_by(Race.race_date.asc())
         races = query.all()
         return [race.to_dict() for race in races]
 
     def get_race(self, race_id: int) -> Optional[Dict]:
         """Get race details by ID."""
         try:
-            race = self.session.query(Race).filter(Race.id == race_id).first()
+            race = self.session.query(Race).options(
+                joinedload(Race.athletes_assoc).joinedload(RaceAthlete.athlete).joinedload(Athlete.team)
+            ).filter(Race.id == race_id).first()
             if race:
                 return race.to_dict()
             return None

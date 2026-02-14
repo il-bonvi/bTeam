@@ -245,9 +245,10 @@ window.deleteRaceGpx = function() {
  * Update detail categories based on gender
  */
 window.updateDetailCategories = function() {
-    const gender = document.getElementById('detail-gender')?.value;
+    const genderSelect = document.getElementById('detail-gender');
+    const gender = genderSelect?.value || 'Femminile';
     const categorySelect = document.getElementById('detail-category');
-    if (!gender || !categorySelect) return;
+    if (!categorySelect) return;
     
     const currentCategory = window.currentRaceData?.category || '';
     
@@ -256,7 +257,11 @@ window.updateDetailCategories = function() {
         'Maschile': ['U23']
     };
     
-    categorySelect.innerHTML = categories[gender].map(cat => 
+    let categoryList = categories[gender] || [...categories.Femminile, ...categories.Maschile];
+    if (currentCategory && !categoryList.includes(currentCategory)) {
+        categoryList = [currentCategory, ...categoryList];
+    }
+    categorySelect.innerHTML = categoryList.map(cat => 
         `<option value="${cat}" ${cat === currentCategory ? 'selected' : ''}>${cat}</option>`
     ).join('');
 };

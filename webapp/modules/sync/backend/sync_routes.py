@@ -234,8 +234,8 @@ async def push_race(request: PushRaceRequest):
         if predicted_duration:
             duration_minutes = float(predicted_duration)
         else:
-            # Default estimate: 25 km/h average speed
-            duration_minutes = (distance_km / 25.0) * 60 if distance_km > 0 else 240
+            # Default estimate: 38.5 km/h average speed
+            duration_minutes = (distance_km / 38.5) * 60 if distance_km > 0 else 240
         
         duration_seconds = int(duration_minutes * 60)
         
@@ -253,11 +253,35 @@ async def push_race(request: PushRaceRequest):
         else:
             intervals_category = "RACE_C"  # Default to C
         
+        # Helper function to format duration as "Xh Ym"
+        def format_duration(minutes):
+            hours = int(minutes // 60)
+            mins = int(minutes % 60)
+            return f"{hours}h {mins}m"
+        
         # Build HTML-formatted description like OLDAPP
-        race_description = f'<div><b></b><span class="text-red-darken-2"><b class="">Dislivello</b></span>: {int(elevation_m)}m</div>'
-        race_description += f'<div><b></b><span class="text-green"><b class="">Previsti</b></span>: {int(predicted_kj)}kJ</div>'
+        race_description = f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
+        race_description += f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+        
+        # Add kJ/h/kg if athlete has weight
+        athlete_weight = athlete.get('weight_kg')
+        if athlete_weight and predicted_kj > 0 and duration_minutes > 0:
+            kj_per_hour = predicted_kj / (duration_minutes / 60)
+            kj_per_h_kg = kj_per_hour / float(athlete_weight)
+            race_description += f' ({kj_per_h_kg:.1f} kJ/h/kg)'
+        race_description += '</b></div>'
+        
+        # Calculate durations at 36 km/h and 41 km/h
+        if distance_km > 0:
+            duration_36 = (distance_km / 36.0) * 60  # minutes
+            duration_41 = (distance_km / 41.0) * 60  # minutes
+            duration_36_str = format_duration(duration_36)
+            duration_41_str = format_duration(duration_41)
+            
+            race_description += f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b><br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+        
         if notes:
-            race_description += f'<div><b></b><span class="text-purple"><b class="">Note</b></span>: {notes}</div>'
+            race_description += f'<div><b><span class="text-purple">Note</span>: {notes}</b></div>'
         
         # Create event with ALL parameters from OLDAPP
         # Use "0" for athlete_id (means "current athlete" who owns the API key)
