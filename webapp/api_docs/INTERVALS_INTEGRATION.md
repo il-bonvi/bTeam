@@ -247,5 +247,5 @@ Le date sono in **local time** dell'atleta.
 
 ---
 
-**Ultima Aggiornamento**: 2026-02-13  
+**Ultimo Aggiornamento**: 2026-02-13  
 **Compatibilità**: Intervals.icu API v1

@@ -90,6 +90,7 @@ class IntervalsSyncService:
             for activity in activities:
                 activity_id = activity.get('id')
                 if not activity_id:
+                    logger.warning("Attività senza ID trovata; impossibile scaricare i dettagli. L'attività verrà restituita senza arricchimento.")
                     enriched.append(activity)
                     continue
                 activity_id_str = str(activity_id)

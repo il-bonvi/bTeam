@@ -20,48 +20,44 @@ class APIClient {
             ...options,
         };
         
+        const response = await fetch(url, config);
+        let data;
+        
+        // Read body once to avoid "already consumed" error
+        const text = await response.text();
+        
         try {
-            const response = await fetch(url, config);
-            let data;
-            
-            // Read body once to avoid "already consumed" error
-            const text = await response.text();
-            
-            try {
-                data = text ? JSON.parse(text) : {};
-            } catch (jsonError) {
-                console.error('Failed to parse JSON response:', text);
-                throw new Error(`Server returned invalid JSON: ${text.substring(0, 100)}`);
-            }
-
-            if (!response.ok) {
-                let errorMessage = 'Request failed';
-                
-                // Handle different error response formats
-                if (typeof data.detail === 'string') {
-                    errorMessage = data.detail;
-                } else if (typeof data.message === 'string') {
-                    errorMessage = data.message;
-                } else if (Array.isArray(data.detail)) {
-                    // Handle array of validation errors
-                    errorMessage = data.detail
-                        .map(item => typeof item === 'string' ? item : JSON.stringify(item))
-                        .join('; ');
-                } else if (Array.isArray(data.message)) {
-                    errorMessage = data.message
-                        .map(item => typeof item === 'string' ? item : JSON.stringify(item))
-                        .join('; ');
-                } else if (typeof data.detail === 'object' && data.detail !== null) {
-                    errorMessage = JSON.stringify(data.detail);
-                }
-                
-                throw new Error(errorMessage);
-            }
-
-            return data;
-        } catch (error) {
-            throw error;
+            data = text ? JSON.parse(text) : {};
+        } catch (jsonError) {
+            console.error('Failed to parse JSON response:', text);
+            throw new Error(`Server returned invalid JSON: ${text.substring(0, 100)}`);
         }
+
+        if (!response.ok) {
+            let errorMessage = 'Request failed';
+            
+            // Handle different error response formats
+            if (typeof data.detail === 'string') {
+                errorMessage = data.detail;
+            } else if (typeof data.message === 'string') {
+                errorMessage = data.message;
+            } else if (Array.isArray(data.detail)) {
+                // Handle array of validation errors
+                errorMessage = data.detail
+                    .map(item => typeof item === 'string' ? item : JSON.stringify(item))
+                    .join('; ');
+            } else if (Array.isArray(data.message)) {
+                errorMessage = data.message
+                    .map(item => typeof item === 'string' ? item : JSON.stringify(item))
+                    .join('; ');
+            } else if (typeof data.detail === 'object' && data.detail !== null) {
+                errorMessage = JSON.stringify(data.detail);
+            }
+            
+            throw new Error(errorMessage);
+        }
+
+        return data;
     }
 
     // Teams

@@ -3,15 +3,13 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent.parent / "data"
+storage_dir = Path(__file__).resolve().parent.parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 
