@@ -612,7 +612,7 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
         // Default filter parameters for CP calculation
         const valuesPerWindow = 1;
         const minPercentile = 70;
-        const sprintSeconds = 10;
+        const sprintSeconds = 1;
 
         // 1. Calculate for 90 days
         const stats90d = await calculatePeriodStatistics(
@@ -709,9 +709,11 @@ async function calculatePeriodStatistics(powerData, periodName, weight, valuesPe
             periodName: periodName,
             cp: Math.round(cpResult.CP),
             w_prime: Math.round(cpResult.W_prime),
+            pmax: Math.round(cpResult.Pmax),
             rmse: cpResult.RMSE.toFixed(2),
             cp_kg: (cpResult.CP / weight).toFixed(2),
             w_prime_kg: (cpResult.W_prime / weight / 1000).toFixed(3), // kJ/kg
+            pmax_kg: (cpResult.Pmax / weight).toFixed(2),
             usedPercentile: currentPercentile,
             pointsUsed: filtered.selectedCount,
             mmp_1s: mmps[1],
@@ -743,6 +745,8 @@ function renderStatisticsTable(statistics, weight) {
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">CP (W/kg)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">W' (J)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">W'/kg (kJ/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">pMax (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">pMax (W/kg)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Punti</th>
@@ -754,6 +758,8 @@ function renderStatisticsTable(statistics, weight) {
         const bgColor = idx === 0 ? '#f0f7ff' : (idx % 2 === 0 ? '#f8f9fa' : 'white');
         const w_prime_j = stat.w_prime;
         const w_prime_kg_kj = stat.w_prime_kg;
+        const pmax_w = stat.pmax;
+        const pmax_kg = stat.pmax_kg;
         
         html += `
             <tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">
@@ -762,6 +768,8 @@ function renderStatisticsTable(statistics, weight) {
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${stat.cp_kg} <span style="font-size: 0.85rem; color: #666;"></span></td>
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #667eea;">${w_prime_j}</td>
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${w_prime_kg_kj}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${pmax_w}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${pmax_kg}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #999;">${stat.rmse}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.usedPercentile}%</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.pointsUsed}</td>
@@ -883,7 +891,7 @@ async function renderCPTab(athleteId, athlete, tabContent) {
         // Default filter parameters
         const defaultValuesPerWindow = 1;
         const defaultMinPercentile = 70;
-        const defaultSprintSeconds = 10;
+        const defaultSprintSeconds = 1;
 
         // Render UI with controls and placeholders for charts
         tabContent.innerHTML = `

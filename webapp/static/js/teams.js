@@ -158,6 +158,16 @@ async function renderTeamDetail(teamId, teams, contentArea) {
                 </button>
             </div>
             
+            <!-- Date Range Filter -->
+            <div style="padding: 1rem; background: #f0f4ff; border-bottom: 1px solid #ddd;">
+                <label style="display: inline-block; margin-right: 1rem; font-weight: 600;">📅 Filtra per Periodo:</label>
+                <select id="team-date-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
+                    <option value="90days">Ultimi 90 giorni</option>
+                    <option value="season_2026">Stagione 2026 (Nov 2025 - Ott 2026)</option>
+                    <option value="season_2025">Stagione 2025 (Nov 2024 - Ott 2025)</option>
+                </select>
+            </div>
+            
             <!-- Tabs -->
             <div class="tabs" style="border-bottom: 1px solid #ddd; background: #f8f9fa; display: flex; gap: 0;">
                 <button class="tab-btn active" data-tab="overview" onclick="switchTeamTab('overview', ${teamId})">
@@ -184,6 +194,30 @@ async function renderTeamDetail(teamId, teams, contentArea) {
     // Store team and athletes globally
     window.currentTeam = team;
     window.currentTeamAthletes = athletes;
+    window.currentTeamDateRange = { days: 90 }; // Default: last 90 days
+
+    // Add event listener to date filter
+    setTimeout(() => {
+        const dateFilter = document.getElementById('team-date-filter');
+        if (dateFilter) {
+            dateFilter.addEventListener('change', (e) => {
+                const value = e.target.value;
+                if (value === '90days') {
+                    window.currentTeamDateRange = { days: 90 };
+                } else if (value === 'season_2026') {
+                    window.currentTeamDateRange = { season: 2026 };
+                } else if (value === 'season_2025') {
+                    window.currentTeamDateRange = { season: 2025 };
+                }
+                // Reload current tab with new date range
+                const activeTab = document.querySelector('.tab-btn.active');
+                if (activeTab) {
+                    const tabName = activeTab.getAttribute('data-tab');
+                    switchTeamTab(tabName, teamId);
+                }
+            });
+        }
+    }, 0);
 
     // Load default tab (overview)
     switchTeamTab('overview', teamId);
@@ -223,17 +257,17 @@ async function renderTeamOverviewTab(teamId, team, athletes, tabContent) {
         </div>
     `;
 
-    // Calculate team statistics
-    const stats = await calculateTeamStatistics(athletes);
+    // Get current date range from global filter
+    const dateRange = window.currentTeamDateRange || { days: 90 };
+
+    // Calculate team statistics with selected date range
+    const stats = await calculateTeamStatistics(athletes, dateRange);
 
     let html = `
         <div style="padding: 1.5rem;">
-            <!-- Summary Cards -->
+            <!-- Summary Cards - Dati Impostati -->
+            <h5 style="margin-top: 0; margin-bottom: 1rem;">📌 Dati Impostati Manualmente</h5>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-                <div class="stat-card" style="background: linear-gradient(135deg, #f0f4ff 0%, #f5f0ff 100%); border-left: 4px solid #667eea;">
-                    <div class="stat-label">Totale Membri</div>
-                    <div class="stat-value" style="color: #667eea;">${stats.totalMembers}</div>
-                </div>
                 <div class="stat-card" style="background: linear-gradient(135deg, #fff5f0 0%, #fff0f5 100%); border-left: 4px solid #ff6b6b;">
                     <div class="stat-label">CP Medio</div>
                     <div class="stat-value" style="color: #ff6b6b;">${stats.avgCP} W</div>
@@ -244,19 +278,40 @@ async function renderTeamOverviewTab(teamId, team, athletes, tabContent) {
                     <div class="stat-value" style="color: #43e97b;">${stats.avgWPrime} J</div>
                     <div style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">${stats.avgWPrimeKg} kJ/kg</div>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #fffef0 0%, #fff5f0 100%); border-left: 4px solid #ffa502;">
-                    <div class="stat-label">Peso Medio</div>
-                    <div class="stat-value" style="color: #ffa502;">${stats.avgWeight} kg</div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #ffeef0 0%, #ffe0e0 100%); border-left: 4px solid #ec4899;">
+                    <div class="stat-label">Potenza 5s Medio</div>
+                    <div class="stat-value" style="color: #ec4899;">${stats.avgPower5s} W</div>
+                    <div style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">reale da dati</div>
+                </div>
+            </div>
+
+            <!-- Summary Cards - Dati Calcolati dal Modello -->
+            <h5 style="margin-bottom: 1rem;">📈 Dati Calcolati (OmniPD)</h5>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;" data-calc-cards>
+                <div class="stat-card" style="background: linear-gradient(135deg, #f0f4ff 0%, #e8f0ff 100%); border-left: 4px solid #667eea;">
+                    <div class="stat-label">CP Calcolato Medio</div>
+                    <div class="stat-value" style="color: #667eea;">${stats.avgCalcCP} W</div>
+                    <div style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">atleti con dati: ${stats.athletesWithCalcCP}</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #f0f4ff 0%, #fff0f0 100%); border-left: 4px solid #4facfe;">
+                    <div class="stat-label">W' Calcolato Medio</div>
+                    <div class="stat-value" style="color: #4facfe;">${stats.avgCalcWPrime} J</div>
+                    <div style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">${stats.avgCalcWPrimeKg} kJ/kg</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #fff0f0 0%, #fff5f0 100%); border-left: 4px solid #fa709a;">
+                    <div class="stat-label">Pmax Medio</div>
+                    <div class="stat-value" style="color: #fa709a;">${stats.avgPmax} W</div>
+                    <div style="font-size: 0.875rem; color: #666; margin-top: 0.5rem;">a 1s</div>
                 </div>
             </div>
 
             <!-- Best Performances -->
             <h5 style="margin-bottom: 1rem;">🌟 Migliori Performance</h5>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;" data-best-perf>
                 ${stats.bestPerformances.map(perf => `
                     <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                         <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">${perf.label}</div>
-                        <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${perf.value} W</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; color: ${perf.color || '#667eea'};">${perf.value}${perf.unit || ' W'}</div>
                         <div style="font-size: 0.875rem; color: #999; margin-top: 0.25rem;">${perf.athlete}</div>
                     </div>
                 `).join('')}
@@ -279,26 +334,87 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
         return;
     }
 
+    // Show loading state
+    tabContent.innerHTML = `
+        <div style="padding: 1.5rem;">
+            <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
+            <div style="text-align: center; color: #666;">Caricamento dati calcolati...</div>
+        </div>
+    `;
+
+    // Get current date range from global filter
+    const dateRange = window.currentTeamDateRange || { days: 90 };
+    const { dateStr90, todayStr } = getNormalizedDateRange(dateRange);
+
+    // Load calculated statistics for each athlete
+    const athletesWithStats = await Promise.all(athletes.map(async (athlete) => {
+        const stats = { ...athlete, eCP: null, eWPrime: null, Pmax: null };
+        
+        if (!athlete.api_key) {
+            return stats;
+        }
+
+        try {
+            const response = await fetch(`/api/athletes/${athlete.id}/power-curve?oldest=${dateStr90}&newest=${todayStr}`);
+            if (!response.ok) return stats;
+
+            const powerData = await response.json();
+            const durations = powerData.secs || [];
+            const watts = powerData.watts || [];
+
+            if (durations.length === 0) return stats;
+
+            // Calculate CP, W', and Pmax using OmniPD model
+            const filtered = filterPowerCurveData(durations, watts, 1, 70, 10);
+            if (filtered.selectedCount >= 4) {
+                const cpResult = calculateOmniPD(filtered.times, filtered.powers);
+                stats.eCP = Math.round(cpResult.CP);
+                stats.eWPrime = Math.round(cpResult.W_prime);
+                // Pmax at 1s from OmniPD model
+                const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
+                stats.Pmax = pmax1s ? Math.round(pmax1s) : null;
+            }
+            
+            // Find power at 5 seconds from raw data
+            const idx5s = durations.findIndex(d => d >= 5);
+            if (idx5s !== -1 && watts[idx5s]) {
+                stats.power5s = Math.round(watts[idx5s]);
+            } else if (durations.length > 0) {
+                // Fallback: take highest available power if no 5s data
+                stats.power5s = Math.max(...watts);
+            }
+        } catch (err) {
+            console.warn(`Failed to load stats for athlete ${athlete.id}:`, err);
+        }
+
+        return stats;
+    }));
+
     let html = `
         <div style="padding: 1.5rem;">
             <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
-            <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div style="background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: #f8f9fa;">
                         <tr>
                             <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600;">Atleta</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Peso (kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">CP (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">CP (W/kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">W' (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">CP (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">CP (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">CP calc (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">CP calc (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">W' (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">W' calc (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">Pmax (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Azioni</th>
                         </tr>
                     </thead>
                     <tbody>`;
 
-    athletes.forEach((athlete, idx) => {
+    athletesWithStats.forEach((athlete, idx) => {
         const bgColor = idx % 2 === 0 ? 'white' : '#f8f9fa';
-        const cpKg = athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-';
+        const cpPerKg = athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-';
+        const ecpPerKg = athlete.eCP && athlete.weight_kg ? (athlete.eCP / athlete.weight_kg).toFixed(2) : '-';
         
         html += `
             <tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">
@@ -308,8 +424,12 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
                 </td>
                 <td style="padding: 1rem; text-align: center;">${athlete.weight_kg || '-'}</td>
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #667eea;">${athlete.cp || '-'}</td>
-                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${cpKg}</td>
-                <td style="padding: 1rem; text-align: center;">${athlete.cp ? '-' : '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #667eea;">${cpPerKg}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${athlete.eCP || '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${ecpPerKg}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #43e97b;">${athlete.w_prime || '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${athlete.eWPrime || '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ffa502;">${athlete.Pmax || '-'}</td>
                 <td style="padding: 1rem; text-align: center;">
                     <button class="btn btn-primary btn-sm" onclick="navigateToAthlete(${athlete.id})">
                         Dettagli
@@ -351,8 +471,11 @@ async function renderTeamRankingsTab(teamId, team, athletes, tabContent) {
         return;
     }
 
+    // Get current date range from global filter
+    const dateRange = window.currentTeamDateRange || { days: 90 };
+
     // Calculate rankings for all athletes
-    const rankings = await calculateTeamRankings(athletesWithKeys);
+    const rankings = await calculateTeamRankings(athletesWithKeys, dateRange);
 
     renderRankingsTable(rankings, tabContent);
 }
@@ -378,8 +501,11 @@ async function renderTeamComparisonTab(teamId, team, athletes, tabContent) {
         return;
     }
 
+    // Get current date range from global filter
+    const dateRange = window.currentTeamDateRange || { days: 90 };
+
     // Fetch power curves for all athletes
-    const powerCurves = await fetchAllPowerCurves(athletesWithKeys);
+    const powerCurves = await fetchAllPowerCurves(athletesWithKeys, dateRange);
 
     renderPowerCurvesComparison(powerCurves, athletesWithKeys, tabContent);
 }
@@ -397,7 +523,36 @@ window.navigateToAthlete = function(athleteId) {
     }
 };
 
-async function calculateTeamStatistics(athletes) {
+// Helper function to normalize date range
+function getNormalizedDateRange(dateRangeOpt = { days: 90 }) {
+    let dateStr90, todayStr;
+    if (dateRangeOpt.days) {
+        // Last N days
+        const today = new Date();
+        const daysAgo = new Date(today.getTime() - dateRangeOpt.days * 24 * 60 * 60 * 1000);
+        dateStr90 = daysAgo.toISOString().split('T')[0];
+        todayStr = today.toISOString().split('T')[0];
+    } else if (dateRangeOpt.season) {
+        // Season: November of previous year to October of current year
+        const season = dateRangeOpt.season;
+        dateStr90 = `${season - 1}-11-01`;
+        todayStr = `${season}-10-31`;
+    } else if (dateRangeOpt.start && dateRangeOpt.end) {
+        dateStr90 = dateRangeOpt.start.toISOString().split('T')[0];
+        todayStr = dateRangeOpt.end.toISOString().split('T')[0];
+    } else {
+        // Default to last 90 days
+        const today = new Date();
+        const daysAgo = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        dateStr90 = daysAgo.toISOString().split('T')[0];
+        todayStr = today.toISOString().split('T')[0];
+    }
+    return { dateStr90, todayStr };
+}
+
+async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
+    // Normalize date range using helper function
+    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
     const withCP = athletes.filter(a => a.cp);
     const withWeight = athletes.filter(a => a.weight_kg);
 
@@ -416,16 +571,23 @@ async function calculateTeamStatistics(athletes) {
         ? (withWeight.reduce((sum, a) => sum + a.weight_kg, 0) / withWeight.length).toFixed(1)
         : '0';
 
-    // Calculate W' average from power curves (90 days)
+    // Calculate CP, W', Pmax average from power curves (OmniPD model, 90 days)
     let totalWPrime = 0;
     let totalWPrimeKg = 0;
     let withWPrimeCount = 0;
     let withWPrimeKgCount = 0;
 
-    const today = new Date();
-    const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const dateStr90 = days90ago.toISOString().split('T')[0];
-    const todayStr = today.toISOString().split('T')[0];
+    // Calculated values from OmniPD model
+    let totalCalcCP = 0;
+    let totalCalcWPrime = 0;
+    let totalCalcWPrimeKg = 0;
+    let totalPmax = 0;
+    let totalPower5s = 0;
+    let withCalcCPCount = 0;
+    let withCalcWPrimeCount = 0;
+    let withCalcWPrimeKgCount = 0;
+    let withPmaxCount = 0;
+    let withPower5sCount = 0;
 
     for (const athlete of athletes) {
         if (!athlete.api_key) continue;
@@ -445,6 +607,8 @@ async function calculateTeamStatistics(athletes) {
             
             try {
                 const cpResult = calculateOmniPD(filtered.times, filtered.powers);
+                
+                // Old method (stored in DB)
                 totalWPrime += cpResult.W_prime;
                 withWPrimeCount++;
                 
@@ -452,8 +616,40 @@ async function calculateTeamStatistics(athletes) {
                     totalWPrimeKg += cpResult.W_prime / athlete.weight_kg / 1000;
                     withWPrimeKgCount++;
                 }
+                
+                // New OmniPD calculated values
+                totalCalcCP += cpResult.CP;
+                withCalcCPCount++;
+                
+                totalCalcWPrime += cpResult.W_prime;
+                withCalcWPrimeCount++;
+                
+                if (athlete.weight_kg) {
+                    totalCalcWPrimeKg += cpResult.W_prime / athlete.weight_kg / 1000;
+                    withCalcWPrimeKgCount++;
+                }
+                
+                // Pmax at 1s from OmniPD model
+                const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
+                if (pmax1s && !isNaN(pmax1s)) {
+                    totalPmax += pmax1s;
+                    withPmaxCount++;
+                }
+                
+                // Power at 5s from raw data
+                const idx5s = durations.findIndex(d => d >= 5);
+                if (idx5s !== -1 && watts[idx5s]) {
+                    totalPower5s += watts[idx5s];
+                    withPower5sCount++;
+                } else if (durations.length > 0) {
+                    // Fallback: take highest available power if no 5s data
+                    totalPower5s += Math.max(...watts);
+                    withPower5sCount++;
+                }
+                
             } catch (err) {
                 console.warn(`Failed to calculate CP for ${athlete.id}:`, err);
+                console.debug(`Data available - durations: ${durations.length}, watts: ${watts.length}`, {durations, watts});
             }
         } catch (err) {
             console.warn(`Failed to load power curve for ${athlete.id}:`, err);
@@ -463,28 +659,72 @@ async function calculateTeamStatistics(athletes) {
     const avgWPrime = withWPrimeCount > 0 ? Math.round(totalWPrime / withWPrimeCount) : 0;
     const avgWPrimeKg = withWPrimeKgCount > 0 ? (totalWPrimeKg / withWPrimeKgCount).toFixed(3) : '0.000';
 
-    // Best performances
+    // Calculated values
+    const avgCalcCP = withCalcCPCount > 0 ? Math.round(totalCalcCP / withCalcCPCount) : 0;
+    const avgCalcWPrime = withCalcWPrimeCount > 0 ? Math.round(totalCalcWPrime / withCalcWPrimeCount) : 0;
+    const avgCalcWPrimeKg = withCalcWPrimeKgCount > 0 ? (totalCalcWPrimeKg / withCalcWPrimeKgCount).toFixed(3) : '0.000';
+    const avgPmax = withPmaxCount > 0 ? Math.round(totalPmax / withPmaxCount) : 0;
+    const avgPower5s = withPower5sCount > 0 ? Math.round(totalPower5s / withPower5sCount) : 0;
+    const athletesWithCalcCP = withCalcCPCount;
+
+    // Best performances with colors and units
     const bestPerformances = [
-        { label: 'CP Massima', value: withCP.length > 0 ? Math.max(...withCP.map(a => a.cp)) : 0, athlete: withCP.length > 0 ? `${withCP.reduce((max, a) => a.cp > max.cp ? a : max).first_name} ${withCP.reduce((max, a) => a.cp > max.cp ? a : max).last_name}` : '-' },
-        { label: 'CP/kg Massima', value: withCP.filter(a => a.weight_kg).length > 0 ? Math.round(Math.max(...withCP.filter(a => a.weight_kg).map(a => a.cp / a.weight_kg))) : 0, athlete: '-' }
+        { 
+            label: 'CP Massima', 
+            value: withCP.length > 0 ? Math.max(...withCP.map(a => a.cp)) : 0, 
+            athlete: withCP.length > 0 ? `${withCP.reduce((max, a) => a.cp > max.cp ? a : max).first_name} ${withCP.reduce((max, a) => a.cp > max.cp ? a : max).last_name}` : '-',
+            color: '#ff6b6b',
+            unit: ' W'
+        },
+        { 
+            label: 'CP/kg Massima', 
+            value: withCP.filter(a => a.weight_kg).length > 0 ? Math.round(Math.max(...withCP.filter(a => a.weight_kg).map(a => a.cp / a.weight_kg))) : 0, 
+            athlete: '-',
+            color: '#ff6b6b',
+            unit: ' W/kg'
+        },
+        { 
+            label: 'W\' Massimo (impostato)', 
+            value: withCP.length > 0 ? Math.max(...athletes.map(a => a.w_prime || 0)) : 0,
+            athlete: athletes.length > 0 ? (() => {
+                const athlete = athletes.reduce((max, a) => (a.w_prime || 0) > (max.w_prime || 0) ? a : max);
+                return athlete.w_prime ? `${athlete.first_name} ${athlete.last_name}` : '-';
+            })() : '-',
+            color: '#43e97b',
+            unit: ' J'
+        },
+        { 
+            label: 'Potenza 5s Massima', 
+            value: 0,
+            athlete: '-',
+            color: '#ec4899',
+            unit: ' W'
+        }
     ];
+    
+    // Calculate max P5s from available data (estimated from stats)
+    let maxP5s = 0;
+    let maxP5sAthlete = null;
+    // This would require loading power curves for all athletes - for now use 0 placeholder
 
     return {
-        totalMembers: athletes.length,
         avgCP,
         avgCPkg,
         avgWPrime,
         avgWPrimeKg,
         avgWeight,
+        avgCalcCP,
+        avgCalcWPrime,
+        avgCalcWPrimeKg,
+        avgPmax,
+        avgPower5s,
+        athletesWithCalcCP,
         bestPerformances
     };
 }
 
-async function calculateTeamRankings(athletes) {
-    const today = new Date();
-    const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const dateStr90 = days90ago.toISOString().split('T')[0];
-    const todayStr = today.toISOString().split('T')[0];
+async function calculateTeamRankings(athletes, dateRangeOpt = { days: 90 }) {
+    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
 
     const rankings = [];
 
@@ -640,11 +880,8 @@ function renderRankingsTable(rankings, tabContent) {
     tabContent.innerHTML = html;
 }
 
-async function fetchAllPowerCurves(athletes) {
-    const today = new Date();
-    const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const dateStr90 = days90ago.toISOString().split('T')[0];
-    const todayStr = today.toISOString().split('T')[0];
+async function fetchAllPowerCurves(athletes, dateRangeOpt = { days: 90 }) {
+    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
 
     const powerCurves = [];
 
@@ -680,30 +917,56 @@ function renderPowerCurvesComparison(powerCurves, athletes, tabContent) {
 
     let html = `
         <div style="padding: 1.5rem;">
-            <h4 style="margin-bottom: 1.5rem;">📈 Comparazione Power Curves (90 giorni)</h4>
+            <h4 style="margin-bottom: 1.5rem;">📈 Comparazione Power Curves (Ultimi 90 giorni)</h4>
             
-            <div id="team-comparison-chart" style="width: 100%; height: 600px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+            <div style="margin-bottom: 2rem;">
+                <h5 style="margin-bottom: 1rem;">Potenza Assoluta (W)</h5>
+                <div id="team-comparison-chart-absolute" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+            </div>
+            
+            <div>
+                <h5 style="margin-bottom: 1rem;">Potenza per Kg (W/kg)</h5>
+                <div id="team-comparison-chart-per-kg" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+            </div>
         </div>
     `;
 
     tabContent.innerHTML = html;
 
-    // Render comparison chart
-    renderComparisonChart(powerCurves);
+    // Render comparison charts
+    renderComparisonCharts(powerCurves);
 }
 
-function renderComparisonChart(powerCurves) {
+function renderComparisonCharts(powerCurves) {
     // Colors for each athlete
     const colors = ['#667eea', '#f093fb', '#4facfe', '#fa709a', '#43e97b', '#38f9d7', '#f6d365', '#fda085'];
 
-    // Prepare series data
-    const series = powerCurves.map((pc, idx) => {
+    const baseDurations = (powerCurves[0]?.data?.secs || []).filter(d => d > 0);
+    const getNearestWatts = (durations, watts, target) => {
+        if (!durations.length || !watts.length) return 0;
+        const idx = durations.findIndex(d => d >= target);
+        if (idx !== -1) return watts[idx] || 0;
+        return watts[watts.length - 1] || 0;
+    };
+
+    // Calculate min/max for axes
+    const allDurations = baseDurations.length > 0
+        ? baseDurations
+        : powerCurves.flatMap(pc => (pc.data.secs || []).filter(d => d > 0));
+    const minDuration = Math.min(...allDurations.filter(d => d > 0));
+    const maxDuration = Math.max(...allDurations.filter(d => d > 0));
+    const logMin = Math.log10(minDuration * 0.95);
+    const logMax = Math.log10(maxDuration * 1.05);
+
+    // ===== CHART 1: Absolute Power =====
+    const seriesAbsolute = powerCurves.map((pc) => {
         const durations = pc.data.secs || [];
         const watts = pc.data.watts || [];
+        const sourceDurations = baseDurations.length > 0 ? baseDurations : durations;
 
-        const seriesData = durations.map((sec, i) => ({
+        const seriesData = sourceDurations.map((sec) => ({
             x: Math.log10(Math.max(sec, 1)),
-            y: watts[i] || 0,
+            y: getNearestWatts(durations, watts, sec),
             rawX: sec
         }));
 
@@ -713,18 +976,11 @@ function renderComparisonChart(powerCurves) {
         };
     });
 
-    // Calculate min/max for axes
-    const allDurations = powerCurves.flatMap(pc => pc.data.secs || []);
-    const minDuration = Math.min(...allDurations.filter(d => d > 0));
-    const maxDuration = Math.max(...allDurations.filter(d => d > 0));
-    const logMin = Math.log10(minDuration * 0.95);
-    const logMax = Math.log10(maxDuration * 1.05);
-
-    const options = {
-        series: series,
+    const optionsAbsolute = {
+        series: seriesAbsolute,
         chart: {
             type: 'line',
-            height: 600,
+            height: 500,
             toolbar: {
                 show: true,
                 tools: {
@@ -782,7 +1038,7 @@ function renderComparisonChart(powerCurves) {
             }
         },
         tooltip: {
-            shared: false,
+            shared: true,
             intersect: false,
             x: {
                 formatter: function(value) {
@@ -826,13 +1082,146 @@ function renderComparisonChart(powerCurves) {
         }
     };
 
-    // Render chart
-    if (window.teamComparisonChart) {
-        window.teamComparisonChart.destroy();
+    // ===== CHART 2: Power per Kg =====
+    const seriesPerKg = powerCurves.map((pc) => {
+        const durations = pc.data.secs || [];
+        const watts = pc.data.watts || [];
+        const weight = pc.athlete.weight_kg || 1;
+        const sourceDurations = baseDurations.length > 0 ? baseDurations : durations;
+
+        const seriesData = sourceDurations.map((sec) => ({
+            x: Math.log10(Math.max(sec, 1)),
+            y: getNearestWatts(durations, watts, sec) / weight,
+            rawX: sec
+        }));
+
+        return {
+            name: `${pc.athlete.first_name} ${pc.athlete.last_name}`,
+            data: seriesData
+        };
+    });
+
+    const optionsPerKg = {
+        series: seriesPerKg,
+        chart: {
+            type: 'line',
+            height: 500,
+            toolbar: {
+                show: true,
+                tools: {
+                    download: true,
+                    zoom: true,
+                    zoomin: true,
+                    zoomout: true,
+                    pan: true,
+                    reset: true
+                }
+            },
+            zoom: {
+                enabled: true,
+                type: 'x'
+            }
+        },
+        stroke: {
+            curve: 'smooth',
+            width: 3
+        },
+        colors: colors.slice(0, powerCurves.length),
+        xaxis: {
+            type: 'numeric',
+            title: {
+                text: 'Durata (scala logaritmica)',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(value) {
+                    const sec = Math.pow(10, value);
+                    if (sec < 60) return Math.round(sec) + 's';
+                    if (sec < 3600) return Math.round(sec / 60) + 'm';
+                    if (sec < 86400) return (sec / 3600).toFixed(1) + 'h';
+                    return (sec / 86400).toFixed(1) + 'd';
+                }
+            },
+            min: logMin,
+            max: logMax
+        },
+        yaxis: {
+            title: {
+                text: 'Potenza (W/kg)',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(value) {
+                    return value.toFixed(1) + 'W/kg';
+                }
+            }
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            x: {
+                formatter: function(value) {
+                    const sec = Math.pow(10, value);
+                    if (sec < 60) return Math.round(sec) + ' sec';
+                    if (sec < 3600) {
+                        const mins = Math.floor(sec / 60);
+                        const secs = Math.round(sec % 60);
+                        return mins + 'm ' + secs + 's';
+                    }
+                    if (sec < 86400) {
+                        const hours = Math.floor(sec / 3600);
+                        const mins = Math.round((sec % 3600) / 60);
+                        return hours + 'h ' + mins + 'm';
+                    }
+                    const days = Math.floor(sec / 86400);
+                    const hours = Math.round((sec % 86400) / 3600);
+                    return days + 'd ' + hours + 'h';
+                }
+            },
+            y: {
+                formatter: function(value) {
+                    return value.toFixed(2) + ' W/kg';
+                }
+            }
+        },
+        legend: {
+            show: true,
+            position: 'top',
+            horizontalAlign: 'center'
+        },
+        grid: {
+            borderColor: '#e0e0e0',
+            strokeDashArray: 4
+        },
+        markers: {
+            size: 0,
+            hover: {
+                size: 6
+            }
+        }
+    };
+
+    // Render charts
+    if (window.teamComparisonChartAbsolute) {
+        window.teamComparisonChartAbsolute.destroy();
     }
-    const chart = new ApexCharts(document.querySelector("#team-comparison-chart"), options);
-    chart.render();
-    window.teamComparisonChart = chart;
+    if (window.teamComparisonChartPerKg) {
+        window.teamComparisonChartPerKg.destroy();
+    }
+
+    const chartAbsolute = new ApexCharts(document.querySelector("#team-comparison-chart-absolute"), optionsAbsolute);
+    chartAbsolute.render();
+    window.teamComparisonChartAbsolute = chartAbsolute;
+
+    const chartPerKg = new ApexCharts(document.querySelector("#team-comparison-chart-per-kg"), optionsPerKg);
+    chartPerKg.render();
+    window.teamComparisonChartPerKg = chartPerKg;
 }
 
 // ========== CRUD OPERATIONS ==========
