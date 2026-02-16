@@ -177,37 +177,6 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                     </button>
                 </div>
                 <div class="card-body">
-                    <!-- Athlete Info Section -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; padding: 1rem; background: #f5f5f5; border-radius: 8px;">
-                        <div>
-                            <strong>Squadra:</strong> ${athlete.team_name || '-'}
-                        </div>
-                        <div>
-                            <strong>Genere:</strong> ${athlete.gender || '-'}
-                        </div>
-                        <div>
-                            <strong>Peso:</strong> ${athlete.weight_kg ? athlete.weight_kg + ' kg' : '-'}
-                        </div>
-                        <div>
-                            <strong>Altezza:</strong> ${athlete.height_cm ? athlete.height_cm + ' cm' : '-'}
-                        </div>
-                        <div>
-                            <strong>FTP/CP:</strong> ${athlete.cp ? Math.round(athlete.cp) + ' W' : '-'}
-                        </div>
-                        <div>
-                            <strong>W':</strong> ${athlete.w_prime ? Math.round(athlete.w_prime) + ' J' : '-'}
-                        </div>
-                        <div>
-                            <strong>W/kg:</strong> ${athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-'}
-                        </div>
-                        <div>
-                            <strong>kJ/h/kg:</strong> ${athlete.kj_per_hour_per_kg ? athlete.kj_per_hour_per_kg.toFixed(1) : '10.0'}
-                        </div>
-                        <div>
-                            <strong>Data Nascita:</strong> ${athlete.birth_date || '-'}
-                        </div>
-                    </div>
-                    
                     <!-- Tabs -->
                     <div class="tabs">
                         <button class="tab-button active" onclick="switchAthleteTab('activities')">
@@ -227,6 +196,9 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                         </button>
                         <button class="tab-button" onclick="switchAthleteTab('sync')">
                             Sincronizzazione
+                        </button>
+                        <button class="tab-button" onclick="switchAthleteTab('details')">
+                            Dettagli
                         </button>
                     </div>
                     
@@ -277,10 +249,22 @@ function renderActivitiesTab(activities) {
     return html;
 }
 
-window.switchAthleteTab = function(tabName) {
+window.switchAthleteTab = function(tabName, eventObj) {
     // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    
+    // If event is available, use it. Otherwise find the button by tabName
+    if (eventObj && eventObj.target) {
+        eventObj.target.classList.add('active');
+    } else {
+        // Find and activate the button with matching onclick
+        const buttons = document.querySelectorAll('.tab-button');
+        buttons.forEach(btn => {
+            if (btn.textContent.toLowerCase().includes(tabName.toLowerCase())) {
+                btn.classList.add('active');
+            }
+        });
+    }
     
     const athleteId = window.currentAthleteView;
     const athlete = window.allAthletes.find(a => a.id === athleteId);
@@ -293,18 +277,80 @@ window.switchAthleteTab = function(tabName) {
             tabContent.innerHTML = renderActivitiesTab(activities);
         });
     } else if (tabName === 'stats') {
-        tabContent.innerHTML = `
-            <div style="padding: 2rem; text-align: center;">
-                <h4>Statistiche Atleta</h4>
-                <p style="color: #666;">Statistiche dettagliate in arrivo...</p>
-            </div>
-        `;
+        const athlete = window.allAthletes.find(a => a.id === athleteId);
+        renderStatisticsTab(athleteId, athlete, tabContent);
     } else if (tabName === 'power-curve') {
         renderPowerCurveTab(athleteId, athlete, tabContent);
     } else if (tabName === 'cp') {
         renderCPTab(athleteId, athlete, tabContent);
     } else if (tabName === 'seasons') {
         renderSeasonsTab(athleteId, tabContent);
+    } else if (tabName === 'details') {
+        const athlete = window.allAthletes.find(a => a.id === athleteId);
+        const wPerKg = athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-';
+        const teamsOptions = window.availableTeams.map(t => 
+            `<option value="${t.id}" ${athlete.team_id === t.id ? 'selected' : ''}>${t.name}</option>`
+        ).join('');
+        tabContent.innerHTML = `
+            <div style="padding: 2rem;">
+                <h4>Dettagli Atleta</h4>
+                <form id="athlete-details-form" style="margin-top: 1.5rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Squadra</label>
+                            <select id="detail-team" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                <option value="">-</option>
+                                ${teamsOptions}
+                            </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Genere</label>
+                            <select id="detail-gender" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                <option value="">-</option>
+                                <option value="M" ${athlete.gender === 'M' ? 'selected' : ''}>Maschile</option>
+                                <option value="F" ${athlete.gender === 'F' ? 'selected' : ''}>Femminile</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Peso (kg)</label>
+                            <input type="number" id="detail-weight" step="0.1" value="${athlete.weight_kg || ''}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Altezza (cm)</label>
+                            <input type="number" id="detail-height" step="0.1" value="${athlete.height_cm || ''}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">FTP/CP (W)</label>
+                            <input type="number" id="detail-cp" step="1" value="${athlete.cp || ''}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">W' (J)</label>
+                            <input type="number" id="detail-wprime" step="1" value="${athlete.w_prime || ''}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">W/kg (calcolato)</label>
+                            <input type="text" value="${wPerKg}" disabled style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; background: #f5f5f5; color: #666;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">kJ/h/kg</label>
+                            <input type="number" id="detail-kj-per-kg" step="0.1" value="${athlete.kj_per_hour_per_kg || '10.0'}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Data Nascita</label>
+                            <input type="date" id="detail-birth-date" value="${athlete.birth_date ? athlete.birth_date.split('T')[0] : ''}" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                        </div>
+                    </div>
+                    <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                        <button type="button" class="btn btn-primary" onclick="saveAthleteDetails(${athleteId})">
+                            <i class="bi bi-check-circle"></i> Salva Modifiche
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="switchAthleteTab('activities')">
+                            <i class="bi bi-x-circle"></i> Annulla
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
     } else if (tabName === 'sync') {
         tabContent.innerHTML = `
             <div style="padding: 2rem;">
@@ -458,13 +504,16 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
                     </div>
                 </div>
                 
-                <!-- Chart Container -->
-                <div id="power-curve-chart" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
-                
-                <!-- Best Efforts Table -->
-                <div style="margin-top: 2rem;">
-                    <h5>🏆 Migliori Sforzi</h5>
-                    <div id="best-efforts-table" style="margin-top: 1rem;"></div>
+                <!-- Main Container: Chart and Table Side-by-Side -->
+                <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
+                    <!-- Chart Container -->
+                    <div id="power-curve-chart" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+                    
+                    <!-- Best Efforts Table -->
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; height: 500px; overflow-y: auto;">
+                        <h5 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">🏆 Migliori Sforzi</h5>
+                        <div id="best-efforts-table"></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -489,6 +538,286 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
             </div>
         `;
     }
+}
+
+// ========== STATISTICS TAB ==========
+
+async function renderStatisticsTab(athleteId, athlete, tabContent) {
+    if (!athlete.api_key) {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border: 1px solid #ffc107; margin-bottom: 1rem;">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 2rem; color: #ff9800;"></i>
+                    <h4 style="margin-top: 1rem; color: #856404;">API Key Non Configurata</h4>
+                    <p style="color: #856404; margin-top: 0.5rem;">
+                        Per visualizzare le statistiche è necessario configurare l'API key di Intervals.icu per questo atleta.
+                    </p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Show loading
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento statistiche...</p>
+        </div>
+    `;
+
+    try {
+        const today = new Date();
+        const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const dateStr90 = days90ago.toISOString().split('T')[0];
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Fetch all data in parallel
+        const [seasonsResponse, response90, responseAllTime] = await Promise.all([
+            api.getAthleteSeasons(athleteId),
+            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
+            fetch(`/api/athletes/${athleteId}/power-curve`)
+        ]);
+
+        if (!response90.ok || !responseAllTime.ok) {
+            throw new Error('Errore nel caricamento dei dati');
+        }
+
+        const seasons = seasonsResponse;
+        const data90d = await response90.json();
+        const dataAllTime = await responseAllTime.json();
+
+        // Fetch power curves for each season
+        const seasonPowerCurves = {};
+        for (const season of seasons) {
+            const endDate = season.end_date || todayStr;
+            try {
+                const seasonResponse = await fetch(
+                    `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
+                );
+                if (seasonResponse.ok) {
+                    seasonPowerCurves[season.id] = await seasonResponse.json();
+                }
+            } catch (err) {
+                console.warn(`Failed to load power curve for season ${season.id}:`, err);
+            }
+        }
+
+        // Get weight for pro kg calculations
+        const weight = athlete.weight_kg || 1;
+
+        // Calculate statistics for all periods
+        const statistics = [];
+
+        // Default filter parameters for CP calculation
+        const valuesPerWindow = 1;
+        const minPercentile = 70;
+        const sprintSeconds = 10;
+
+        // 1. Calculate for 90 days
+        const stats90d = await calculatePeriodStatistics(
+            data90d, 
+            'Ultimi 90 giorni', 
+            weight, 
+            valuesPerWindow, 
+            minPercentile, 
+            sprintSeconds
+        );
+        if (stats90d) statistics.push(stats90d);
+
+        // 2. Calculate for each season
+        for (const season of seasons) {
+            const seasonData = seasonPowerCurves[season.id];
+            if (seasonData && seasonData.secs && seasonData.secs.length > 0) {
+                const seasonStats = await calculatePeriodStatistics(
+                    seasonData,
+                    season.name,
+                    weight,
+                    valuesPerWindow,
+                    minPercentile,
+                    sprintSeconds
+                );
+                if (seasonStats) statistics.push(seasonStats);
+            }
+        }
+
+        // Render statistics table
+        renderStatisticsTable(statistics, weight);
+
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fee; padding: 1.5rem; border-radius: 8px; border: 1px solid #fcc;">
+                    <i class="bi bi-x-circle" style="font-size: 2rem; color: #d32f2f;"></i>
+                    <h4 style="margin-top: 1rem; color: #c62828;">Errore nel caricamento</h4>
+                    <p style="color: #666; margin-top: 0.5rem;">
+                        ${error.message}
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Calculate statistics for a specific period (90d or season)
+async function calculatePeriodStatistics(powerData, periodName, weight, valuesPerWindow, minPercentile, sprintSeconds) {
+    try {
+        const durations = powerData.secs || [];
+        const watts = powerData.watts || [];
+
+        if (!durations || durations.length < 4) {
+            return null;
+        }
+
+        // Try filtering with decreasing percentiles until we have enough data
+        let filtered = null;
+        let currentPercentile = minPercentile;
+
+        while (currentPercentile >= 0) {
+            const tempFiltered = filterPowerCurveData(durations, watts, valuesPerWindow, currentPercentile, sprintSeconds);
+            
+            if (tempFiltered.selectedCount >= 4) {
+                filtered = tempFiltered;
+                break;
+            }
+            
+            currentPercentile--;
+        }
+
+        if (!filtered) {
+            return null;
+        }
+
+        // Calculate CP model
+        const cpResult = calculateOmniPD(filtered.times, filtered.powers);
+
+        // Extract MMP for specific durations
+        const targetDurations = [1, 5, 180, 360, 720]; // 1s, 5s, 3m, 6m, 12m
+        const mmps = {};
+
+        for (const duration of targetDurations) {
+            const index = durations.findIndex(d => d >= duration);
+            if (index !== -1) {
+                mmps[duration] = watts[index] || 0;
+            } else {
+                mmps[duration] = null;
+            }
+        }
+
+        return {
+            periodName: periodName,
+            cp: Math.round(cpResult.CP),
+            w_prime: Math.round(cpResult.W_prime),
+            rmse: cpResult.RMSE.toFixed(2),
+            cp_kg: (cpResult.CP / weight).toFixed(2),
+            w_prime_kg: (cpResult.W_prime / weight / 1000).toFixed(3), // kJ/kg
+            usedPercentile: currentPercentile,
+            pointsUsed: filtered.selectedCount,
+            mmp_1s: mmps[1],
+            mmp_5s: mmps[5],
+            mmp_3m: mmps[180],
+            mmp_6m: mmps[360],
+            mmp_12m: mmps[720],
+            weight: weight
+        };
+    } catch (error) {
+        console.warn(`Error calculating statistics for ${periodName}:`, error);
+        return null;
+    }
+}
+
+// Render statistics as a comprehensive table
+function renderStatisticsTable(statistics, weight) {
+    const tabContent = document.getElementById('athlete-tab-content');
+
+    let html = `
+        <div style="padding: 1.5rem;">
+            <!-- CP & W' Section -->
+            <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 2rem;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: #f8f9fa;">
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600;">Periodo</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">CP (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">CP (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">W' (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">W'/kg (kJ/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Punti</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+    statistics.forEach((stat, idx) => {
+        const bgColor = idx === 0 ? '#f0f7ff' : (idx % 2 === 0 ? '#f8f9fa' : 'white');
+        const w_prime_j = stat.w_prime;
+        const w_prime_kg_kj = stat.w_prime_kg;
+        
+        html += `
+            <tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">
+                <td style="padding: 1rem; font-weight: ${idx === 0 ? '600' : '500'}; color: ${idx === 0 ? '#667eea' : '#333'};">${stat.periodName}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #667eea;">${stat.cp}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${stat.cp_kg} <span style="font-size: 0.85rem; color: #666;"></span></td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #667eea;">${w_prime_j}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${w_prime_kg_kj}</td>
+                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #999;">${stat.rmse}</td>
+                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.usedPercentile}%</td>
+                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.pointsUsed}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- MMP Section -->
+            <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: #f8f9fa;">
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600;">Periodo</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">MMP 1s</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">MMP 5s</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">MMP 3'</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">MMP 6'</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">MMP 12'</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+    statistics.forEach((stat, idx) => {
+        const bgColor = idx === 0 ? '#f0f7ff' : (idx % 2 === 0 ? '#f8f9fa' : 'white');
+        
+        const formatMMP = (watts) => {
+            if (watts === null) return '-';
+            const perKg = (watts / weight).toFixed(1);
+            return `<div style="font-weight: 600; color: #3b82f6;">${Math.round(watts)} W</div><div style="font-size: 0.8rem; color: #666;">${perKg} W/kg</div>`;
+        };
+
+        html += `
+            <tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">
+                <td style="padding: 1rem; font-weight: ${idx === 0 ? '600' : '500'}; color: ${idx === 0 ? '#667eea' : '#333'};">${stat.periodName}</td>
+                <td style="padding: 1rem; text-align: center;">${formatMMP(stat.mmp_1s)}</td>
+                <td style="padding: 1rem; text-align: center;">${formatMMP(stat.mmp_5s)}</td>
+                <td style="padding: 1rem; text-align: center;">${formatMMP(stat.mmp_3m)}</td>
+                <td style="padding: 1rem; text-align: center;">${formatMMP(stat.mmp_6m)}</td>
+                <td style="padding: 1rem; text-align: center;">${formatMMP(stat.mmp_12m)}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    tabContent.innerHTML = html;
 }
 
 // ========== CP MODEL TAB ==========
@@ -798,7 +1127,7 @@ async function renderSeasonsTab(athleteId, tabContent) {
         
         tabContent.innerHTML = `
             <div style="padding: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <h4 style="margin: 0;">📅 Stagioni Sportive</h4>
                     <button class="btn btn-primary" onclick="showCreateSeasonDialog(${athleteId})">
                         <i class="bi bi-plus"></i> Nuova Stagione
@@ -1017,9 +1346,9 @@ function renderPowerCurveChart(data) {
     const minDuration = Math.min(...durations.filter(d => d > 0));
     const maxDuration = Math.max(...durations.filter(d => d > 0));
     
-    // Add some padding (10% on each side)
-    const logMin = Math.log10(Math.max(minDuration * 0.5, 1));
-    const logMax = Math.log10(maxDuration * 2);
+    // Minimal padding for cleaner view - no wasted space
+    const logMin = Math.log10(minDuration * 0.95);
+    const logMax = Math.log10(maxDuration * 1.05);
 
     // Transform to logarithmic scale for X axis
     const seriesData = durations.map((sec, idx) => ({
@@ -1151,7 +1480,7 @@ function renderBestEffortsTable(data) {
 
     // Initialize custom durations list if doesn't exist - include longer efforts
     if (!window.customDurations) {
-        window.customDurations = [5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 5400, 7200, 10800];
+        window.customDurations = [1,2,5,8,10,15,20,30,40,50,60,120,180,240,300,360,480,570,720,900,960,1200,1500,1800,2400,2700,3600,5400,7200];
     }
 
     const tableData = window.customDurations
@@ -1174,19 +1503,19 @@ function renderBestEffortsTable(data) {
     }
 
     let html = `
-        <div style="margin-bottom: 1rem;">
-            <input type="number" id="custom-duration-input" placeholder="Aggiungi durata (secondi)" 
-                   style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 220px;">
-            <button class="btn btn-primary btn-sm" onclick="addCustomDuration()" style="margin-left: 0.5rem;">
+        <div style="margin-bottom: 0.75rem;">
+            <input type="number" id="custom-duration-input" placeholder="Aggiungi durata (sec)" 
+                   style="padding: 0.35rem 0.5rem; font-size: 0.85rem; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+            <button class="btn btn-primary btn-sm" onclick="addCustomDuration()" style="margin-left: 0.35rem; padding: 0.35rem 0.75rem; font-size: 0.8rem;">
                 <i class="bi bi-plus"></i> Aggiungi
             </button>
         </div>
-        <table style="width: 100%; border-collapse: collapse;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
             <thead>
                 <tr>
-                    <th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #ddd;">Durata</th>
-                    <th style="text-align: right; padding: 0.75rem; border-bottom: 2px solid #ddd;">Potenza</th>
-                    <th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #ddd; width: 40px;"></th>
+                    <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 0.8rem;">Durata</th>
+                    <th style="text-align: right; padding: 0.5rem; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 0.8rem;">Potenza</th>
+                    <th style="text-align: center; padding: 0.5rem; border-bottom: 1px solid #ddd; width: 35px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -1194,15 +1523,15 @@ function renderBestEffortsTable(data) {
 
     tableData.forEach(item => {
         html += `
-            <tr style="border-bottom: 1px solid #eee;">
-                <td style="padding: 0.75rem; font-weight: 500;">${item.label}</td>
-                <td style="padding: 0.75rem; text-align: right; color: #3b82f6; font-weight: 600;">
+            <tr style="border-bottom: 1px solid #f0f0f0;">
+                <td style="padding: 0.4rem 0.5rem; font-weight: 500; font-size: 0.85rem;">${item.label}</td>
+                <td style="padding: 0.4rem 0.5rem; text-align: right; color: #3b82f6; font-weight: 600; font-size: 0.85rem;">
                     ${Math.round(item.watts)} W
                 </td>
-                <td style="text-align: center; padding: 0.75rem;">
+                <td style="text-align: center; padding: 0.4rem 0.5rem;">
                     <button class="btn btn-danger btn-xs" onclick="removeDuration(${item.duration})" 
-                            style="padding: 4px 8px; font-size: 0.8rem; background: #f5101f; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        × Rimuovi
+                            style="padding: 2px 5px; font-size: 0.7rem; background: #f5101f; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        ×
                     </button>
                 </td>
             </tr>
@@ -1495,12 +1824,61 @@ window.createAthlete = async function() {
     }
 };
 
+window.saveAthleteDetails = async function(athleteId) {
+    try {
+        showLoading();
+        
+        // Raccogliere i dati dal form
+        const teamId = document.getElementById('detail-team').value.trim();
+        const gender = document.getElementById('detail-gender').value;
+        const weightKg = parseFloat(document.getElementById('detail-weight').value) || null;
+        const heightCm = parseFloat(document.getElementById('detail-height').value) || null;
+        const cp = parseInt(document.getElementById('detail-cp').value) || null;
+        const wPrime = parseInt(document.getElementById('detail-wprime').value) || null;
+        const kjPerHourPerKg = parseFloat(document.getElementById('detail-kj-per-kg').value) || null;
+        const birthDate = document.getElementById('detail-birth-date').value;
+        
+        // Inviare al backend
+        const response = await fetch(`/api/athletes/${athleteId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                team_id: teamId ? parseInt(teamId) : null,
+                gender: gender || null,
+                weight_kg: weightKg,
+                height_cm: heightCm,
+                cp: cp,
+                w_prime: wPrime,
+                kj_per_hour_per_kg: kjPerHourPerKg,
+                birth_date: birthDate || null
+            })
+        });
+        
+        if (!response.ok) throw new Error('Errore durante il salvataggio');
+        
+        // Aggiornare la lista degli atleti
+        const updated = await response.json();
+        const idx = window.allAthletes.findIndex(a => a.id === athleteId);
+        if (idx >= 0) {
+            window.allAthletes[idx] = { ...window.allAthletes[idx], ...updated };
+        }
+        
+        showToast('Dettagli atleta salvati con successo', 'success');
+        // Ricaricare la tab per mostrare i nuovi dati
+        switchAthleteTab('details');
+    } catch (error) {
+        showToast('Errore nel salvataggio: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
 window.editAthlete = async function(athleteId) {
     try {
         const athlete = await api.getAthlete(athleteId);
         
         const teamsOptions = window.availableTeams.map(t => 
-            `<option value="${t.id}" ${t.id === athlete.team_id ? 'selected' : ''}>${t.name}</option>`
+            `<option value="${t.id}" ${athlete.team_id === t.id ? 'selected' : ''}>${t.name}</option>`
         ).join('');
         
         createModal(
@@ -1539,7 +1917,7 @@ window.editAthlete = async function(athleteId) {
                 <label class="form-label">kJ/h/kg (default)</label>
                 <input type="number" id="athlete-kj-per-hour-per-kg-edit" class="form-input" value="${athlete.kj_per_hour_per_kg || 10.0}" step="0.1" min="0.5" max="50">
             </div>
-            <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem;">
+            <div style="border-top: 2px solid #e0e0e0; margin-top: 1rem; padding-top: 1rem; margin-bottom: 1rem;">
                 <h4>Sincronizzazione Intervals.icu</h4>
                 <div class="form-group">
                     <label class="form-label">API Key Intervals.icu</label>
