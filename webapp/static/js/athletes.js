@@ -219,6 +219,9 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                         <button class="tab-button" onclick="switchAthleteTab('power-curve')">
                             Power Curve
                         </button>
+                        <button class="tab-button" onclick="switchAthleteTab('cp')">
+                            CP Model
+                        </button>
                         <button class="tab-button" onclick="switchAthleteTab('seasons')">
                             Stagioni
                         </button>
@@ -298,6 +301,8 @@ window.switchAthleteTab = function(tabName) {
         `;
     } else if (tabName === 'power-curve') {
         renderPowerCurveTab(athleteId, athlete, tabContent);
+    } else if (tabName === 'cp') {
+        renderCPTab(athleteId, athlete, tabContent);
     } else if (tabName === 'seasons') {
         renderSeasonsTab(athleteId, tabContent);
     } else if (tabName === 'sync') {
@@ -485,6 +490,297 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
         `;
     }
 }
+
+// ========== CP MODEL TAB ==========
+
+async function renderCPTab(athleteId, athlete, tabContent) {
+    if (!athlete.api_key) {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border: 1px solid #ffc107; margin-bottom: 1rem;">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 2rem; color: #ff9800;"></i>
+                    <h4 style="margin-top: 1rem; color: #856404;">API Key Non Configurata</h4>
+                    <p style="color: #856404; margin-top: 0.5rem;">
+                        Per calcolare il modello CP è necessario configurare l'API key di Intervals.icu per questo atleta.
+                    </p>
+                    <button class="btn btn-warning" onclick="editAthlete(${athleteId})" style="margin-top: 1rem;">
+                        <i class="bi bi-pencil"></i> Configura API Key
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Show loading
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento dati per modello CP...</p>
+        </div>
+    `;
+
+    try {
+        // Calculate dates for 90-day default
+        const today = new Date();
+        const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const dateStr90 = days90ago.toISOString().split('T')[0];
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Fetch seasons and 90-day power curve
+        const [seasonsResponse, response90] = await Promise.all([
+            api.getAthleteSeasons(athleteId),
+            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`)
+        ]);
+
+        if (!response90.ok) {
+            throw new Error(`HTTP error! status: ${response90.status}`);
+        }
+
+        const seasons = seasonsResponse;
+        const data90d = await response90.json();
+
+        // Store globally for CP tab
+        window.cpDataRaw = { '90d': data90d };
+        window.cpSeasons = seasons;
+        window.cpCurrentPeriod = '90d';
+        window.cpCurrentAthleteId = athleteId;
+
+        // Convert power curve to time/power arrays
+        // API returns {secs: [], watts: []} format
+        const allTimes = data90d.secs || [];
+        const allPowers = data90d.watts || [];
+
+        // Default filter parameters
+        const defaultValuesPerWindow = 1;
+        const defaultMinPercentile = 70;
+        const defaultSprintSeconds = 10;
+
+        // Render UI with controls and placeholders for charts
+        tabContent.innerHTML = `
+            <div style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <h4 style="margin: 0;">⚡ Modello omniPD Critical Power</h4>
+                </div>
+
+                <!-- Period Selector -->
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
+                    <h5 style="margin-bottom: 1rem;">📅 Periodo Dati</h5>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="radio" name="cp-period" value="90d" checked onchange="switchCPPeriod('90d')">
+                            90 giorni
+                        </label>
+                        ${seasons.map(s => `
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="radio" name="cp-period" value="season-${s.id}" onchange="switchCPPeriod('season-${s.id}')">
+                                ${s.name}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Filter Controls -->
+                <div style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
+                    <h5 style="margin-bottom: 1rem;">⚙️ Filtri Selezione Dati</h5>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div class="input-field">
+                            <label>Valori per finestra</label>
+                            <input type="number" id="cp-values-per-window" value="${defaultValuesPerWindow}" min="1" onchange="recalculateCP()">
+                        </div>
+                        <div class="input-field">
+                            <label>Percentile minimo (%)</label>
+                            <input type="number" id="cp-min-percentile" value="${defaultMinPercentile}" min="0" max="100" onchange="recalculateCP()">
+                        </div>
+                        <div class="input-field">
+                            <label>Durata sprint (s)</label>
+                            <input type="number" id="cp-sprint-seconds" value="${defaultSprintSeconds}" min="1" onchange="recalculateCP()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Stats -->
+                <div id="cp-results-stats" style="margin-bottom: 1.5rem;">
+                    <!-- Stats will be populated by JS -->
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div id="cp-chart-1" style="grid-column: 1 / -1; width: 100%; height: 600px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                    <div id="cp-chart-2" style="width: 100%; height: 500px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                    <div id="cp-chart-3" style="width: 100%; height: 500px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                </div>
+            </div>
+        `;
+
+        // Calculate and render with default parameters
+        calculateAndRenderCP(allTimes, allPowers, defaultValuesPerWindow, defaultMinPercentile, defaultSprintSeconds);
+
+    } catch (error) {
+        console.error('Error loading CP model:', error);
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fee; padding: 1.5rem; border-radius: 8px; border: 1px solid #fcc;">
+                    <i class="bi bi-x-circle" style="font-size: 2rem; color: #d32f2f;"></i>
+                    <h4 style="margin-top: 1rem; color: #c62828;">Errore nel caricamento</h4>
+                    <p style="color: #666; margin-top: 0.5rem;">
+                        ${error.message}
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Calculate and render CP model
+function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds) {
+    try {
+        // Filter data
+        const filtered = filterPowerCurveData(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds);
+        
+        if (filtered.selectedCount < 4) {
+            showToast('Dati insufficienti dopo il filtraggio. Diminuisci il percentile minimo.', 'warning');
+            return;
+        }
+
+        // Calculate omniPD parameters
+        const result = calculateOmniPD(filtered.times, filtered.powers);
+
+        // Update stats display
+        updateCPStats(result, filtered);
+
+        // Create charts
+        createCPCharts(allTimes, allPowers, filtered.times, filtered.powers, result);
+
+    } catch (error) {
+        console.error('Error calculating CP:', error);
+        showToast('Errore nel calcolo del modello: ' + error.message, 'error');
+    }
+}
+
+// Update CP statistics display
+function updateCPStats(result, filtered) {
+    const statsHtml = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">CP (Critical Power)</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.CP} W</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(240, 147, 251, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">W' (Anaerobic Capacity)</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.W_prime} J</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">Pmax</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.Pmax} W</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 112, 154, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">A (Fatigue Parameter)</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.A}</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">RMSE</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${result.RMSE} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">99% W'eff at</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${formatTimeLabel(result.t_99)}</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Punti usati</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${filtered.selectedCount} / ${filtered.totalCount}</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 5min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${Math.round(ompd_power(300, result.CP, result.W_prime, result.Pmax, result.A))} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 20min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${Math.round(ompd_power(1200, result.CP, result.W_prime, result.Pmax, result.A))} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 30min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${Math.round(ompd_power(1800, result.CP, result.W_prime, result.Pmax, result.A))} W</div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('cp-results-stats').innerHTML = statsHtml;
+}
+
+// Recalculate CP when filters change
+window.recalculateCP = function() {
+    const valuesPerWindow = parseInt(document.getElementById('cp-values-per-window').value) || 1;
+    const minPercentile = parseInt(document.getElementById('cp-min-percentile').value) || 70;
+    const sprintSeconds = parseInt(document.getElementById('cp-sprint-seconds').value) || 10;
+
+    // Get current period data
+    const period = window.cpCurrentPeriod;
+    const data = window.cpDataRaw[period];
+    
+    if (!data) {
+        showToast('Dati non disponibili per questo periodo', 'warning');
+        return;
+    }
+
+    // Data format is {secs: [], watts: []}
+    const allTimes = data.secs || [];
+    const allPowers = data.watts || [];
+
+    calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds);
+};
+
+// Switch CP period
+window.switchCPPeriod = async function(period) {
+    window.cpCurrentPeriod = period;
+
+    // Check if data already loaded
+    if (window.cpDataRaw[period]) {
+        window.recalculateCP();
+        return;
+    }
+
+    // Load data for this period
+    showLoading();
+    try {
+        const athleteId = window.cpCurrentAthleteId;
+        let url;
+
+        if (period === '90d') {
+            const today = new Date();
+            const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+            const dateStr90 = days90ago.toISOString().split('T')[0];
+            const todayStr = today.toISOString().split('T')[0];
+            url = `/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`;
+        } else if (period.startsWith('season-')) {
+            const seasonId = parseInt(period.replace('season-', ''));
+            const season = window.cpSeasons.find(s => s.id === seasonId);
+            if (!season) throw new Error('Stagione non trovata');
+            
+            const today = new Date().toISOString().split('T')[0];
+            const endDate = season.end_date || today;
+            url = `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const data = await response.json();
+        // API returns {secs: [], watts: []}
+        window.cpDataRaw[period] = data;
+
+        window.recalculateCP();
+        showToast('Dati caricati con successo', 'success');
+    } catch (error) {
+        console.error('Error loading CP period data:', error);
+        showToast('Errore nel caricamento dei dati: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
 
 // ========== SEASONS TAB ==========
 
@@ -1548,3 +1844,501 @@ window.saveAthleteApiKeyQuick = async function(athleteId) {
     }
 };
 
+// ========== CP CHARTS ==========
+
+/**
+ * Create the 3 ECharts for CP model visualization
+ */
+function createCPCharts(allTimes, allPowers, selectedTimes, selectedPowers, result) {
+    // Chart 1: Power-Duration Curve
+    createCPPowerDurationChart(allTimes, allPowers, selectedTimes, selectedPowers, result);
+    
+    // Chart 2: Residuals
+    createCPResidualsChart(selectedTimes, result.residuals);
+    
+    // Chart 3: W'eff
+    createCPWeffChart(result.W_prime, result.CP, result.Pmax);
+}
+
+/**
+ * Chart 1: Power-Duration Curve with fitted model
+ */
+function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues, result) {
+    const chartDom = document.getElementById('cp-chart-1');
+    if (!chartDom) return;
+    
+    if (window.cpChart1) {
+        window.cpChart1.dispose();
+    }
+    window.cpChart1 = echarts.init(chartDom);
+
+    // Generate fitted curve (log distributed points)
+    const minTime = 1;
+    const maxTime = 7200;
+    const numPoints = 300;
+    const logMin = Math.log10(minTime);
+    const logMax = Math.log10(maxTime);
+    const fittedData = [];
+    
+    for (let i = 0; i <= numPoints; i++) {
+        const logT = logMin + (i / numPoints) * (logMax - logMin);
+        const t = Math.pow(10, logT);
+        const p = ompd_power(t, result.CP, result.W_prime, result.Pmax, result.A);
+        fittedData.push([t, p]);
+    }
+
+    const scatterData = timeValues.map((t, i) => [t, powerValues[i]]);
+    const realPowerCurveData = allTimes.map((t, i) => [t, allPowers[i]]);
+
+    const option = {
+        title: {
+            text: 'OmniPD Power-Duration Curve',
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 20,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#667eea',
+            borderWidth: 2,
+            axisPointer: {
+                type: 'line',
+                axis: 'x',
+                snap: false,
+                label: { show: false },
+                lineStyle: {
+                    type: 'dashed',
+                    color: '#aaa',
+                    width: 1
+                }
+            },
+            formatter: function(params) {
+                // Find hovered time (x value)
+                let hoveredTime = params[0].value[0];
+                // Find fitted curve value at this time
+                let fitted = null;
+                let real = null;
+                let selected = null;
+                params.forEach(param => {
+                    if (param.seriesName === 'Fitted Curve') fitted = param;
+                    if (param.seriesName === 'Real Power Curve') real = param;
+                    if (param.seriesName === 'Selected Data') selected = param;
+                });
+                // If not present in params, interpolate fitted and real
+                if (!fitted) {
+                    // Interpolate fitted curve
+                    let fitVal = null;
+                    for (let i = 1; i < fittedData.length; ++i) {
+                        if (fittedData[i][0] >= hoveredTime) {
+                            let t0 = fittedData[i-1][0], t1 = fittedData[i][0];
+                            let p0 = fittedData[i-1][1], p1 = fittedData[i][1];
+                            fitVal = p0 + (p1-p0)*(hoveredTime-t0)/(t1-t0);
+                            break;
+                        }
+                    }
+                    fitted = { marker: '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background:#667eea;"></span>', seriesName: 'Fitted Curve', value: [hoveredTime, fitVal] };
+                }
+                if (!real) {
+                    // Interpolate real curve
+                    let realVal = null;
+                    for (let i = 1; i < realPowerCurveData.length; ++i) {
+                        if (realPowerCurveData[i][0] >= hoveredTime) {
+                            let t0 = realPowerCurveData[i-1][0], t1 = realPowerCurveData[i][0];
+                            let p0 = realPowerCurveData[i-1][1], p1 = realPowerCurveData[i][1];
+                            realVal = p0 + (p1-p0)*(hoveredTime-t0)/(t1-t0);
+                            break;
+                        }
+                    }
+                    real = { marker: '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background:#505050;"></span>', seriesName: 'Real Power Curve', value: [hoveredTime, realVal] };
+                }
+                let resultStr = `<strong>Time: ${formatTimeLabel(hoveredTime)}</strong><br/>`;
+                if (fitted) resultStr += `${fitted.marker} ${fitted.seriesName}: ${Math.round(fitted.value[1])} W<br/>`;
+                if (real) resultStr += `${real.marker} ${real.seriesName}: ${Math.round(real.value[1])} W<br/>`;
+                if (selected) resultStr += `${selected.marker} ${selected.seriesName}: ${Math.round(selected.value[1])} W<br/>`;
+                return resultStr;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '12%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 40,
+            min: 1,
+            max: 7200,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 14,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    const logVal = Math.log10(value);
+                    if (Math.abs(logVal - Math.round(logVal)) < 0.1) {
+                        return formatTimeLabel(value);
+                    }
+                    return '';
+                },
+                color: '#666'
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: 'Power (W)',
+            nameLocation: 'middle',
+            nameGap: 50,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 14,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        series: [
+            {
+                name: 'Real Power Curve',
+                type: 'scatter',
+                data: realPowerCurveData,
+                symbolSize: 4,
+                itemStyle: {
+                    color: 'rgba(80, 80, 80, 0.45)',
+                    borderColor: 'rgba(60, 60, 60, 0.25)',
+                    borderWidth: 0
+                },
+                z: 0
+            },
+            {
+                name: 'Fitted Curve',
+                type: 'line',
+                data: fittedData,
+                smooth: false,
+                lineStyle: {
+                    color: '#667eea',
+                    width: 3
+                },
+                showSymbol: false,
+                z: 10
+            },
+            {
+                name: 'Selected Data',
+                type: 'scatter',
+                data: scatterData,
+                symbolSize: 10,
+                itemStyle: {
+                    color: '#f093fb',
+                    borderColor: '#764ba2',
+                    borderWidth: 2
+                },
+                z: 20
+            }
+        ],
+        animationDuration: 1200,
+        animationEasing: 'elasticOut'
+    };
+
+    window.cpChart1.setOption(option);
+    window.addEventListener('resize', () => window.cpChart1.resize());
+}
+
+/**
+ * Chart 2: Residuals (errors between data and model)
+ */
+function createCPResidualsChart(timeValues, residuals) {
+    const chartDom = document.getElementById('cp-chart-2');
+    if (!chartDom) return;
+    
+    if (window.cpChart2) {
+        window.cpChart2.dispose();
+    }
+    window.cpChart2 = echarts.init(chartDom);
+
+    const residualData = timeValues.map((t, i) => [t, residuals[i]]);
+
+    const option = {
+        title: {
+            text: 'Residuals',
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 18,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#f06447',
+            borderWidth: 2,
+            formatter: function(params) {
+                return `<strong>Time: ${formatTimeLabel(params[0].value[0])}</strong><br/>Residual: ${params[0].value[1].toFixed(2)} W`;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '15%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 35,
+            min: 1,
+            max: Math.max(...timeValues) * 1.1,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    return formatTimeLabel(value);
+                },
+                color: '#666'
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: 'Residual (W)',
+            nameLocation: 'middle',
+            nameGap: 45,
+            nameTextStyle: {
+                color: '#f06447',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#f06447'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(240, 100, 71, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        series: [
+            {
+                name: 'Residual',
+                type: 'line',
+                data: residualData,
+                symbol: 'circle',
+                symbolSize: 8,
+                lineStyle: {
+                    color: '#f06447',
+                    width: 2
+                },
+                itemStyle: {
+                    color: '#f06447',
+                    borderWidth: 2
+                },
+                smooth: true
+            }
+        ],
+        animationDuration: 1000,
+        animationEasing: 'cubicOut'
+    };
+
+    window.cpChart2.setOption(option);
+    window.addEventListener('resize', () => window.cpChart2.resize());
+}
+
+/**
+ * Chart 3: W'eff (Effective W' recovery over time)
+ */
+function createCPWeffChart(W_prime, CP, Pmax) {
+    const chartDom = document.getElementById('cp-chart-3');
+    if (!chartDom) return;
+    
+    if (window.cpChart3) {
+        window.cpChart3.dispose();
+    }
+    window.cpChart3 = echarts.init(chartDom);
+
+    // Calculate W'eff curve
+    const T_weff = Array.from({length: 500}, (_, i) => 1 + i * (300 - 1) / 499);
+    const Weff_plot = T_weff.map(t => w_eff(t, W_prime, CP, Pmax));
+    const weffData = T_weff.map((t, i) => [t, Weff_plot[i]]);
+
+    // Find t_99
+    const W_99 = 0.99 * W_prime;
+    const t_99_idx = Weff_plot.reduce((minIdx, val, idx, arr) => 
+        Math.abs(val - W_99) < Math.abs(arr[minIdx] - W_99) ? idx : minIdx, 0);
+    const t_99 = T_weff[t_99_idx];
+
+    const option = {
+        title: {
+            text: "Effective W' Recovery",
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 18,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#667eea',
+            borderWidth: 2,
+            formatter: function(params) {
+                return `<strong>Time: ${formatTimeLabel(params[0].value[0])}</strong><br/>W'eff: ${Math.round(params[0].value[1])} J`;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '15%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 35,
+            min: 1,
+            max: 300,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    return formatTimeLabel(value);
+                },
+                color: '#666'
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: "W'eff (J)",
+            nameLocation: 'middle',
+            nameGap: 45,
+            nameTextStyle: {
+                color: '#52c787',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#52c787'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(82, 199, 135, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        series: [
+            {
+                name: "W'eff",
+                type: 'line',
+                data: weffData,
+                smooth: true,
+                lineStyle: {
+                    color: '#52c787',
+                    width: 3
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0,
+                        y: 0,
+                        x2: 0,
+                        y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(82, 199, 135, 0.5)' },
+                            { offset: 1, color: 'rgba(82, 199, 135, 0.05)' }
+                        ]
+                    }
+                },
+                showSymbol: false,
+                markLine: {
+                    silent: true,
+                    symbol: ['none', 'none'],
+                    label: {
+                        show: true,
+                        formatter: `99% at ${formatTimeLabel(t_99)}`,
+                        color: '#333',
+                        fontWeight: 'bold'
+                    },
+                    lineStyle: {
+                        color: '#ff6b6b',
+                        type: 'dashed',
+                        width: 2
+                    },
+                    data: [{yAxis: W_99}]
+                }
+            }
+        ],
+        animationDuration: 1200,
+        animationEasing: 'elasticOut'
+    };
+
+    window.cpChart3.setOption(option);
+    window.addEventListener('resize', () => window.cpChart3.resize());
+}
