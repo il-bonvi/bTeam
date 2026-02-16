@@ -216,6 +216,9 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                         <button class="tab-button" onclick="switchAthleteTab('stats')">
                             Statistiche
                         </button>
+                        <button class="tab-button" onclick="switchAthleteTab('power-curve')">
+                            Power Curve
+                        </button>
                         <button class="tab-button" onclick="switchAthleteTab('sync')">
                             Sincronizzazione
                         </button>
@@ -290,6 +293,8 @@ window.switchAthleteTab = function(tabName) {
                 <p style="color: #666;">Statistiche dettagliate in arrivo...</p>
             </div>
         `;
+    } else if (tabName === 'power-curve') {
+        renderPowerCurveTab(athleteId, athlete, tabContent);
     } else if (tabName === 'sync') {
         tabContent.innerHTML = `
             <div style="padding: 2rem;">
@@ -324,6 +329,353 @@ window.switchAthleteTab = function(tabName) {
                 </div>
             </div>
         `;
+    }
+};
+
+// ========== POWER CURVE TAB ==========
+
+async function renderPowerCurveTab(athleteId, athlete, tabContent) {
+    if (!athlete.api_key) {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border: 1px solid #ffc107; margin-bottom: 1rem;">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 2rem; color: #ff9800;"></i>
+                    <h4 style="margin-top: 1rem; color: #856404;">API Key Non Configurata</h4>
+                    <p style="color: #856404; margin-top: 0.5rem;">
+                        Per visualizzare la power curve è necessario configurare l'API key di Intervals.icu per questo atleta.
+                    </p>
+                    <button class="btn btn-warning" onclick="editAthlete(${athleteId})" style="margin-top: 1rem;">
+                        <i class="bi bi-pencil"></i> Configura API Key
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Show loading state
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento power curve da Intervals.icu...</p>
+        </div>
+    `;
+
+    try {
+        // Fetch power curve data
+        const response = await fetch(`/api/athletes/${athleteId}/power-curve`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const powerCurveData = await response.json();
+
+        // Render power curve UI
+        tabContent.innerHTML = `
+            <div style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h4 style="margin: 0;">📈 Power Curve</h4>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <label style="font-size: 0.9rem; color: #666;">
+                            Periodo:
+                            <select id="power-curve-period" onchange="updatePowerCurvePeriod(${athleteId})" 
+                                    style="margin-left: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="30">Ultimi 30 giorni</option>
+                                <option value="90" selected>Ultimi 90 giorni</option>
+                                <option value="180">Ultimi 180 giorni</option>
+                                <option value="365">Ultimo anno</option>
+                                <option value="all">Tutto il tempo</option>
+                            </select>
+                        </label>
+                        <button class="btn btn-secondary btn-sm" onclick="refreshPowerCurve(${athleteId})">
+                            <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chart Container -->
+                <div id="power-curve-chart" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+                
+                <!-- Best Efforts Table -->
+                <div style="margin-top: 2rem;">
+                    <h5>🏆 Migliori Sforzi</h5>
+                    <div id="best-efforts-table" style="margin-top: 1rem;"></div>
+                </div>
+            </div>
+        `;
+
+        // Render the chart
+        renderPowerCurveChart(powerCurveData);
+
+    } catch (error) {
+        console.error('Error loading power curve:', error);
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fee; padding: 1.5rem; border-radius: 8px; border: 1px solid #fcc;">
+                    <i class="bi bi-x-circle" style="font-size: 2rem; color: #d32f2f;"></i>
+                    <h4 style="margin-top: 1rem; color: #c62828;">Errore nel caricamento</h4>
+                    <p style="color: #666; margin-top: 0.5rem;">
+                        Non è stato possibile caricare la power curve: ${error.message}
+                    </p>
+                    <button class="btn btn-primary" onclick="refreshPowerCurve(${athleteId})" style="margin-top: 1rem;">
+                        <i class="bi bi-arrow-clockwise"></i> Riprova
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function renderPowerCurveChart(data) {
+    // Transform data for ApexCharts
+    // Power curve typically has: secs array and watts array
+    const durations = data.secs || [];
+    const watts = data.watts || [];
+
+    // Create series data
+    const seriesData = durations.map((sec, idx) => ({
+        x: sec,
+        y: watts[idx] || 0
+    }));
+
+    // ApexCharts configuration
+    const options = {
+        series: [{
+            name: 'Potenza (W)',
+            data: seriesData
+        }],
+        chart: {
+            type: 'line',
+            height: 500,
+            toolbar: {
+                show: true,
+                tools: {
+                    download: true,
+                    zoom: true,
+                    zoomin: true,
+                    zoomout: true,
+                    pan: true,
+                    reset: true
+                }
+            },
+            zoom: {
+                enabled: true,
+                type: 'x'
+            }
+        },
+        stroke: {
+            curve: 'smooth',
+            width: 3
+        },
+        colors: ['#3b82f6'],
+        xaxis: {
+            type: 'numeric',
+            title: {
+                text: 'Durata',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(value) {
+                    // Format seconds to readable duration
+                    if (value < 60) return Math.round(value) + 's';
+                    if (value < 3600) return Math.round(value / 60) + 'm';
+                    return (value / 3600).toFixed(1) + 'h';
+                }
+            }
+        },
+        yaxis: {
+            title: {
+                text: 'Potenza (W)',
+                style: {
+                    fontSize: '14px',
+                    fontWeight: 600
+                }
+            },
+            labels: {
+                formatter: function(value) {
+                    return Math.round(value) + 'W';
+                }
+            }
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            x: {
+                formatter: function(value) {
+                    // Detailed duration format for tooltip
+                    if (value < 60) return Math.round(value) + ' secondi';
+                    if (value < 3600) {
+                        const mins = Math.floor(value / 60);
+                        const secs = Math.round(value % 60);
+                        return mins + 'm ' + secs + 's';
+                    }
+                    const hours = Math.floor(value / 3600);
+                    const mins = Math.round((value % 3600) / 60);
+                    return hours + 'h ' + mins + 'm';
+                }
+            },
+            y: {
+                formatter: function(value) {
+                    return Math.round(value) + ' W';
+                }
+            }
+        },
+        grid: {
+            borderColor: '#e0e0e0',
+            strokeDashArray: 4
+        },
+        markers: {
+            size: 0,
+            hover: {
+                size: 6
+            }
+        }
+    };
+
+    // Render chart
+    const chart = new ApexCharts(document.querySelector("#power-curve-chart"), options);
+    chart.render();
+
+    // Store chart instance for later updates
+    window.currentPowerCurveChart = chart;
+
+    // Render best efforts table
+    renderBestEffortsTable(data);
+}
+
+function renderBestEffortsTable(data) {
+    const durations = data.secs || [];
+    const watts = data.watts || [];
+    
+    // Define key durations to highlight (in seconds)
+    const keyDurations = [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600];
+    
+    const tableData = keyDurations
+        .map(duration => {
+            const index = durations.findIndex(d => d >= duration);
+            if (index === -1) return null;
+            
+            return {
+                duration: duration,
+                watts: watts[index] || 0,
+                label: formatDurationLabel(duration)
+            };
+        })
+        .filter(item => item !== null);
+
+    if (tableData.length === 0) {
+        document.getElementById('best-efforts-table').innerHTML = 
+            '<p style="color: #666; text-align: center;">Nessun dato disponibile</p>';
+        return;
+    }
+
+    let html = '<table style="width: 100%; border-collapse: collapse;"><thead><tr>';
+    html += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #ddd;">Durata</th>';
+    html += '<th style="text-align: right; padding: 0.75rem; border-bottom: 2px solid #ddd;">Potenza</th>';
+    html += '</tr></thead><tbody>';
+
+    tableData.forEach(item => {
+        html += `
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 0.75rem; font-weight: 500;">${item.label}</td>
+                <td style="padding: 0.75rem; text-align: right; color: #3b82f6; font-weight: 600;">
+                    ${Math.round(item.watts)} W
+                </td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('best-efforts-table').innerHTML = html;
+}
+
+function formatDurationLabel(seconds) {
+    if (seconds < 60) return seconds + ' sec';
+    if (seconds < 3600) return (seconds / 60) + ' min';
+    return (seconds / 3600).toFixed(1).replace('.0', '') + ' ora' + (seconds >= 7200 ? 'e' : '');
+}
+
+window.refreshPowerCurve = async function(athleteId) {
+    const athlete = window.allAthletes.find(a => a.id === athleteId);
+    const tabContent = document.getElementById('athlete-tab-content');
+    await renderPowerCurveTab(athleteId, athlete, tabContent);
+};
+
+window.updatePowerCurvePeriod = async function(athleteId) {
+    const period = document.getElementById('power-curve-period').value;
+    const athlete = window.allAthletes.find(a => a.id === athleteId);
+    const tabContent = document.getElementById('athlete-tab-content');
+    
+    // Calculate date range
+    let oldest = null;
+    if (period !== 'all') {
+        const days = parseInt(period);
+        const date = new Date();
+        date.setDate(date.getDate() - days);
+        oldest = date.toISOString().split('T')[0];
+    }
+    
+    // Show loading
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento power curve...</p>
+        </div>
+    `;
+    
+    try {
+        // Fetch with period
+        let url = `/api/athletes/${athleteId}/power-curve`;
+        if (oldest) {
+            url += `?oldest=${oldest}`;
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const powerCurveData = await response.json();
+        
+        // Re-render with preserved period selection
+        tabContent.innerHTML = `
+            <div style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h4 style="margin: 0;">📈 Power Curve</h4>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <label style="font-size: 0.9rem; color: #666;">
+                            Periodo:
+                            <select id="power-curve-period" onchange="updatePowerCurvePeriod(${athleteId})" 
+                                    style="margin-left: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                                <option value="30" ${period === '30' ? 'selected' : ''}>Ultimi 30 giorni</option>
+                                <option value="90" ${period === '90' ? 'selected' : ''}>Ultimi 90 giorni</option>
+                                <option value="180" ${period === '180' ? 'selected' : ''}>Ultimi 180 giorni</option>
+                                <option value="365" ${period === '365' ? 'selected' : ''}>Ultimo anno</option>
+                                <option value="all" ${period === 'all' ? 'selected' : ''}>Tutto il tempo</option>
+                            </select>
+                        </label>
+                        <button class="btn btn-secondary btn-sm" onclick="refreshPowerCurve(${athleteId})">
+                            <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chart Container -->
+                <div id="power-curve-chart" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+                
+                <!-- Best Efforts Table -->
+                <div style="margin-top: 2rem;">
+                    <h5>🏆 Migliori Sforzi</h5>
+                    <div id="best-efforts-table" style="margin-top: 1rem;"></div>
+                </div>
+            </div>
+        `;
+        
+        renderPowerCurveChart(powerCurveData);
+    } catch (error) {
+        console.error('Error updating power curve:', error);
+        showToast('Errore aggiornamento power curve', 'error');
     }
 };
 

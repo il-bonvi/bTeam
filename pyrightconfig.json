@@ -4,5 +4,5 @@
   "pythonPath": "C:/Python313/python.exe",
   "searchPaths": ["."],
   "include": ["**"],
-  "exclude": ["**/node_modules", "**/__pycache__", ".git"]
+  "exclude": ["**/node_modules", "**/__pycache__", ".git", "INFO"]
 }

@@ -119,6 +119,15 @@ class APIClient {
         });
     }
 
+    async getAthletePowerCurve(id, oldest = null, newest = null) {
+        let url = `/athletes/${id}/power-curve`;
+        const params = [];
+        if (oldest) params.push(`oldest=${oldest}`);
+        if (newest) params.push(`newest=${newest}`);
+        if (params.length > 0) url += `?${params.join('&')}`;
+        return this.request(url);
+    }
+
     // Activities
     async getActivities(filters = {}) {
         const params = new URLSearchParams(filters).toString();

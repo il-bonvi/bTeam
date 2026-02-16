@@ -524,28 +524,32 @@ class IntervalsAPIClient:
         self,
         athlete_id: str = '0',
         oldest: Optional[str] = None,
-        newest: Optional[str] = None
+        newest: Optional[str] = None,
+        activity_type: str = 'Ride'
     ) -> Dict:
         """
         Power curve (migliori sforzi per durata)
-        
+
+        Note: Intervals.icu uses /power-curves{ext}. This method wraps that endpoint.
+
         Args:
             athlete_id: ID atleta
-            oldest: Data inizio
-            newest: Data fine
-        
+            oldest: Data inizio (YYYY-MM-DD)
+            newest: Data fine (YYYY-MM-DD)
+            activity_type: Sport type (default: Ride)
+
         Returns:
             Dati power curve
         """
-        params = {}
+        params: Dict[str, str] = {'type': activity_type}
         if oldest:
-            params['oldest'] = oldest
-        if newest:
-            params['newest'] = newest
-        
+            if not newest:
+                newest = date.today().strftime('%Y-%m-%d')
+            params['curves'] = f"r.{oldest}.{newest}"
+
         response = self._request(
             'GET',
-            f'/api/v1/athlete/{athlete_id}/power-curve',
+            f'/api/v1/athlete/{athlete_id}/power-curves.json',
             params=params
         )
         return response.json()
