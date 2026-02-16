@@ -33,6 +33,8 @@ class AthleteCreate(BaseModel):
 class AthleteUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    birth_date: Optional[str] = None
+    gender: Optional[str] = None
     team_id: Optional[int] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None

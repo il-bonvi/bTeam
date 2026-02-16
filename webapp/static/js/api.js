@@ -291,8 +291,9 @@ class APIClient {
     }
 
     async syncAthleteMetrics(athleteId, apiKey) {
-        return this.request(`/sync/athlete-metrics?athlete_id=${athleteId}&api_key=${apiKey}`, {
+        return this.request(`/sync/athlete-metrics`, {
             method: 'POST',
+            body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey }),
         });
     }
 

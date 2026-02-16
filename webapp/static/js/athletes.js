@@ -307,8 +307,8 @@ window.switchAthleteTab = function(tabName, eventObj) {
                             <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Genere</label>
                             <select id="detail-gender" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
                                 <option value="">-</option>
-                                <option value="M" ${athlete.gender === 'M' ? 'selected' : ''}>Maschile</option>
-                                <option value="F" ${athlete.gender === 'F' ? 'selected' : ''}>Femminile</option>
+                                <option value="Maschile" ${athlete.gender === 'Maschile' ? 'selected' : ''}>Maschile</option>
+                                <option value="Femminile" ${athlete.gender === 'Femminile' ? 'selected' : ''}>Femminile</option>
                             </select>
                         </div>
                         <div style="display: flex; flex-direction: column;">

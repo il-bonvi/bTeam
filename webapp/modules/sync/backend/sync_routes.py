@@ -331,11 +331,28 @@ async def debug_athlete_data(api_key: str):
 
 
 @router.post("/athlete-metrics")
-async def sync_athlete_metrics(athlete_id: int, api_key: str):
+async def sync_athlete_metrics(request: SyncRequest):
     """Sync athlete metrics (weight, FTP, max HR, W', eCP, eW', gender, birth date) from Intervals.icu"""
     try:
+        athlete_id = request.athlete_id
+        api_key = request.api_key
+        
+        # Validate API key
+        if not api_key or not api_key.strip():
+            raise HTTPException(status_code=400, detail="API key non fornita per l'atleta")
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[SYNC] Starting athlete metrics sync for athlete_id={athlete_id}")
+        
         client = IntervalsAPIClient(api_key=api_key)
-        athlete_data = client.get_athlete()
+        
+        try:
+            athlete_data = client.get_athlete()
+            logger.info(f"[SYNC] Retrieved athlete data: {list(athlete_data.keys())}")
+        except Exception as e:
+            logger.error(f"[SYNC] Error getting athlete data: {str(e)}")
+            raise HTTPException(status_code=401, detail=f"Errore di autenticazione con Intervals.icu: {str(e)}")
 
         sport_settings = athlete_data.get('sportSettings') or []
         cycling_settings = sport_settings[0] if sport_settings else {}
@@ -363,6 +380,7 @@ async def sync_athlete_metrics(athlete_id: int, api_key: str):
                         weight_kg = weight_value
                         break  # Take the most recent one with weight
         except Exception as e:
+            logger.warning(f"[SYNC] Error getting wellness data: {str(e)}")
             pass  # Fall back to athlete profile if wellness fails
         
         # If no weight from wellness, try athlete profile
@@ -394,6 +412,7 @@ async def sync_athlete_metrics(athlete_id: int, api_key: str):
         
         # Update athlete in storage (only non-None values)
         update_data = {k: v for k, v in metrics.items() if v is not None}
+        logger.info(f"[SYNC] Metrics extracted: {update_data}")
         if update_data:
             storage.update_athlete(athlete_id, **update_data)
         
@@ -405,7 +424,12 @@ async def sync_athlete_metrics(athlete_id: int, api_key: str):
             "athlete": updated_athlete,
             "synced_fields": update_data
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[SYNC] Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 

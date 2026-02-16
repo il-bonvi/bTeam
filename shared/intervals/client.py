@@ -54,18 +54,17 @@ class IntervalsAPIClient:
         self.base_url = base_url
         self.api_key = api_key
         self.access_token = access_token
-        self.auth: Optional[tuple[str, str]] = None
         
         # Setup auth
         if access_token:
+            # OAuth Bearer token
             self.headers = {
                 'Authorization': f'Bearer {access_token}',
                 'Content-Type': 'application/json'
             }
             self.auth = None
         else:
-            # api_key must be provided if access_token is not
-            assert api_key is not None
+            # API key uses Basic Auth
             self.headers = {'Content-Type': 'application/json'}
             self.auth = ('API_KEY', api_key)
 
