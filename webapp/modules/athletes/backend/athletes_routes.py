@@ -26,6 +26,7 @@ class AthleteCreate(BaseModel):
     birth_date: Optional[str] = None
     gender: Optional[str] = None
     team_id: Optional[int] = None
+    category_id: Optional[int] = None
     kj_per_hour_per_kg: Optional[float] = None
     api_key: Optional[str] = None
 
@@ -36,6 +37,7 @@ class AthleteUpdate(BaseModel):
     birth_date: Optional[str] = None
     gender: Optional[str] = None
     team_id: Optional[int] = None
+    category_id: Optional[int] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
     cp: Optional[float] = None
@@ -48,11 +50,13 @@ class AthleteUpdate(BaseModel):
 
 
 @router.get("/")
-async def get_athletes(team_id: Optional[int] = None):
-    """Get all athletes, optionally filtered by team"""
+async def get_athletes(team_id: Optional[int] = None, category_id: Optional[int] = None):
+    """Get all athletes, optionally filtered by team or category"""
     athletes = storage.list_athletes()
     if team_id:
         athletes = [a for a in athletes if a.get('team_id') == team_id]
+    if category_id:
+        athletes = [a for a in athletes if a.get('category_id') == category_id]
     return athletes
 
 
@@ -66,6 +70,7 @@ async def create_athlete(athlete: AthleteCreate):
             birth_date=athlete.birth_date or "",
             gender=athlete.gender,
             team_id=athlete.team_id,
+            category_id=athlete.category_id,
             kj_per_hour_per_kg=athlete.kj_per_hour_per_kg,
             api_key=athlete.api_key
         )

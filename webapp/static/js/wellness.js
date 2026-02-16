@@ -67,12 +67,15 @@ window.renderWellnessPage = async function() {
 function renderAthletesWellnessGrid(athletesWithWellness) {
     const gridContainer = document.getElementById('wellness-athletes-grid');
     
-    if (athletesWithWellness.length === 0) {
-        gridContainer.innerHTML = '<p class="no-data">No athletes found</p>';
+    // Filter athletes that have wellness data
+    const athletesWithData = athletesWithWellness.filter(athlete => athlete.latestWellness !== null);
+    
+    if (athletesWithData.length === 0) {
+        gridContainer.innerHTML = '<p class="no-data">No athletes with wellness data found</p>';
         return;
     }
     
-    const gridHtml = athletesWithWellness.map(athlete => {
+    const gridHtml = athletesWithData.map(athlete => {
         const wellness = athlete.latestWellness;
         const athleteName = `${athlete.first_name} ${athlete.last_name}`;
         

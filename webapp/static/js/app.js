@@ -12,6 +12,10 @@ const pages = {
         title: 'Gestione Squadre',
         load: loadTeams
     },
+    categories: {
+        title: 'Gestione Categorie',
+        load: loadCategories
+    },
     athletes: {
         title: 'Gestione Atleti',
         load: loadAthletes
@@ -219,6 +223,20 @@ async function loadTeams() {
     
     if (typeof window.renderTeamsPage === 'function') {
         window.renderTeamsPage();
+    }
+}
+
+async function loadCategories() {
+    const script = document.createElement('script');
+    script.src = '/static/js/categories.js';
+    document.body.appendChild(script);
+    
+    await new Promise(resolve => {
+        script.onload = resolve;
+    });
+    
+    if (typeof window.renderCategoriesPage === 'function') {
+        window.renderCategoriesPage();
     }
 }
 

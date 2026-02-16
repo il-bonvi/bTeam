@@ -5,6 +5,11 @@
 
 // Global state
 window.currentAthleteView = null; // null = dashboard, number = athlete ID
+window.athleteFilters = {
+    team: null,
+    category: null,
+    gender: null
+};
 
 window.renderAthletesPage = async function() {
     const contentArea = document.getElementById('content-area');
@@ -13,15 +18,19 @@ window.renderAthletesPage = async function() {
     
     try {
         showLoading();
-        const [athletes, teams] = await Promise.all([
+        const [athletes, teams, categories] = await Promise.all([
             api.getAthletes(),
-            api.getTeams()
+            api.getTeams(),
+            api.getCategories()
         ]);
         
         console.log('[ATHLETES] Loaded', athletes.length, 'athletes');
         
         // Store globally
         window.availableTeams = teams;
+        window.availableCategories = categories;
+        // Sort athletes alphabetically by last name
+        athletes.sort((a, b) => a.last_name.localeCompare(b.last_name, 'it'));
         window.allAthletes = athletes;
         
         // Render based on current view
@@ -48,6 +57,11 @@ function renderAthletesDashboard(athletes, contentArea) {
     const maleCount = athletes.filter(a => a.gender === 'Maschile').length;
     const femaleCount = athletes.filter(a => a.gender === 'Femminile').length;
     const avgFtp = athletes.filter(a => a.cp).reduce((sum, a) => sum + a.cp, 0) / athletes.filter(a => a.cp).length || 0;
+    
+    // Get unique teams and categories from athletes
+    const uniqueTeams = [...new Set(athletes.map(a => a.team_name).filter(t => t))];
+    const uniqueCategories = [...new Set(athletes.map(a => a.category_name).filter(c => c))];
+    const uniqueGenders = ['Maschile', 'Femminile'];
     
     contentArea.innerHTML = `
         <div class="card">
@@ -77,6 +91,32 @@ function renderAthletesDashboard(athletes, contentArea) {
                         <div class="stat-value">${avgFtp > 0 ? Math.round(avgFtp) + 'W' : '-'}</div>
                     </div>
                 </div>
+
+                <!-- Filters Section -->
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #ddd;">
+                    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                        <label style="font-weight: 600;">🔍 Filtri:</label>
+                        
+                        <select id="team-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;" onchange="applyAthleteFilters()">
+                            <option value="">Tutti i Team</option>
+                            ${uniqueTeams.map(team => `<option value="${team}">${team}</option>`).join('')}
+                        </select>
+                        
+                        <select id="category-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;" onchange="applyAthleteFilters()">
+                            <option value="">Tutte le Categorie</option>
+                            ${uniqueCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                        </select>
+                        
+                        <select id="gender-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;" onchange="applyAthleteFilters()">
+                            <option value="">Tutti i Generi</option>
+                            ${uniqueGenders.map(gender => `<option value="${gender}">${gender === 'Maschile' ? '👨 Maschile' : '👩 Femminile'}</option>`).join('')}
+                        </select>
+                        
+                        <button class="btn btn-secondary btn-sm" onclick="clearAthleteFilters()" style="margin-left: auto;">
+                            <i class="bi bi-x"></i> Cancella Filtri
+                        </button>
+                    </div>
+                </div>
                 
                 <!-- Athletes Grid -->
                 <h4 style="margin-bottom: 1rem;">Atleti</h4>
@@ -98,7 +138,7 @@ function createAthleteCard(athlete) {
                 <div class="athlete-avatar">${initials}</div>
                 <div class="athlete-info">
                     <div class="athlete-name">${athlete.first_name} ${athlete.last_name}</div>
-                    <div class="athlete-team">${genderIcon} ${athlete.team_name || 'Nessuna squadra'}</div>
+                    <div class="athlete-team">${genderIcon} ${athlete.team_name || 'Nessuna squadra'} • ${athlete.category_name || 'Nessuna categoria'}</div>
                 </div>
             </div>
             <div class="athlete-card-body">
@@ -149,6 +189,65 @@ window.showAthleteDetail = async function(athleteId) {
 window.backToAthletesDashboard = function() {
     window.currentAthleteView = null;
     renderAthletesPage();
+};
+
+window.applyAthleteFilters = function() {
+    const teamFilter = document.getElementById('team-filter').value;
+    const categoryFilter = document.getElementById('category-filter').value;
+    const genderFilter = document.getElementById('gender-filter').value;
+    
+    // Store filter state
+    window.athleteFilters = {
+        team: teamFilter,
+        category: categoryFilter,
+        gender: genderFilter
+    };
+    
+    // Get all athletes
+    const allAthletes = window.allAthletes || [];
+    
+    // Filter athletes based on selected filters
+    const filteredAthletes = allAthletes.filter(athlete => {
+        if (teamFilter && athlete.team_name !== teamFilter) return false;
+        if (categoryFilter && athlete.category_name !== categoryFilter) return false;
+        if (genderFilter && athlete.gender !== genderFilter) return false;
+        return true;
+    });
+    
+    // Update grid with filtered athletes
+    const gridContainer = document.getElementById('athletes-grid');
+    if (gridContainer) {
+        if (filteredAthletes.length === 0) {
+            gridContainer.innerHTML = `
+                <div style="grid-column: 1 / -1; padding: 2rem; text-align: center; color: #666;">
+                    <p>Nessun atleta corrisponde ai filtri selezionati</p>
+                </div>
+            `;
+        } else {
+            gridContainer.innerHTML = filteredAthletes.map(athlete => createAthleteCard(athlete)).join('');
+        }
+    }
+};
+
+window.clearAthleteFilters = function() {
+    // Reset filter state
+    window.athleteFilters = {
+        team: null,
+        category: null,
+        gender: null
+    };
+    
+    // Reset filter inputs
+    document.getElementById('team-filter').value = '';
+    document.getElementById('category-filter').value = '';
+    document.getElementById('gender-filter').value = '';
+    
+    // Reset grid to show all athletes
+    const allAthletes = window.allAthletes || [];
+    const gridContainer = document.getElementById('athletes-grid');
+    if (gridContainer) {
+        gridContainer.innerHTML = allAthletes.map(athlete => createAthleteCard(athlete)).join('');
+    }
 };
 
 async function renderAthleteDetail(athleteId, athletes, contentArea) {
@@ -250,6 +349,9 @@ function renderActivitiesTab(activities) {
 }
 
 window.switchAthleteTab = function(tabName, eventObj) {
+    // Track which tab is active to prevent race conditions
+    window.currentAthleteActiveTab = tabName;
+    
     // Update tab buttons
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
     
@@ -274,6 +376,10 @@ window.switchAthleteTab = function(tabName, eventObj) {
     if (tabName === 'activities') {
         // Already loaded, just re-fetch if needed
         api.getActivities({ athlete_id: athleteId, limit: 50 }).then(activities => {
+            // Check if this tab is still active - prevent race condition
+            if (window.currentAthleteActiveTab !== 'activities') {
+                return;
+            }
             tabContent.innerHTML = renderActivitiesTab(activities);
         });
     } else if (tabName === 'stats') {
@@ -291,6 +397,9 @@ window.switchAthleteTab = function(tabName, eventObj) {
         const teamsOptions = window.availableTeams.map(t => 
             `<option value="${t.id}" ${athlete.team_id === t.id ? 'selected' : ''}>${t.name}</option>`
         ).join('');
+        const categoriesOptions = (window.availableCategories || []).map(c => 
+            `<option value="${c.id}" ${athlete.category_id === c.id ? 'selected' : ''}>${c.name}</option>`
+        ).join('');
         tabContent.innerHTML = `
             <div style="padding: 2rem;">
                 <h4>Dettagli Atleta</h4>
@@ -301,6 +410,13 @@ window.switchAthleteTab = function(tabName, eventObj) {
                             <select id="detail-team" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
                                 <option value="">-</option>
                                 ${teamsOptions}
+                            </select>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <label style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem; font-weight: 500;">Categoria</label>
+                            <select id="detail-category" style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                                <option value="">-</option>
+                                ${categoriesOptions}
                             </select>
                         </div>
                         <div style="display: flex; flex-direction: column;">
@@ -453,6 +569,11 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
             } catch (err) {
                 console.warn(`Failed to load power curve for season ${season.id}:`, err);
             }
+        }
+
+        // Check if this tab is still active - prevent race condition
+        if (window.currentAthleteActiveTab !== 'power-curve') {
+            return;
         }
 
         // Store datasets globally
@@ -639,6 +760,11 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
                 );
                 if (seasonStats) statistics.push(seasonStats);
             }
+        }
+
+        // Check if this tab is still active - prevent race condition
+        if (window.currentAthleteActiveTab !== 'stats') {
+            return;
         }
 
         // Render statistics table
@@ -876,6 +1002,11 @@ async function renderCPTab(athleteId, athlete, tabContent) {
 
         const seasons = seasonsResponse;
         const data90d = await response90.json();
+
+        // Check if this tab is still active - prevent race condition
+        if (window.currentAthleteActiveTab !== 'cp') {
+            return;
+        }
 
         // Store globally for CP tab
         window.cpDataRaw = { '90d': data90d };
@@ -1132,6 +1263,11 @@ async function renderSeasonsTab(athleteId, tabContent) {
 
     try {
         const seasons = await api.getAthleteSeasons(athleteId);
+        
+        // Check if this tab is still active - prevent race condition
+        if (window.currentAthleteActiveTab !== 'seasons') {
+            return;
+        }
         
         tabContent.innerHTML = `
             <div style="padding: 1.5rem;">
@@ -1438,17 +1574,20 @@ function renderPowerCurveChart(data) {
                     const sec = Math.pow(10, value);
                     if (sec < 60) return Math.round(sec) + ' sec';
                     if (sec < 3600) {
-                        const mins = Math.floor(sec / 60);
-                        const secs = Math.round(sec % 60);
+                        let mins = Math.floor(sec / 60);
+                        let secs = Math.round(sec % 60);
+                        if (secs === 60) { mins += 1; secs = 0; }
                         return mins + 'm ' + secs + 's';
                     }
                     if (sec < 86400) {
-                        const hours = Math.floor(sec / 3600);
-                        const mins = Math.round((sec % 3600) / 60);
+                        let hours = Math.floor(sec / 3600);
+                        let mins = Math.round((sec % 3600) / 60);
+                        if (mins === 60) { hours += 1; mins = 0; }
                         return hours + 'h ' + mins + 'm';
                     }
-                    const days = Math.floor(sec / 86400);
-                    const hours = Math.round((sec % 86400) / 3600);
+                    let days = Math.floor(sec / 86400);
+                    let hours = Math.round((sec % 86400) / 3600);
+                    if (hours === 24) { days += 1; hours = 0; }
                     return days + 'd ' + hours + 'h';
                 }
             },
@@ -1732,6 +1871,9 @@ window.showCreateAthleteDialog = function() {
     const teamsOptions = window.availableTeams.map(t => 
         `<option value="${t.id}">${t.name}</option>`
     ).join('');
+    const categoriesOptions = (window.availableCategories || []).map(c => 
+        `<option value="${c.id}">${c.name}</option>`
+    ).join('');
     
     createModal(
         'Nuovo Atleta',
@@ -1763,6 +1905,13 @@ window.showCreateAthleteDialog = function() {
             <select id="athlete-team" class="form-input">
                 <option value="">Nessuna squadra</option>
                 ${teamsOptions}
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="athlete-category" class="form-input">
+                <option value="">Nessuna categoria</option>
+                ${categoriesOptions}
             </select>
         </div>
         <div class="form-group">
@@ -1815,6 +1964,7 @@ window.createAthlete = async function() {
         birth_date: document.getElementById('athlete-birth-date').value || null,
         gender: document.getElementById('athlete-gender').value || null,
         team_id: document.getElementById('athlete-team').value ? parseInt(document.getElementById('athlete-team').value) : null,
+        category_id: document.getElementById('athlete-category').value ? parseInt(document.getElementById('athlete-category').value) : null,
         kj_per_hour_per_kg: parseFloat(document.getElementById('athlete-kj-per-hour-per-kg').value) || 10.0,
         api_key: document.getElementById('athlete-api-key').value.trim() || null
     };
@@ -1838,6 +1988,7 @@ window.saveAthleteDetails = async function(athleteId) {
         
         // Raccogliere i dati dal form
         const teamId = document.getElementById('detail-team').value.trim();
+        const categoryId = document.getElementById('detail-category').value.trim();
         const gender = document.getElementById('detail-gender').value;
         const weightKg = parseFloat(document.getElementById('detail-weight').value) || null;
         const heightCm = parseFloat(document.getElementById('detail-height').value) || null;
@@ -1852,6 +2003,7 @@ window.saveAthleteDetails = async function(athleteId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 team_id: teamId ? parseInt(teamId) : null,
+                category_id: categoryId ? parseInt(categoryId) : null,
                 gender: gender || null,
                 weight_kg: weightKg,
                 height_cm: heightCm,
@@ -1888,6 +2040,9 @@ window.editAthlete = async function(athleteId) {
         const teamsOptions = window.availableTeams.map(t => 
             `<option value="${t.id}" ${athlete.team_id === t.id ? 'selected' : ''}>${t.name}</option>`
         ).join('');
+        const categoriesOptions = (window.availableCategories || []).map(c => 
+            `<option value="${c.id}" ${athlete.category_id === c.id ? 'selected' : ''}>${c.name}</option>`
+        ).join('');
         
         createModal(
             'Modifica Atleta',
@@ -1919,6 +2074,13 @@ window.editAthlete = async function(athleteId) {
                 <select id="athlete-team-edit" class="form-input">
                     <option value="">Nessuna squadra</option>
                     ${teamsOptions}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoria</label>
+                <select id="athlete-category-edit" class="form-input">
+                    <option value="">Nessuna categoria</option>
+                    ${categoriesOptions}
                 </select>
             </div>
             <div class="form-group">
@@ -1970,6 +2132,7 @@ window.updateAthlete = async function(athleteId) {
         birth_date: document.getElementById('athlete-birth-date-edit').value || null,
         gender: document.getElementById('athlete-gender-edit').value || null,
         team_id: document.getElementById('athlete-team-edit').value ? parseInt(document.getElementById('athlete-team-edit').value) : null,
+        category_id: document.getElementById('athlete-category-edit').value ? parseInt(document.getElementById('athlete-category-edit').value) : null,
         kj_per_hour_per_kg: parseFloat(document.getElementById('athlete-kj-per-hour-per-kg-edit').value) || 10.0,
         api_key: document.getElementById('athlete-api-key-edit').value.trim() || null
     };

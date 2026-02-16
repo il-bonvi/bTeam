@@ -42,6 +42,20 @@ class Team(Base):
         return {"id": self.id, "name": self.name, "created_at": self.created_at}
 
 
+class Category(Base):
+    """SQLAlchemy ORM model for athlete categories."""
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), unique=True, nullable=False)
+    created_at = Column(String(255), nullable=False)
+
+    athletes = relationship("Athlete", back_populates="category", cascade="all, delete-orphan")
+
+    def to_dict(self) -> Dict:
+        return {"id": self.id, "name": self.name, "created_at": self.created_at}
+
+
 class Athlete(Base):
     """SQLAlchemy ORM model for athletes."""
     __tablename__ = "athletes"
@@ -50,6 +64,7 @@ class Athlete(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     team_id = Column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     birth_date = Column(String(255), nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
@@ -65,6 +80,7 @@ class Athlete(Base):
     created_at = Column(String(255), nullable=False)
 
     team = relationship("Team", back_populates="athletes")
+    category = relationship("Category", back_populates="athletes")
     activities = relationship("Activity", back_populates="athlete", cascade="all, delete-orphan")
     wellness = relationship("Wellness", back_populates="athlete", cascade="all, delete-orphan")
     seasons = relationship("Season", back_populates="athlete", cascade="all, delete-orphan")
@@ -75,6 +91,7 @@ class Athlete(Base):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "team_id": self.team_id,
+            "category_id": self.category_id,
             "birth_date": self.birth_date,
             "weight_kg": self.weight_kg,
             "height_cm": self.height_cm,
@@ -91,6 +108,7 @@ class Athlete(Base):
         }
         if with_team_name:
             data["team_name"] = self.team.name if self.team else None
+            data["category_name"] = self.category.name if self.category else None
         return data
 
 
@@ -461,6 +479,15 @@ class BTeamStorage:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
 
+            # Add category_id column to athletes if missing
+            if "category_id" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN category_id INTEGER DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'category_id' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'category_id': {e}")
+
             # Add max_hr column to athletes if missing
             if "max_hr" not in athletes_cols:
                 try:
@@ -652,11 +679,52 @@ class BTeamStorage:
             self.session.delete(team)
             self.session.commit()
 
+    def add_category(self, name: str) -> int:
+        """Add a new category."""
+        now = datetime.utcnow().isoformat()
+        name = name.strip()
+        try:
+            category = Category(name=name, created_at=now)
+            self.session.add(category)
+            self.session.commit()
+            return category.id
+        except Exception as e:
+            self.session.rollback()
+            existing = self.session.query(Category).filter_by(name=name).first()
+            if existing:
+                return existing.id
+            raise e
+
+    def list_categories(self) -> List[Dict[str, str]]:
+        """List all categories ordered by name."""
+        categories = self.session.query(Category).order_by(Category.name.asc()).all()
+        return [category.to_dict() for category in categories]
+
+    def get_category(self, category_id: int) -> Optional[Dict]:
+        """Get a single category by ID."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        return category.to_dict() if category else None
+
+    def update_category(self, category_id: int, name: str) -> None:
+        """Update a category name."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        if category:
+            category.name = name.strip()
+            self.session.commit()
+
+    def delete_category(self, category_id: int) -> None:
+        """Delete a category."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        if category:
+            self.session.delete(category)
+            self.session.commit()
+
     def add_athlete(
         self,
         first_name: str,
         last_name: str,
         team_id: Optional[int] = None,
+        category_id: Optional[int] = None,
         birth_date: str = "",
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
@@ -673,6 +741,7 @@ class BTeamStorage:
             first_name=first_name.strip(),
             last_name=last_name.strip(),
             team_id=team_id,
+            category_id=category_id,
             birth_date=birth_date.strip() or None,
             weight_kg=weight_kg,
             height_cm=height_cm,
@@ -694,6 +763,7 @@ class BTeamStorage:
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
         team_id: Optional[int] = None,
+        category_id: Optional[int] = None,
         birth_date: Optional[str] = None,
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
@@ -716,6 +786,8 @@ class BTeamStorage:
                 athlete.last_name = last_name.strip()
             if team_id is not None:
                 athlete.team_id = team_id
+            if category_id is not None:
+                athlete.category_id = category_id
             if birth_date is not None:
                 athlete.birth_date = birth_date.strip() or None
             if weight_kg is not None:
