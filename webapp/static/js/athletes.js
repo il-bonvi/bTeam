@@ -219,6 +219,9 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                         <button class="tab-button" onclick="switchAthleteTab('power-curve')">
                             Power Curve
                         </button>
+                        <button class="tab-button" onclick="switchAthleteTab('seasons')">
+                            Stagioni
+                        </button>
                         <button class="tab-button" onclick="switchAthleteTab('sync')">
                             Sincronizzazione
                         </button>
@@ -295,6 +298,8 @@ window.switchAthleteTab = function(tabName) {
         `;
     } else if (tabName === 'power-curve') {
         renderPowerCurveTab(athleteId, athlete, tabContent);
+    } else if (tabName === 'seasons') {
+        renderSeasonsTab(athleteId, tabContent);
     } else if (tabName === 'sync') {
         tabContent.innerHTML = `
             <div style="padding: 2rem;">
@@ -362,32 +367,88 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
     `;
 
     try {
-        // Fetch power curve data
-        const response = await fetch(`/api/athletes/${athleteId}/power-curve`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const powerCurveData = await response.json();
+        // Calculate dates for 90-day curve
+        const today = new Date();
+        const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const dateStr90 = days90ago.toISOString().split('T')[0];
+        const todayStr = today.toISOString().split('T')[0];
 
-        // Render power curve UI
+        // Fetch seasons and power curves in parallel
+        const [seasonsResponse, response90, responseAllTime] = await Promise.all([
+            api.getAthleteSeasons(athleteId),
+            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
+            fetch(`/api/athletes/${athleteId}/power-curve`)
+        ]);
+
+        if (!response90.ok || !responseAllTime.ok) {
+            throw new Error(`HTTP error! status: ${response90.status || responseAllTime.status}`);
+        }
+
+        const seasons = seasonsResponse;
+        const data90d = await response90.json();
+        const dataAllTime = await responseAllTime.json();
+
+        // Fetch power curves for each season
+        const seasonPowerCurves = {};
+        for (const season of seasons) {
+            const endDate = season.end_date || todayStr;
+            try {
+                const seasonResponse = await fetch(
+                    `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
+                );
+                if (seasonResponse.ok) {
+                    seasonPowerCurves[season.id] = await seasonResponse.json();
+                }
+            } catch (err) {
+                console.warn(`Failed to load power curve for season ${season.id}:`, err);
+            }
+        }
+
+        // Store datasets globally
+        window.powerCurve90d = data90d;
+        window.powerCurveAllTime = dataAllTime;
+        window.powerCurveSeasons = seasonPowerCurves;
+        window.athleteSeasons = seasons;
+        window.selectedPeriod = '90d';
+        window.currentAthleteId = athleteId;
+
+        // Build period selector HTML with seasons
+        let periodSelectorHtml = `
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="power-period" value="90d" checked onchange="switchPowerCurvePeriod('90d')">
+                90 giorni
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="power-period" value="allTime" onchange="switchPowerCurvePeriod('allTime')">
+                Tutto il tempo
+            </label>
+        `;
+
+        // Add radio buttons for each season
+        seasons.forEach(season => {
+            periodSelectorHtml += `
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="power-period" value="season-${season.id}" onchange="switchPowerCurvePeriod('season-${season.id}')">
+                ${season.name}
+            </label>
+            `;
+        });
+
+        // Render power curve UI with period selector
         tabContent.innerHTML = `
             <div style="padding: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <h4 style="margin: 0;">📈 Power Curve</h4>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <label style="font-size: 0.9rem; color: #666;">
-                            Periodo:
-                            <select id="power-curve-period" onchange="updatePowerCurvePeriod(${athleteId})" 
-                                    style="margin-left: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
-                                <option value="30">Ultimi 30 giorni</option>
-                                <option value="90" selected>Ultimi 90 giorni</option>
-                                <option value="180">Ultimi 180 giorni</option>
-                                <option value="365">Ultimo anno</option>
-                                <option value="all">Tutto il tempo</option>
-                            </select>
-                        </label>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <label style="font-weight: 500; white-space: nowrap;">Periodo:</label>
+                            ${periodSelectorHtml}
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="showCustomPeriodPicker(${athleteId})">
+                            📅 Custom
+                        </button>
                         <button class="btn btn-secondary btn-sm" onclick="refreshPowerCurve(${athleteId})">
-                            <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                            <i class="bi bi-arrow-clockwise"></i>
                         </button>
                     </div>
                 </div>
@@ -403,8 +464,8 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
             </div>
         `;
 
-        // Render the chart
-        renderPowerCurveChart(powerCurveData);
+        // Render the chart with 90-day data by default
+        renderPowerCurveChart(data90d);
 
     } catch (error) {
         console.error('Error loading power curve:', error);
@@ -425,19 +486,253 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
     }
 }
 
+// ========== SEASONS TAB ==========
+
+async function renderSeasonsTab(athleteId, tabContent) {
+    // Show loading
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento stagioni...</p>
+        </div>
+    `;
+
+    try {
+        const seasons = await api.getAthleteSeasons(athleteId);
+        
+        tabContent.innerHTML = `
+            <div style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h4 style="margin: 0;">📅 Stagioni Sportive</h4>
+                    <button class="btn btn-primary" onclick="showCreateSeasonDialog(${athleteId})">
+                        <i class="bi bi-plus"></i> Nuova Stagione
+                    </button>
+                </div>
+                
+                ${seasons.length === 0 ? `
+                    <div style="padding: 3rem; text-align: center; background: #f9fafb; border-radius: 8px; border: 2px dashed #ddd;">
+                        <p style="font-size: 2rem; margin: 0;">📅</p>
+                        <h5 style="margin: 1rem 0 0.5rem 0; color: #666;">Nessuna stagione configurata</h5>
+                        <p style="color: #999; margin: 0;">Crea la prima stagione per organizzare i dati dell'atleta</p>
+                        <button class="btn btn-primary" onclick="showCreateSeasonDialog(${athleteId})" style="margin-top: 1rem;">
+                            Crea Stagione
+                        </button>
+                    </div>
+                ` : `
+                    <div style="display: grid; gap: 1rem;">
+                        ${seasons.map(season => `
+                            <div style="padding: 1.5rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div style="flex: 1;">
+                                        <h5 style="margin: 0 0 0.5rem 0; color: #1f2937; font-size: 1.1rem;">${season.name}</h5>
+                                        <div style="display: flex; gap: 2rem; color: #6b7280; font-size: 0.95rem;">
+                                            <div>
+                                                <strong>Inizio:</strong> ${formatItalianDate(season.start_date)}
+                                            </div>
+                                            <div>
+                                                <strong>Fine:</strong> ${season.end_date ? formatItalianDate(season.end_date) : '<em>In corso</em>'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-secondary btn-sm" onclick="editSeason(${season.id}, '${season.name}', '${season.start_date}')" title="Modifica">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteSeason(${season.id}, ${athleteId})" title="Elimina">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading seasons:', error);
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fee; padding: 1.5rem; border-radius: 8px; border: 1px solid #fcc;">
+                    <i class="bi bi-x-circle" style="font-size: 2rem; color: #d32f2f;"></i>
+                    <h4 style="margin-top: 1rem; color: #c62828;">Errore nel caricamento</h4>
+                    <p style="color: #666; margin-top: 0.5rem;">Non è stato possibile caricare le stagioni: ${error.message}</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+window.showCreateSeasonDialog = function(athleteId) {
+    createModal(
+        'Crea Nuova Stagione',
+        `
+        <div style="padding: 0.5rem 0;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label">Nome Stagione</label>
+                <input type="text" id="season-name-input" class="form-input" placeholder="es. Stagione 2025-2026" style="width: 100%;">
+                <small style="color: #666; margin-top: 0.5rem; display: block;">
+                    Il nome identifica la stagione (es. "Stagione 2025-2026", "Preparazione Olimpica 2026")
+                </small>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label">Data Inizio</label>
+                <input type="date" id="season-start-date-input" class="form-input" style="width: 100%;">
+                <small style="color: #666; margin-top: 0.5rem; display: block;">
+                    La fine sarà automaticamente l'inizio della stagione successiva
+                </small>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="createSeason(${athleteId})">
+                    💾 Crea Stagione
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()">
+                    Annulla
+                </button>
+            </div>
+        </div>
+        `
+    );
+};
+
+window.createSeason = async function(athleteId) {
+    const name = document.getElementById('season-name-input').value.trim();
+    const startDate = document.getElementById('season-start-date-input').value;
+    
+    if (!name) {
+        alert('Inserisci un nome per la stagione');
+        return;
+    }
+    
+    if (!startDate) {
+        alert('Seleziona una data di inizio');
+        return;
+    }
+    
+    try {
+        showLoading();
+        await api.createSeason(athleteId, { name, start_date: startDate });
+        
+        closeModal();
+        showToast('Stagione creata con successo', 'success');
+        
+        // Reload seasons tab
+        const tabContent = document.getElementById('athlete-tab-content');
+        await renderSeasonsTab(athleteId, tabContent);
+    } catch (error) {
+        showToast('Errore creazione stagione: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+window.editSeason = function(seasonId, currentName, currentStartDate) {
+    createModal(
+        'Modifica Stagione',
+        `
+        <div style="padding: 0.5rem 0;">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label">Nome Stagione</label>
+                <input type="text" id="season-name-edit-input" class="form-input" value="${currentName}" style="width: 100%;">
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label class="form-label">Data Inizio</label>
+                <input type="date" id="season-start-date-edit-input" class="form-input" value="${currentStartDate}" style="width: 100%;">
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="updateSeasonData(${seasonId})">
+                    💾 Salva
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()">
+                    Annulla
+                </button>
+            </div>
+        </div>
+        `
+    );
+};
+
+window.updateSeasonData = async function(seasonId) {
+    const name = document.getElementById('season-name-edit-input').value.trim();
+    const startDate = document.getElementById('season-start-date-edit-input').value;
+    
+    if (!name || !startDate) {
+        alert('Compila tutti i campi');
+        return;
+    }
+    
+    try {
+        showLoading();
+        await api.updateSeason(seasonId, { name, start_date: startDate });
+        
+        closeModal();
+        showToast('Stagione aggiornata', 'success');
+        
+        // Reload seasons tab
+        const athleteId = window.currentAthleteView;
+        const tabContent = document.getElementById('athlete-tab-content');
+        await renderSeasonsTab(athleteId, tabContent);
+    } catch (error) {
+        showToast('Errore aggiornamento: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+window.deleteSeason = async function(seasonId, athleteId) {
+    if (!confirm('Sei sicuro di voler eliminare questa stagione?')) {
+        return;
+    }
+    
+    try {
+        showLoading();
+        await api.deleteSeason(seasonId);
+        showToast('Stagione eliminata', 'success');
+        
+        // Reload seasons tab
+        const tabContent = document.getElementById('athlete-tab-content');
+        await renderSeasonsTab(athleteId, tabContent);
+    } catch (error) {
+        showToast('Errore eliminazione: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
 function renderPowerCurveChart(data) {
     // Transform data for ApexCharts
-    // Power curve typically has: secs array and watts array
     const durations = data.secs || [];
     const watts = data.watts || [];
 
-    // Create series data
+    if (!durations || durations.length === 0) {
+        document.getElementById('power-curve-chart').innerHTML = 
+            '<p style="color: #666; text-align: center; padding: 2rem;">Nessun dato disponibile</p>';
+        return;
+    }
+
+    // Store raw data globally for later use
+    window.currentPowerCurveData = { secs: durations, watts: watts };
+
+    // Calculate actual min/max from data for adaptive scale
+    const minDuration = Math.min(...durations.filter(d => d > 0));
+    const maxDuration = Math.max(...durations.filter(d => d > 0));
+    
+    // Add some padding (10% on each side)
+    const logMin = Math.log10(Math.max(minDuration * 0.5, 1));
+    const logMax = Math.log10(maxDuration * 2);
+
+    // Transform to logarithmic scale for X axis
     const seriesData = durations.map((sec, idx) => ({
-        x: sec,
-        y: watts[idx] || 0
+        x: Math.log10(Math.max(sec, 1)),
+        y: watts[idx] || 0,
+        rawX: sec
     }));
 
-    // ApexCharts configuration
+    // ApexCharts configuration with adaptive logarithmic X axis
     const options = {
         series: [{
             name: 'Potenza (W)',
@@ -470,7 +765,7 @@ function renderPowerCurveChart(data) {
         xaxis: {
             type: 'numeric',
             title: {
-                text: 'Durata',
+                text: 'Durata (scala logaritmica)',
                 style: {
                     fontSize: '14px',
                     fontWeight: 600
@@ -478,12 +773,15 @@ function renderPowerCurveChart(data) {
             },
             labels: {
                 formatter: function(value) {
-                    // Format seconds to readable duration
-                    if (value < 60) return Math.round(value) + 's';
-                    if (value < 3600) return Math.round(value / 60) + 'm';
-                    return (value / 3600).toFixed(1) + 'h';
+                    const sec = Math.pow(10, value);
+                    if (sec < 60) return Math.round(sec) + 's';
+                    if (sec < 3600) return Math.round(sec / 60) + 'm';
+                    if (sec < 86400) return (sec / 3600).toFixed(1) + 'h';
+                    return (sec / 86400).toFixed(1) + 'd';
                 }
-            }
+            },
+            min: logMin,
+            max: logMax
         },
         yaxis: {
             title: {
@@ -504,16 +802,21 @@ function renderPowerCurveChart(data) {
             intersect: false,
             x: {
                 formatter: function(value) {
-                    // Detailed duration format for tooltip
-                    if (value < 60) return Math.round(value) + ' secondi';
-                    if (value < 3600) {
-                        const mins = Math.floor(value / 60);
-                        const secs = Math.round(value % 60);
+                    const sec = Math.pow(10, value);
+                    if (sec < 60) return Math.round(sec) + ' sec';
+                    if (sec < 3600) {
+                        const mins = Math.floor(sec / 60);
+                        const secs = Math.round(sec % 60);
                         return mins + 'm ' + secs + 's';
                     }
-                    const hours = Math.floor(value / 3600);
-                    const mins = Math.round((value % 3600) / 60);
-                    return hours + 'h ' + mins + 'm';
+                    if (sec < 86400) {
+                        const hours = Math.floor(sec / 3600);
+                        const mins = Math.round((sec % 3600) / 60);
+                        return hours + 'h ' + mins + 'm';
+                    }
+                    const days = Math.floor(sec / 86400);
+                    const hours = Math.round((sec % 86400) / 3600);
+                    return days + 'd ' + hours + 'h';
                 }
             },
             y: {
@@ -535,10 +838,11 @@ function renderPowerCurveChart(data) {
     };
 
     // Render chart
+    if (window.currentPowerCurveChart) {
+        window.currentPowerCurveChart.destroy();
+    }
     const chart = new ApexCharts(document.querySelector("#power-curve-chart"), options);
     chart.render();
-
-    // Store chart instance for later updates
     window.currentPowerCurveChart = chart;
 
     // Render best efforts table
@@ -548,11 +852,13 @@ function renderPowerCurveChart(data) {
 function renderBestEffortsTable(data) {
     const durations = data.secs || [];
     const watts = data.watts || [];
-    
-    // Define key durations to highlight (in seconds)
-    const keyDurations = [5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600];
-    
-    const tableData = keyDurations
+
+    // Initialize custom durations list if doesn't exist - include longer efforts
+    if (!window.customDurations) {
+        window.customDurations = [5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 5400, 7200, 10800];
+    }
+
+    const tableData = window.customDurations
         .map(duration => {
             const index = durations.findIndex(d => d >= duration);
             if (index === -1) return null;
@@ -571,10 +877,24 @@ function renderBestEffortsTable(data) {
         return;
     }
 
-    let html = '<table style="width: 100%; border-collapse: collapse;"><thead><tr>';
-    html += '<th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #ddd;">Durata</th>';
-    html += '<th style="text-align: right; padding: 0.75rem; border-bottom: 2px solid #ddd;">Potenza</th>';
-    html += '</tr></thead><tbody>';
+    let html = `
+        <div style="margin-bottom: 1rem;">
+            <input type="number" id="custom-duration-input" placeholder="Aggiungi durata (secondi)" 
+                   style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; width: 220px;">
+            <button class="btn btn-primary btn-sm" onclick="addCustomDuration()" style="margin-left: 0.5rem;">
+                <i class="bi bi-plus"></i> Aggiungi
+            </button>
+        </div>
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="text-align: left; padding: 0.75rem; border-bottom: 2px solid #ddd;">Durata</th>
+                    <th style="text-align: right; padding: 0.75rem; border-bottom: 2px solid #ddd;">Potenza</th>
+                    <th style="text-align: center; padding: 0.75rem; border-bottom: 2px solid #ddd; width: 40px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
 
     tableData.forEach(item => {
         html += `
@@ -582,6 +902,12 @@ function renderBestEffortsTable(data) {
                 <td style="padding: 0.75rem; font-weight: 500;">${item.label}</td>
                 <td style="padding: 0.75rem; text-align: right; color: #3b82f6; font-weight: 600;">
                     ${Math.round(item.watts)} W
+                </td>
+                <td style="text-align: center; padding: 0.75rem;">
+                    <button class="btn btn-danger btn-xs" onclick="removeDuration(${item.duration})" 
+                            style="padding: 4px 8px; font-size: 0.8rem; background: #f5101f; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        × Rimuovi
+                    </button>
                 </td>
             </tr>
         `;
@@ -591,10 +917,55 @@ function renderBestEffortsTable(data) {
     document.getElementById('best-efforts-table').innerHTML = html;
 }
 
+window.addCustomDuration = function() {
+    const input = document.getElementById('custom-duration-input');
+    const durationStr = input.value.trim();
+    
+    if (!durationStr || isNaN(durationStr)) {
+        alert('Inserisci un numero valido di secondi');
+        return;
+    }
+    
+    const duration = parseInt(durationStr);
+    if (duration <= 0) {
+        alert('La durata deve essere > 0 secondi');
+        return;
+    }
+    
+    if (!window.customDurations) {
+        window.customDurations = [];
+    }
+    
+    // Aggiungi se non esiste già
+    if (!window.customDurations.includes(duration)) {
+        window.customDurations.push(duration);
+        window.customDurations.sort((a, b) => a - b);
+        
+        // Rifresha tabella
+        renderBestEffortsTable(window.currentPowerCurveData);
+        input.value = '';
+    } else {
+        alert('Questa durata è già presente');
+    }
+};
+
+window.removeDuration = function(duration) {
+    if (!window.customDurations) {
+        window.customDurations = [];
+    }
+    
+    const index = window.customDurations.indexOf(duration);
+    if (index > -1) {
+        window.customDurations.splice(index, 1);
+        renderBestEffortsTable(window.currentPowerCurveData);
+    }
+};
+
 function formatDurationLabel(seconds) {
     if (seconds < 60) return seconds + ' sec';
-    if (seconds < 3600) return (seconds / 60) + ' min';
-    return (seconds / 3600).toFixed(1).replace('.0', '') + ' ora' + (seconds >= 7200 ? 'e' : '');
+    if (seconds < 3600) return Math.round(seconds / 60) + ' min';
+    if (seconds < 86400) return (seconds / 3600).toFixed(1).replace('.0', '') + 'h';
+    return (seconds / 86400).toFixed(1) + ' giorni';
 }
 
 window.refreshPowerCurve = async function(athleteId) {
@@ -603,81 +974,126 @@ window.refreshPowerCurve = async function(athleteId) {
     await renderPowerCurveTab(athleteId, athlete, tabContent);
 };
 
-window.updatePowerCurvePeriod = async function(athleteId) {
-    const period = document.getElementById('power-curve-period').value;
-    const athlete = window.allAthletes.find(a => a.id === athleteId);
-    const tabContent = document.getElementById('athlete-tab-content');
+window.switchPowerCurvePeriod = function(period) {
+    window.selectedPeriod = period;
     
-    // Calculate date range
-    let oldest = null;
-    if (period !== 'all') {
-        const days = parseInt(period);
-        const date = new Date();
-        date.setDate(date.getDate() - days);
-        oldest = date.toISOString().split('T')[0];
+    // Use the appropriate dataset
+    let data;
+    if (period === '90d') {
+        data = window.powerCurve90d;
+    } else if (period.startsWith('season-')) {
+        const seasonId = parseInt(period.replace('season-', ''));
+        data = window.powerCurveSeasons[seasonId];
+    } else {
+        data = window.powerCurveAllTime;
     }
     
-    // Show loading
+    if (!data) {
+        console.error('Power curve data not available for period:', period);
+        showToast('Dati non disponibili per questo periodo', 'warning');
+        return;
+    }
+    
+    // Re-render chart and table with selected period
+    renderPowerCurveChart(data);
+};
+
+window.showCustomPeriodPicker = function(athleteId) {
+    createModal(
+        '📅 Seleziona Periodo Custom',
+        `
+        <div style="padding: 1.5rem;">
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Data inizio:</label>
+                <input type="date" id="custom-period-start" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Data fine:</label>
+                <input type="date" id="custom-period-end" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button class="btn btn-primary" onclick="loadCustomPeriod(${athleteId})">
+                    Carica dati
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()">
+                    Annulla
+                </button>
+            </div>
+        </div>
+        `
+    );
+
+    // Set default dates (today and 6 months ago)
+    const today = new Date();
+    const sixMonthsAgo = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
+    
+    document.getElementById('custom-period-end').value = today.toISOString().split('T')[0];
+    document.getElementById('custom-period-start').value = sixMonthsAgo.toISOString().split('T')[0];
+};
+
+window.loadCustomPeriod = async function(athleteId) {
+    const startDate = document.getElementById('custom-period-start').value;
+    const endDate = document.getElementById('custom-period-end').value;
+    
+    if (!startDate || !endDate) {
+        alert('Seleziona entrambe le date');
+        return;
+    }
+    
+    if (startDate >= endDate) {
+        alert('Data inizio deve essere prima di data fine');
+        return;
+    }
+    
+    closeModal();
+    
+    const tabContent = document.getElementById('athlete-tab-content');
     tabContent.innerHTML = `
         <div style="padding: 2rem; text-align: center;">
             <div class="spinner" style="margin: 2rem auto;"></div>
-            <p style="color: #666; margin-top: 1rem;">Caricamento power curve...</p>
+            <p style="color: #666; margin-top: 1rem;">Caricamento power curve custom...</p>
         </div>
     `;
     
     try {
-        // Fetch with period
-        let url = `/api/athletes/${athleteId}/power-curve`;
-        if (oldest) {
-            url += `?oldest=${oldest}`;
-        }
+        const response = await fetch(
+            `/api/athletes/${athleteId}/power-curve?oldest=${startDate}&newest=${endDate}`
+        );
         
-        const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const powerCurveData = await response.json();
         
-        // Re-render with preserved period selection
-        tabContent.innerHTML = `
-            <div style="padding: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h4 style="margin: 0;">📈 Power Curve</h4>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <label style="font-size: 0.9rem; color: #666;">
-                            Periodo:
-                            <select id="power-curve-period" onchange="updatePowerCurvePeriod(${athleteId})" 
-                                    style="margin-left: 0.5rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
-                                <option value="30" ${period === '30' ? 'selected' : ''}>Ultimi 30 giorni</option>
-                                <option value="90" ${period === '90' ? 'selected' : ''}>Ultimi 90 giorni</option>
-                                <option value="180" ${period === '180' ? 'selected' : ''}>Ultimi 180 giorni</option>
-                                <option value="365" ${period === '365' ? 'selected' : ''}>Ultimo anno</option>
-                                <option value="all" ${period === 'all' ? 'selected' : ''}>Tutto il tempo</option>
-                            </select>
-                        </label>
-                        <button class="btn btn-secondary btn-sm" onclick="refreshPowerCurve(${athleteId})">
-                            <i class="bi bi-arrow-clockwise"></i> Aggiorna
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Chart Container -->
-                <div id="power-curve-chart" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
-                
-                <!-- Best Efforts Table -->
-                <div style="margin-top: 2rem;">
-                    <h5>🏆 Migliori Sforzi</h5>
-                    <div id="best-efforts-table" style="margin-top: 1rem;"></div>
-                </div>
-            </div>
-        `;
+        const customData = await response.json();
         
-        renderPowerCurveChart(powerCurveData);
+        // Store custom data
+        window.powerCurveCustom = customData;
+        window.selectedPeriod = 'custom';
+        window.customPeriodStart = startDate;
+        window.customPeriodEnd = endDate;
+        
+        // Re-render the tab
+        const athlete = window.allAthletes.find(a => a.id === athleteId);
+        await renderPowerCurveTab(athleteId, athlete, tabContent);
+        
+        // Switch to custom period and render chart
+        renderPowerCurveChart(customData);
+        
+        showToast(`Caricati dati dal ${formatItalianDate(startDate)} al ${formatItalianDate(endDate)}`, 'success');
+        
     } catch (error) {
-        console.error('Error updating power curve:', error);
-        showToast('Errore aggiornamento power curve', 'error');
+        console.error('Error loading custom period:', error);
+        showToast('Errore caricamento periodo custom', 'error');
+        // Reload the original view
+        const athlete = window.allAthletes.find(a => a.id === athleteId);
+        await renderPowerCurveTab(athleteId, athlete, tabContent);
     }
 };
+
+function formatItalianDate(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 window.showCreateAthleteDialog = function() {
     const teamsOptions = window.availableTeams.map(t => 
@@ -839,6 +1255,7 @@ window.editAthlete = async function(athleteId) {
                     </div>
                     <small style="color: #666;">Consente la sincronizzazione di attività, metriche e dati di wellness</small>
                 </div>
+
             </div>
             <div style="margin-top: 1rem; padding: 1rem; background: #f0f4f8; border-radius: 4px;">
                 <p style="margin: 0; color: #15803d; font-size: 0.9rem;">

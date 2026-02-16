@@ -128,6 +128,31 @@ class APIClient {
         return this.request(url);
     }
 
+    // Seasons
+    async getAthleteSeasons(athleteId) {
+        return this.request(`/athletes/${athleteId}/seasons`);
+    }
+
+    async createSeason(athleteId, data) {
+        return this.request(`/athletes/${athleteId}/seasons`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async updateSeason(seasonId, data) {
+        return this.request(`/athletes/seasons/${seasonId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async deleteSeason(seasonId) {
+        return this.request(`/athletes/seasons/${seasonId}`, {
+            method: 'DELETE'
+        });
+    }
+
     // Activities
     async getActivities(filters = {}) {
         const params = new URLSearchParams(filters).toString();

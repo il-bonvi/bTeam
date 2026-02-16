@@ -67,6 +67,7 @@ class Athlete(Base):
     team = relationship("Team", back_populates="athletes")
     activities = relationship("Activity", back_populates="athlete", cascade="all, delete-orphan")
     wellness = relationship("Wellness", back_populates="athlete", cascade="all, delete-orphan")
+    seasons = relationship("Season", back_populates="athlete", cascade="all, delete-orphan")
 
     def to_dict(self, with_team_name: bool = True) -> Dict:
         data = {
@@ -268,6 +269,28 @@ class Wellness(Base):
             "atl": self.atl,
             "ramp_rate": self.ramp_rate,
             "comments": self.comments,
+            "created_at": self.created_at,
+        }
+
+
+class Season(Base):
+    """Stagioni sportive per ogni atleta"""
+    __tablename__ = "seasons"
+
+    id = Column(Integer, primary_key=True)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)  # es. "Stagione 2025-2026"
+    start_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    created_at = Column(String(255), nullable=False)
+
+    athlete = relationship("Athlete", back_populates="seasons")
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "athlete_id": self.athlete_id,
+            "name": self.name,
+            "start_date": self.start_date,
             "created_at": self.created_at,
         }
 
@@ -1315,6 +1338,79 @@ class BTeamStorage:
             Wellness.weight_kg.isnot(None)
         ).order_by(Wellness.wellness_date.desc()).first()
         return wellness.weight_kg if wellness else None
+
+    # ========== SEASONS ==========
+
+    def create_season(self, athlete_id: int, name: str, start_date: str) -> Dict:
+        """Create a new season for an athlete."""
+        now = datetime.now().isoformat()
+        season = Season(
+            athlete_id=athlete_id,
+            name=name,
+            start_date=start_date,
+            created_at=now
+        )
+        self.session.add(season)
+        self.session.commit()
+        return season.to_dict()
+
+    def get_seasons(self, athlete_id: int) -> List[Dict]:
+        """Get all seasons for an athlete, ordered by start_date DESC."""
+        seasons = self.session.query(Season).filter(
+            Season.athlete_id == athlete_id
+        ).order_by(Season.start_date.desc()).all()
+        
+        # Calculate end_date for each season (= start of next season or None)
+        result = []
+        for i, season in enumerate(seasons):
+            season_dict = season.to_dict()
+            # End date is start of next season (which is previous in DESC order)
+            if i > 0:
+                season_dict['end_date'] = seasons[i - 1].start_date
+            else:
+                season_dict['end_date'] = None  # Most recent season, still ongoing
+            result.append(season_dict)
+        
+        return result
+
+    def get_season(self, season_id: int) -> Optional[Dict]:
+        """Get a specific season by ID."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return None
+        
+        season_dict = season.to_dict()
+        # Calculate end_date
+        next_season = self.session.query(Season).filter(
+            Season.athlete_id == season.athlete_id,
+            Season.start_date > season.start_date
+        ).order_by(Season.start_date.asc()).first()
+        
+        season_dict['end_date'] = next_season.start_date if next_season else None
+        return season_dict
+
+    def update_season(self, season_id: int, **kwargs) -> bool:
+        """Update a season."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return False
+        
+        for key, value in kwargs.items():
+            if hasattr(season, key) and value is not None:
+                setattr(season, key, value)
+        
+        self.session.commit()
+        return True
+
+    def delete_season(self, season_id: int) -> bool:
+        """Delete a season."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return False
+        
+        self.session.delete(season)
+        self.session.commit()
+        return True
     
     def close(self) -> None:
         """

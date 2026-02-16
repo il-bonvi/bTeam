@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from datetime import date
+from typing import Optional, List, Dict
+from datetime import date, timedelta
 from pathlib import Path
 import sys
 import os
