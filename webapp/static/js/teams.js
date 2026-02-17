@@ -265,8 +265,25 @@ async function renderTeamOverviewTab(teamId, team, athletes, tabContent) {
     // Get current date range from global filter
     const dateRange = window.currentTeamDateRange || { days: 90 };
 
-    // Calculate team statistics with selected date range
-    const stats = await calculateTeamStatistics(athletes, dateRange);
+    // Initialize cache if needed
+    if (!window.teamOverviewCache) {
+        window.teamOverviewCache = {};
+    }
+    
+    // Create cache key
+    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    
+    // Check if data is already cached with the same date range
+    let stats;
+    if (window.teamOverviewCache[cacheKey]) {
+        console.log('[TEAMS] Using cached overview data for team', teamId);
+        stats = window.teamOverviewCache[cacheKey];
+    } else {
+        console.log('[TEAMS] Loading fresh overview data for team', teamId);
+        stats = await calculateTeamStatistics(athletes, dateRange);
+        // Cache the loaded data
+        window.teamOverviewCache[cacheKey] = stats;
+    }
 
     // Check if this tab is still active - prevent race condition
     if (window.currentTeamActiveTab !== 'overview') {
@@ -355,55 +372,159 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
     // Get current date range from global filter
     const dateRange = window.currentTeamDateRange || { days: 90 };
     const { dateStr90, todayStr } = getNormalizedDateRange(dateRange);
-
-    // Load calculated statistics for each athlete
-    const athletesWithStats = await Promise.all(athletes.map(async (athlete) => {
-        const stats = { ...athlete, eCP: null, eWPrime: null, Pmax: null };
-        
-        if (!athlete.api_key) {
-            return stats;
-        }
-
-        try {
-            const response = await fetch(`/api/athletes/${athlete.id}/power-curve?oldest=${dateStr90}&newest=${todayStr}`);
-            if (!response.ok) return stats;
-
-            const powerData = await response.json();
-            const durations = powerData.secs || [];
-            const watts = powerData.watts || [];
-
-            if (durations.length === 0) return stats;
-
-            // Calculate CP, W', and Pmax using OmniPD model
-            const filtered = filterPowerCurveData(durations, watts, 1, 70, 10);
-            if (filtered.selectedCount >= 4) {
-                const cpResult = calculateOmniPD(filtered.times, filtered.powers);
-                stats.eCP = Math.round(cpResult.CP);
-                stats.eWPrime = Math.round(cpResult.W_prime);
-                // Pmax at 1s from OmniPD model
-                const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
-                stats.Pmax = pmax1s ? Math.round(pmax1s) : null;
-            }
+    
+    // Initialize cache if needed
+    if (!window.teamMembersCache) {
+        window.teamMembersCache = {};
+    }
+    
+    // Create cache key
+    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    
+    // Check if data is already cached with the same date range
+    let athletesWithStats;
+    if (window.teamMembersCache[cacheKey]) {
+        console.log('[TEAMS] Using cached members data for team', teamId);
+        athletesWithStats = window.teamMembersCache[cacheKey];
+    } else {
+        console.log('[TEAMS] Loading fresh members data for team', teamId);
+        // Load calculated statistics for each athlete
+        athletesWithStats = await Promise.all(athletes.map(async (athlete) => {
+            const stats = { ...athlete, eCP: null, eWPrime: null, Pmax: null };
             
-            // Find power at 5 seconds from raw data
-            const idx5s = durations.findIndex(d => d >= 5);
-            if (idx5s !== -1 && watts[idx5s]) {
-                stats.power5s = Math.round(watts[idx5s]);
-            } else if (durations.length > 0) {
-                // Fallback: take highest available power if no 5s data
-                stats.power5s = Math.max(...watts);
+            if (!athlete.api_key) {
+                return stats;
             }
-        } catch (err) {
-            console.warn(`Failed to load stats for athlete ${athlete.id}:`, err);
-        }
 
-        return stats;
-    }));
+            try {
+                const response = await fetch(`/api/athletes/${athlete.id}/power-curve?oldest=${dateStr90}&newest=${todayStr}`);
+                if (!response.ok) return stats;
+
+                const powerData = await response.json();
+                const durations = powerData.secs || [];
+                const watts = powerData.watts || [];
+
+                if (durations.length === 0) return stats;
+
+                // Calculate CP, W', and Pmax using OmniPD model
+                const filtered = filterPowerCurveData(durations, watts, 1, 70, 10);
+                if (filtered.selectedCount >= 4) {
+                    const cpResult = calculateOmniPD(filtered.times, filtered.powers);
+                    stats.eCP = Math.round(cpResult.CP);
+                    stats.eWPrime = Math.round(cpResult.W_prime);
+                    // Pmax at 1s from OmniPD model
+                    const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
+                    stats.Pmax = pmax1s ? Math.round(pmax1s) : null;
+                }
+                
+                // Find power at 5 seconds from raw data
+                const idx5s = durations.findIndex(d => d >= 5);
+                if (idx5s !== -1 && watts[idx5s]) {
+                    stats.power5s = Math.round(watts[idx5s]);
+                } else if (durations.length > 0) {
+                    // Fallback: take highest available power if no 5s data
+                    stats.power5s = Math.max(...watts);
+                }
+            } catch (err) {
+                console.warn(`Failed to load stats for athlete ${athlete.id}:`, err);
+            }
+
+            return stats;
+        }));
+        
+        // Cache the loaded data
+        window.teamMembersCache[cacheKey] = athletesWithStats;
+    }
 
     // Check if this tab is still active - prevent race condition
     if (window.currentTeamActiveTab !== 'members') {
         return;
     }
+    
+    // Initialize sorting state
+    if (!window.teamMembersSortState) {
+        window.teamMembersSortState = { field: 'name', direction: 'asc' };
+    }
+    
+    // Function to render members table with sorting
+    const renderMembersTable = (athletes, sortState) => {
+        // Sort athletes based on current sort state
+        const sortedAthletes = [...athletes];
+        sortedAthletes.sort((a, b) => {
+            let aVal, bVal;
+            
+            switch(sortState.field) {
+                case 'name':
+                    aVal = `${a.first_name} ${a.last_name}`.toLowerCase();
+                    bVal = `${b.first_name} ${b.last_name}`.toLowerCase();
+                    break;
+                case 'weight':
+                    aVal = a.weight_kg || 0;
+                    bVal = b.weight_kg || 0;
+                    break;
+                case 'cp':
+                    aVal = a.cp || 0;
+                    bVal = b.cp || 0;
+                    break;
+                case 'cp_kg':
+                    aVal = (a.cp && a.weight_kg) ? a.cp / a.weight_kg : 0;
+                    bVal = (b.cp && b.weight_kg) ? b.cp / b.weight_kg : 0;
+                    break;
+                case 'ecp':
+                    aVal = a.eCP || 0;
+                    bVal = b.eCP || 0;
+                    break;
+                case 'ecp_kg':
+                    aVal = (a.eCP && a.weight_kg) ? a.eCP / a.weight_kg : 0;
+                    bVal = (b.eCP && b.weight_kg) ? b.eCP / b.weight_kg : 0;
+                    break;
+                case 'wprime':
+                    aVal = a.w_prime || 0;
+                    bVal = b.w_prime || 0;
+                    break;
+                case 'ewprime':
+                    aVal = a.eWPrime || 0;
+                    bVal = b.eWPrime || 0;
+                    break;
+                case 'power5s':
+                    aVal = a.power5s || 0;
+                    bVal = b.power5s || 0;
+                    break;
+                case 'power5s_kg':
+                    aVal = (a.power5s && a.weight_kg) ? a.power5s / a.weight_kg : 0;
+                    bVal = (b.power5s && b.weight_kg) ? b.power5s / b.weight_kg : 0;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (typeof aVal === 'string') {
+                return sortState.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            } else {
+                return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+        });
+        
+        return sortedAthletes;
+    };
+    
+    // Function to get sort indicator
+    const getSortIndicator = (field) => {
+        if (window.teamMembersSortState.field !== field) return '';
+        return window.teamMembersSortState.direction === 'asc' ? ' ↑' : ' ↓';
+    };
+    
+    // Function to handle column click
+    window.sortTeamMembers = (field) => {
+        if (window.teamMembersSortState.field === field) {
+            window.teamMembersSortState.direction = window.teamMembersSortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            window.teamMembersSortState.field = field;
+            window.teamMembersSortState.direction = 'asc';
+        }
+        // Re-render with cached data, don't refetch
+        renderMembersTableOnly(window.currentTeamId, window.currentTeam, window.currentTeamAthletes, tabContent, athletesWithStats, window.teamMembersSortState);
+    };
 
     let html = `
         <div style="padding: 1.5rem;">
@@ -412,24 +533,111 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: #f8f9fa;">
                         <tr>
-                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600;">Atleta</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Peso (kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">CP (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">CP (W/kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">CP calc (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">CP calc (W/kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Valore impostato manualmente">W' (J)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">W' calc (J)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;" title="Calcolato dal modello OmniPD">Pmax (W)</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('name')">Atleta${getSortIndicator('name')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('weight')">Peso (kg)${getSortIndicator('weight')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp')">CP (W)${getSortIndicator('cp')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp_kg')">CP (W/kg)${getSortIndicator('cp_kg')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp')">CP calc (W)${getSortIndicator('ecp')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp_kg')">CP calc (W/kg)${getSortIndicator('ecp_kg')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('wprime')">W' (J)${getSortIndicator('wprime')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ewprime')">W' calc (J)${getSortIndicator('ewprime')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortTeamMembers('power5s')">Power 5s (W)${getSortIndicator('power5s')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortTeamMembers('power5s_kg')">5s W/kg${getSortIndicator('power5s_kg')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+    
+    // Render the table with cached data
+    renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWithStats, window.teamMembersSortState);
+}
+
+// Separate function to render table only, without fetching data
+function renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWithStats, sortState) {
+    // Sort athletes based on current sort state
+    const sortedAthletes = [...athletesWithStats];
+    sortedAthletes.sort((a, b) => {
+        let aVal, bVal;
+        
+        switch(sortState.field) {
+            case 'name':
+                aVal = `${a.first_name} ${a.last_name}`.toLowerCase();
+                bVal = `${b.first_name} ${b.last_name}`.toLowerCase();
+                break;
+            case 'weight':
+                aVal = a.weight_kg || 0;
+                bVal = b.weight_kg || 0;
+                break;
+            case 'cp':
+                aVal = a.cp || 0;
+                bVal = b.cp || 0;
+                break;
+            case 'cp_kg':
+                aVal = (a.cp && a.weight_kg) ? a.cp / a.weight_kg : 0;
+                bVal = (b.cp && b.weight_kg) ? b.cp / b.weight_kg : 0;
+                break;
+            case 'ecp':
+                aVal = a.eCP || 0;
+                bVal = b.eCP || 0;
+                break;
+            case 'ecp_kg':
+                aVal = (a.eCP && a.weight_kg) ? a.eCP / a.weight_kg : 0;
+                bVal = (b.eCP && b.weight_kg) ? b.eCP / b.weight_kg : 0;
+                break;
+            case 'wprime':
+                aVal = a.w_prime || 0;
+                bVal = b.w_prime || 0;
+                break;
+            case 'ewprime':
+                aVal = a.eWPrime || 0;
+                bVal = b.eWPrime || 0;
+                break;
+            case 'power5s':
+                aVal = a.power5s || 0;
+                bVal = b.power5s || 0;
+                break;
+            case 'power5s_kg':
+                aVal = (a.power5s && a.weight_kg) ? a.power5s / a.weight_kg : 0;
+                bVal = (b.power5s && b.weight_kg) ? b.power5s / b.weight_kg : 0;
+                break;
+            default:
+                return 0;
+        }
+        
+        if (typeof aVal === 'string') {
+            return sortState.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        } else {
+            return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+    });
+
+    let html = `
+        <div style="padding: 1.5rem;">
+            <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
+            <div style="background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: #f8f9fa;">
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('name')">Atleta</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('weight')">Peso (kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp')">CP (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp_kg')">CP (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp')">CP calc (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp_kg')">CP calc (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('wprime')">W' (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ewprime')">W' calc (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortTeamMembers('power5s')">Power 5s (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortTeamMembers('power5s_kg')">5s W/kg</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Azioni</th>
                         </tr>
                     </thead>
                     <tbody>`;
 
-    athletesWithStats.forEach((athlete, idx) => {
+    sortedAthletes.forEach((athlete, idx) => {
         const bgColor = idx % 2 === 0 ? 'white' : '#f8f9fa';
         const cpPerKg = athlete.cp && athlete.weight_kg ? (athlete.cp / athlete.weight_kg).toFixed(2) : '-';
         const ecpPerKg = athlete.eCP && athlete.weight_kg ? (athlete.eCP / athlete.weight_kg).toFixed(2) : '-';
+        const power5sPerKg = athlete.power5s && athlete.weight_kg ? (athlete.power5s / athlete.weight_kg).toFixed(2) : '-';
         
         html += `
             <tr style="background: ${bgColor}; border-bottom: 1px solid #eee;">
@@ -444,7 +652,8 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${ecpPerKg}</td>
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #43e97b;">${athlete.w_prime || '-'}</td>
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #4facfe;">${athlete.eWPrime || '-'}</td>
-                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ffa502;">${athlete.Pmax || '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ec4899;">${athlete.power5s || '-'}</td>
+                <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ec4899;">${power5sPerKg}</td>
                 <td style="padding: 1rem; text-align: center;">
                     <button class="btn btn-primary btn-sm" onclick="navigateToAthlete(${athlete.id})">
                         Dettagli
@@ -489,8 +698,25 @@ async function renderTeamRankingsTab(teamId, team, athletes, tabContent) {
     // Get current date range from global filter
     const dateRange = window.currentTeamDateRange || { days: 90 };
 
-    // Calculate rankings for all athletes
-    const rankings = await calculateTeamRankings(athletesWithKeys, dateRange);
+    // Initialize cache if needed
+    if (!window.teamRankingsCache) {
+        window.teamRankingsCache = {};
+    }
+    
+    // Create cache key
+    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    
+    // Check if data is already cached with the same date range
+    let rankings;
+    if (window.teamRankingsCache[cacheKey]) {
+        console.log('[TEAMS] Using cached rankings data for team', teamId);
+        rankings = window.teamRankingsCache[cacheKey];
+    } else {
+        console.log('[TEAMS] Loading fresh rankings data for team', teamId);
+        rankings = await calculateTeamRankings(athletesWithKeys, dateRange);
+        // Cache the loaded data
+        window.teamRankingsCache[cacheKey] = rankings;
+    }
 
     // Check if this tab is still active - prevent race condition
     if (window.currentTeamActiveTab !== 'rankings') {
@@ -524,8 +750,25 @@ async function renderTeamComparisonTab(teamId, team, athletes, tabContent) {
     // Get current date range from global filter
     const dateRange = window.currentTeamDateRange || { days: 90 };
 
-    // Fetch power curves for all athletes
-    const powerCurves = await fetchAllPowerCurves(athletesWithKeys, dateRange);
+    // Initialize cache if needed
+    if (!window.teamComparisonCache) {
+        window.teamComparisonCache = {};
+    }
+    
+    // Create cache key
+    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    
+    // Check if data is already cached with the same date range
+    let powerCurves;
+    if (window.teamComparisonCache[cacheKey]) {
+        console.log('[TEAMS] Using cached comparison data for team', teamId);
+        powerCurves = window.teamComparisonCache[cacheKey];
+    } else {
+        console.log('[TEAMS] Loading fresh comparison data for team', teamId);
+        powerCurves = await fetchAllPowerCurves(athletesWithKeys, dateRange);
+        // Cache the loaded data
+        window.teamComparisonCache[cacheKey] = powerCurves;
+    }
 
     // Check if this tab is still active - prevent race condition
     if (window.currentTeamActiveTab !== 'comparison') {
@@ -613,6 +856,12 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
     let withCalcWPrimeKgCount = 0;
     let withPmaxCount = 0;
     let withPower5sCount = 0;
+    
+    // For tracking max values
+    let maxPower5s = 0;
+    let maxP5sAthlete = null;
+    let maxCalcCP = 0;
+    let maxCalcCPAthlete = null;
 
     for (const athlete of athletes) {
         if (!athlete.api_key) continue;
@@ -663,13 +912,28 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
                 
                 // Power at 5s from raw data
                 const idx5s = durations.findIndex(d => d >= 5);
+                let power5sValue = 0;
                 if (idx5s !== -1 && watts[idx5s]) {
-                    totalPower5s += watts[idx5s];
+                    power5sValue = watts[idx5s];
+                    totalPower5s += power5sValue;
                     withPower5sCount++;
                 } else if (durations.length > 0) {
                     // Fallback: take highest available power if no 5s data
-                    totalPower5s += Math.max(...watts);
+                    power5sValue = Math.max(...watts);
+                    totalPower5s += power5sValue;
                     withPower5sCount++;
+                }
+                
+                // Track max power 5s
+                if (power5sValue > maxPower5s) {
+                    maxPower5s = power5sValue;
+                    maxP5sAthlete = athlete;
+                }
+                
+                // Track max calculated CP
+                if (cpResult.CP > maxCalcCP) {
+                    maxCalcCP = cpResult.CP;
+                    maxCalcCPAthlete = athlete;
                 }
                 
             } catch (err) {
@@ -695,18 +959,21 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
     // Best performances with colors and units
     const bestPerformances = [
         { 
-            label: 'CP Massima', 
-            value: withCP.length > 0 ? Math.max(...withCP.map(a => a.cp)) : 0, 
-            athlete: withCP.length > 0 ? `${withCP.reduce((max, a) => a.cp > max.cp ? a : max).first_name} ${withCP.reduce((max, a) => a.cp > max.cp ? a : max).last_name}` : '-',
-            color: '#ff6b6b',
-            unit: ' W'
-        },
-        { 
             label: 'CP/kg Massima', 
-            value: withCP.filter(a => a.weight_kg).length > 0 ? Math.round(Math.max(...withCP.filter(a => a.weight_kg).map(a => a.cp / a.weight_kg))) : 0, 
-            athlete: '-',
+            value: withCP.filter(a => a.weight_kg).length > 0 ? (Math.max(...withCP.filter(a => a.weight_kg).map(a => a.cp / a.weight_kg))).toFixed(2) : 0,
+            athlete: withCP.filter(a => a.weight_kg).length > 0 ? (() => {
+                const maxAthlete = withCP.filter(a => a.weight_kg).reduce((max, a) => (a.cp / a.weight_kg) > (max.cp / max.weight_kg) ? a : max);
+                return `${maxAthlete.first_name} ${maxAthlete.last_name}`;
+            })() : '-',
             color: '#ff6b6b',
             unit: ' W/kg'
+        },
+        { 
+            label: 'CP Calcolato Massima', 
+            value: maxCalcCP > 0 ? Math.round(maxCalcCP) : 0,
+            athlete: maxCalcCPAthlete ? `${maxCalcCPAthlete.first_name} ${maxCalcCPAthlete.last_name}` : '-',
+            color: '#667eea',
+            unit: ' W'
         },
         { 
             label: 'W\' Massimo (impostato)', 
@@ -720,17 +987,12 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
         },
         { 
             label: 'Potenza 5s Massima', 
-            value: 0,
-            athlete: '-',
+            value: maxPower5s > 0 ? Math.round(maxPower5s) : 0,
+            athlete: maxP5sAthlete ? `${maxP5sAthlete.first_name} ${maxP5sAthlete.last_name}` : '-',
             color: '#ec4899',
             unit: ' W'
         }
     ];
-    
-    // Calculate max P5s from available data (estimated from stats)
-    let maxP5s = 0;
-    let maxP5sAthlete = null;
-    // This would require loading power curves for all athletes - for now use 0 placeholder
 
     return {
         avgCP,
@@ -1019,7 +1281,7 @@ function renderComparisonCharts(powerCurves) {
             },
             zoom: {
                 enabled: true,
-                type: 'x'
+                type: 'xy'
             }
         },
         stroke: {
@@ -1147,7 +1409,7 @@ function renderComparisonCharts(powerCurves) {
             },
             zoom: {
                 enabled: true,
-                type: 'x'
+                type: 'xy'
             }
         },
         stroke: {

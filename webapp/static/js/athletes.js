@@ -533,6 +533,11 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
         </div>
     `;
 
+    // Initialize cache if needed
+    if (!window.athletePowerCurveCache) {
+        window.athletePowerCurveCache = {};
+    }
+
     try {
         // Calculate dates for 90-day curve
         const today = new Date();
@@ -540,36 +545,59 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
         const dateStr90 = days90ago.toISOString().split('T')[0];
         const todayStr = today.toISOString().split('T')[0];
 
-        // Fetch seasons and power curves in parallel
-        const [seasonsResponse, response90, responseAllTime] = await Promise.all([
-            api.getAthleteSeasons(athleteId),
-            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
-            fetch(`/api/athletes/${athleteId}/power-curve`)
-        ]);
+        // Create cache key
+        const cacheKey = `${athleteId}_powercurve`;
+        
+        // Check if data is already cached
+        let cachedData;
+        if (window.athletePowerCurveCache[cacheKey]) {
+            console.log('[ATHLETES] Using cached power curve data for athlete', athleteId);
+            cachedData = window.athletePowerCurveCache[cacheKey];
+        } else {
+            console.log('[ATHLETES] Loading fresh power curve data for athlete', athleteId);
+            // Fetch seasons and power curves in parallel
+            const [seasonsResponse, response90, responseAllTime] = await Promise.all([
+                api.getAthleteSeasons(athleteId),
+                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
+                fetch(`/api/athletes/${athleteId}/power-curve`)
+            ]);
 
-        if (!response90.ok || !responseAllTime.ok) {
-            throw new Error(`HTTP error! status: ${response90.status || responseAllTime.status}`);
-        }
-
-        const seasons = seasonsResponse;
-        const data90d = await response90.json();
-        const dataAllTime = await responseAllTime.json();
-
-        // Fetch power curves for each season
-        const seasonPowerCurves = {};
-        for (const season of seasons) {
-            const endDate = season.end_date || todayStr;
-            try {
-                const seasonResponse = await fetch(
-                    `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
-                );
-                if (seasonResponse.ok) {
-                    seasonPowerCurves[season.id] = await seasonResponse.json();
-                }
-            } catch (err) {
-                console.warn(`Failed to load power curve for season ${season.id}:`, err);
+            if (!response90.ok || !responseAllTime.ok) {
+                throw new Error(`HTTP error! status: ${response90.status || responseAllTime.status}`);
             }
+
+            const seasons = seasonsResponse;
+            const data90d = await response90.json();
+            const dataAllTime = await responseAllTime.json();
+
+            // Fetch power curves for each season
+            const seasonPowerCurves = {};
+            for (const season of seasons) {
+                const endDate = season.end_date || todayStr;
+                try {
+                    const seasonResponse = await fetch(
+                        `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
+                    );
+                    if (seasonResponse.ok) {
+                        seasonPowerCurves[season.id] = await seasonResponse.json();
+                    }
+                } catch (err) {
+                    console.warn(`Failed to load power curve for season ${season.id}:`, err);
+                }
+            }
+
+            cachedData = {
+                seasons: seasons,
+                data90d: data90d,
+                dataAllTime: dataAllTime,
+                seasonPowerCurves: seasonPowerCurves
+            };
+            
+            // Cache the loaded data
+            window.athletePowerCurveCache[cacheKey] = cachedData;
         }
+
+        const { seasons, data90d, dataAllTime, seasonPowerCurves } = cachedData;
 
         // Check if this tab is still active - prevent race condition
         if (window.currentAthleteActiveTab !== 'power-curve') {
@@ -687,42 +715,70 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
         </div>
     `;
 
+    // Initialize cache if needed
+    if (!window.athleteStatsCache) {
+        window.athleteStatsCache = {};
+    }
+
     try {
         const today = new Date();
         const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
         const dateStr90 = days90ago.toISOString().split('T')[0];
         const todayStr = today.toISOString().split('T')[0];
 
-        // Fetch all data in parallel
-        const [seasonsResponse, response90, responseAllTime] = await Promise.all([
-            api.getAthleteSeasons(athleteId),
-            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
-            fetch(`/api/athletes/${athleteId}/power-curve`)
-        ]);
+        // Create cache key
+        const cacheKey = `${athleteId}_stats`;
+        
+        // Check if data is already cached
+        let cachedData;
+        if (window.athleteStatsCache[cacheKey]) {
+            console.log('[ATHLETES] Using cached statistics data for athlete', athleteId);
+            cachedData = window.athleteStatsCache[cacheKey];
+        } else {
+            console.log('[ATHLETES] Loading fresh statistics data for athlete', athleteId);
+            // Fetch all data in parallel
+            const [seasonsResponse, response90, responseAllTime] = await Promise.all([
+                api.getAthleteSeasons(athleteId),
+                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
+                fetch(`/api/athletes/${athleteId}/power-curve`)
+            ]);
 
-        if (!response90.ok || !responseAllTime.ok) {
-            throw new Error('Errore nel caricamento dei dati');
-        }
-
-        const seasons = seasonsResponse;
-        const data90d = await response90.json();
-        const dataAllTime = await responseAllTime.json();
-
-        // Fetch power curves for each season
-        const seasonPowerCurves = {};
-        for (const season of seasons) {
-            const endDate = season.end_date || todayStr;
-            try {
-                const seasonResponse = await fetch(
-                    `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
-                );
-                if (seasonResponse.ok) {
-                    seasonPowerCurves[season.id] = await seasonResponse.json();
-                }
-            } catch (err) {
-                console.warn(`Failed to load power curve for season ${season.id}:`, err);
+            if (!response90.ok || !responseAllTime.ok) {
+                throw new Error('Errore nel caricamento dei dati');
             }
+
+            const seasons = seasonsResponse;
+            const data90d = await response90.json();
+            const dataAllTime = await responseAllTime.json();
+
+            // Fetch power curves for each season
+            const seasonPowerCurves = {};
+            for (const season of seasons) {
+                const endDate = season.end_date || todayStr;
+                try {
+                    const seasonResponse = await fetch(
+                        `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
+                    );
+                    if (seasonResponse.ok) {
+                        seasonPowerCurves[season.id] = await seasonResponse.json();
+                    }
+                } catch (err) {
+                    console.warn(`Failed to load power curve for season ${season.id}:`, err);
+                }
+            }
+
+            cachedData = {
+                seasons: seasons,
+                data90d: data90d,
+                dataAllTime: dataAllTime,
+                seasonPowerCurves: seasonPowerCurves
+            };
+            
+            // Cache the loaded data
+            window.athleteStatsCache[cacheKey] = cachedData;
         }
+
+        const { seasons, data90d, dataAllTime, seasonPowerCurves } = cachedData;
 
         // Get weight for pro kg calculations
         const weight = athlete.weight_kg || 1;
@@ -983,6 +1039,11 @@ async function renderCPTab(athleteId, athlete, tabContent) {
         </div>
     `;
 
+    // Initialize cache if needed
+    if (!window.athleteCPCache) {
+        window.athleteCPCache = {};
+    }
+
     try {
         // Calculate dates for 90-day default
         const today = new Date();
@@ -990,18 +1051,39 @@ async function renderCPTab(athleteId, athlete, tabContent) {
         const dateStr90 = days90ago.toISOString().split('T')[0];
         const todayStr = today.toISOString().split('T')[0];
 
-        // Fetch seasons and 90-day power curve
-        const [seasonsResponse, response90] = await Promise.all([
-            api.getAthleteSeasons(athleteId),
-            fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`)
-        ]);
+        // Create cache key
+        const cacheKey = `${athleteId}_cp`;
+        
+        // Check if data is already cached
+        let cachedData;
+        if (window.athleteCPCache[cacheKey]) {
+            console.log('[ATHLETES] Using cached CP data for athlete', athleteId);
+            cachedData = window.athleteCPCache[cacheKey];
+        } else {
+            console.log('[ATHLETES] Loading fresh CP data for athlete', athleteId);
+            // Fetch seasons and 90-day power curve
+            const [seasonsResponse, response90] = await Promise.all([
+                api.getAthleteSeasons(athleteId),
+                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`)
+            ]);
 
-        if (!response90.ok) {
-            throw new Error(`HTTP error! status: ${response90.status}`);
+            if (!response90.ok) {
+                throw new Error(`HTTP error! status: ${response90.status}`);
+            }
+
+            const seasons = seasonsResponse;
+            const data90d = await response90.json();
+
+            cachedData = {
+                seasons: seasons,
+                data90d: data90d
+            };
+            
+            // Cache the loaded data
+            window.athleteCPCache[cacheKey] = cachedData;
         }
 
-        const seasons = seasonsResponse;
-        const data90d = await response90.json();
+        const { seasons, data90d } = cachedData;
 
         // Check if this tab is still active - prevent race condition
         if (window.currentAthleteActiveTab !== 'cp') {
@@ -1523,7 +1605,7 @@ function renderPowerCurveChart(data) {
             },
             zoom: {
                 enabled: true,
-                type: 'x'
+                type: 'xy'
             }
         },
         stroke: {
