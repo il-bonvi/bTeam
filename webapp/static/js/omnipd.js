@@ -284,6 +284,7 @@ function calculateCPModel(durations, watts, weight = 1) {
     let currentPercentile = 100;  // Start from 100% and auto-search down
     let selectedTimes = [];
     let selectedPowers = [];
+    let forcedLongPoint = false; // Track if fallback was used
 
     // Auto-search for percentile
     while (currentPercentile >= 0) {
@@ -325,6 +326,7 @@ function calculateCPModel(durations, watts, weight = 1) {
         }
 
         let selectedMask = new Array(durations.length).fill(false);
+        forcedLongPoint = false; // Reset for each iteration
 
         // Select points from each window
         for (const [tmin, tmax] of timeWindows) {
@@ -388,6 +390,14 @@ function calculateCPModel(durations, watts, weight = 1) {
                 selectedTimes.push(durations[bestIdx]);
                 selectedPowers.push(watts[bestIdx]);
                 selectedMask[bestIdx] = true;
+                
+                // Calculate the percentile of this forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                forcedLongPoint = Math.round(forcedPointPercentile); // Store as percentile value
             }
         }
 
@@ -432,6 +442,7 @@ function calculateCPModel(durations, watts, weight = 1) {
         t_99: cpResult.t_99,
         usedPercentile: currentPercentile,
         pointsUsed: selectedTimes.length,
+        forcedLongPoint: forcedLongPoint,
         mmp_1s: mmps[1],
         mmp_5s: mmps[5],
         mmp_3m: mmps[180],

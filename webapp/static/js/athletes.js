@@ -736,41 +736,34 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
             cachedData = window.athleteStatsCache[cacheKey];
         } else {
             console.log('[ATHLETES] Loading fresh statistics data for athlete', athleteId);
-            // Fetch all data in parallel
-            const [seasonsResponse, response90, responseAllTime] = await Promise.all([
-                api.getAthleteSeasons(athleteId),
-                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
-                fetch(`/api/athletes/${athleteId}/power-curve`)
-            ]);
+            
+            // Define fixed seasons (nov-oct)
+            const fixedSeasons = [
+                { name: 'Ultimi 90 giorni', key: '90d', startDate: dateStr90, endDate: todayStr },
+                { name: 'S2026', key: 'season_2026', startDate: '2025-11-01', endDate: '2026-10-31' },
+                { name: 'S2025', key: 'season_2025', startDate: '2024-11-01', endDate: '2025-10-31' },
+                { name: 'S2024', key: 'season_2024', startDate: '2023-11-01', endDate: '2024-10-31' }
+            ];
 
-            if (!response90.ok || !responseAllTime.ok) {
-                throw new Error('Errore nel caricamento dei dati');
-            }
+            // Fetch data for all fixed periods in parallel
+            const fetchPromises = fixedSeasons.map(season =>
+                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${season.startDate}&newest=${season.endDate}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .catch(err => {
+                        console.warn(`Failed to load power curve for ${season.key}:`, err);
+                        return null;
+                    })
+            );
 
-            const seasons = seasonsResponse;
-            const data90d = await response90.json();
-            const dataAllTime = await responseAllTime.json();
+            const powerCurves = await Promise.all(fetchPromises);
 
-            // Fetch power curves for each season
             const seasonPowerCurves = {};
-            for (const season of seasons) {
-                const endDate = season.end_date || todayStr;
-                try {
-                    const seasonResponse = await fetch(
-                        `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
-                    );
-                    if (seasonResponse.ok) {
-                        seasonPowerCurves[season.id] = await seasonResponse.json();
-                    }
-                } catch (err) {
-                    console.warn(`Failed to load power curve for season ${season.id}:`, err);
-                }
-            }
+            fixedSeasons.forEach((season, idx) => {
+                seasonPowerCurves[season.key] = powerCurves[idx];
+            });
 
             cachedData = {
-                seasons: seasons,
-                data90d: data90d,
-                dataAllTime: dataAllTime,
+                fixedSeasons: fixedSeasons,
                 seasonPowerCurves: seasonPowerCurves
             };
             
@@ -778,7 +771,7 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
             window.athleteStatsCache[cacheKey] = cachedData;
         }
 
-        const { seasons, data90d, dataAllTime, seasonPowerCurves } = cachedData;
+        const { fixedSeasons, seasonPowerCurves } = cachedData;
 
         // Get weight for pro kg calculations
         const weight = athlete.weight_kg || 1;
@@ -791,20 +784,9 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
         const minPercentile = 100;  // Start from 100% and auto-search downwards
         const sprintSeconds = 1;
 
-        // 1. Calculate for 90 days
-        const stats90d = await calculatePeriodStatistics(
-            data90d, 
-            'Ultimi 90 giorni', 
-            weight, 
-            valuesPerWindow, 
-            minPercentile, 
-            sprintSeconds
-        );
-        if (stats90d) statistics.push(stats90d);
-
-        // 2. Calculate for each season
-        for (const season of seasons) {
-            const seasonData = seasonPowerCurves[season.id];
+        // Calculate for each fixed season
+        for (const season of fixedSeasons) {
+            const seasonData = seasonPowerCurves[season.key];
             if (seasonData && seasonData.secs && seasonData.secs.length > 0) {
                 const seasonStats = await calculatePeriodStatistics(
                     seasonData,
@@ -891,7 +873,7 @@ function renderStatisticsTable(statistics, weight) {
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">pMax (W/kg)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Punti</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">forced10></th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -914,7 +896,7 @@ function renderStatisticsTable(statistics, weight) {
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${pmax_kg}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #999;">${stat.rmse}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.usedPercentile}%</td>
-                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.pointsUsed}</td>
+                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${typeof stat.forcedLongPoint === 'number' ? stat.forcedLongPoint + '%' : 'no'}</td>
             </tr>
         `;
     });
@@ -1081,6 +1063,18 @@ async function renderCPTab(athleteId, athlete, tabContent) {
                             <input type="radio" name="cp-period" value="90d" checked onchange="switchCPPeriod('90d')">
                             90 giorni
                         </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="radio" name="cp-period" value="season_2026" onchange="switchCPPeriod('season_2026')">
+                            Stagione 2026 (Nov 2025 - Ott 2026)
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="radio" name="cp-period" value="season_2025" onchange="switchCPPeriod('season_2025')">
+                            Stagione 2025 (Nov 2024 - Ott 2025)
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="radio" name="cp-period" value="season_2024" onchange="switchCPPeriod('season_2024')">
+                            Stagione 2024 (Nov 2023 - Ott 2024)
+                        </label>
                         ${seasons.map(s => `
                             <label style="display: flex; align-items: center; gap: 0.5rem;">
                                 <input type="radio" name="cp-period" value="season-${s.id}" onchange="switchCPPeriod('season-${s.id}')">
@@ -1188,6 +1182,7 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
         }
 
         let selectedMask = new Array(allTimes.length).fill(false);
+        let forcedLongPoint = false; // Track if fallback was used
 
         // Select points from each window
         for (const [tmin, tmax] of timeWindows) {
@@ -1251,6 +1246,14 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
                 selectedTimes.push(allTimes[bestIdx]);
                 selectedPowers.push(allPowers[bestIdx]);
                 selectedMask[bestIdx] = true;
+                
+                // Calculate the percentile of this forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                forcedLongPoint = Math.round(forcedPointPercentile); // Store as percentile value
             }
         }
 
@@ -1272,7 +1275,8 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
             times: selectedTimes,
             powers: selectedPowers,
             selectedCount: selectedTimes.length,
-            totalCount: allTimes.length
+            totalCount: allTimes.length,
+            forcedLongPoint: forcedLongPoint
         };
 
         // Update stats display
@@ -1294,11 +1298,13 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
         let usedPercentile = 100;
         let selectedTimes = [];
         let selectedPowers = [];
+        let forcedLongPoint = false; // Track if fallback was used
 
         // Search for percentile starting from 100, decreasing until we have enough points
         while (currentPercentile >= 0) {
             selectedTimes = [];
             selectedPowers = [];
+            forcedLongPoint = false; // Reset for each iteration
             
             // Fit all data to get residuals
             const params = curveFit(allTimes, allPowers);
@@ -1398,6 +1404,14 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
                     selectedTimes.push(allTimes[bestIdx]);
                     selectedPowers.push(allPowers[bestIdx]);
                     selectedMask[bestIdx] = true;
+                    
+                    // Calculate the percentile of this forced point
+                    let position = 0;
+                    for (let r of residualsClean) {
+                        if (r < bestResidual) position++;
+                    }
+                    const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                    forcedLongPoint = Math.round(forcedPointPercentile); // Store as percentile value
                 }
             }
 
@@ -1434,7 +1448,8 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
             times: selectedTimes,
             powers: selectedPowers,
             selectedCount: selectedTimes.length,
-            totalCount: allTimes.length
+            totalCount: allTimes.length,
+            forcedLongPoint: forcedLongPoint
         };
 
         // Update stats display
@@ -1549,6 +1564,15 @@ window.switchCPPeriod = async function(period) {
             const dateStr90 = days90ago.toISOString().split('T')[0];
             const todayStr = today.toISOString().split('T')[0];
             url = `/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`;
+        } else if (period === 'season_2024') {
+            // Stagione 2024: Nov 2023 - Ott 2024
+            url = `/api/athletes/${athleteId}/power-curve?oldest=2023-11-01&newest=2024-10-31`;
+        } else if (period === 'season_2025') {
+            // Stagione 2025: Nov 2024 - Ott 2025
+            url = `/api/athletes/${athleteId}/power-curve?oldest=2024-11-01&newest=2025-10-31`;
+        } else if (period === 'season_2026') {
+            // Stagione 2026: Nov 2025 - Ott 2026
+            url = `/api/athletes/${athleteId}/power-curve?oldest=2025-11-01&newest=2026-10-31`;
         } else if (period.startsWith('season-')) {
             const seasonId = parseInt(period.replace('season-', ''));
             const season = window.cpSeasons.find(s => s.id === seasonId);
