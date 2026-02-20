@@ -278,8 +278,6 @@ function calculateCPModel(durations, watts, weight = 1) {
     if (!durations || !watts || durations.length < 4) {
         return null;
     }
-
-    // Filter parameters - SINGLE SOURCE OF TRUTH
     const valuesPerWindow = 1;
     let currentPercentile = 100;  // Start from 100% and auto-search down
     let selectedTimes = [];

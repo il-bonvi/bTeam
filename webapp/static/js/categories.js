@@ -167,6 +167,7 @@ async function renderCategoryDetail(categoryId, categories, contentArea) {
                     <option value="90days">Ultimi 90 giorni</option>
                     <option value="season_2026">Stagione 2026 (Nov 2025 - Ott 2026)</option>
                     <option value="season_2025">Stagione 2025 (Nov 2024 - Ott 2025)</option>
+                    <option value="season_2024">Stagione 2024 (Nov 2023 - Ott 2024)</option>
                 </select>
             </div>
             
@@ -210,6 +211,8 @@ async function renderCategoryDetail(categoryId, categories, contentArea) {
                     window.currentCategoryDateRange = { season: 2026 };
                 } else if (value === 'season_2025') {
                     window.currentCategoryDateRange = { season: 2025 };
+                } else if (value === 'season_2024') {
+                    window.currentCategoryDateRange = { season: 2024 };
                 }
                 // Reload current tab with new date range
                 const activeTab = document.querySelector('.tab-btn.active');
@@ -407,13 +410,13 @@ async function renderCategoryMembersTab(categoryId, category, athletes, tabConte
                 if (durations.length === 0) return stats;
 
                 // Calculate CP, W', and Pmax using OmniPD model
-                const filtered = filterPowerCurveData(durations, watts, 1, 70, 10);
-                if (filtered.selectedCount >= 4) {
-                    const cpResult = calculateOmniPD(filtered.times, filtered.powers);
-                    stats.eCP = Math.round(cpResult.CP);
-                    stats.eWPrime = Math.round(cpResult.W_prime);
+                // Pass raw data directly to calculateCPModel (no pre-filtering)
+                const cpResult = calculateCPModel(durations, watts, athlete.weight_kg);
+                if (cpResult) {
+                    stats.eCP = cpResult.cp;
+                    stats.eWPrime = cpResult.w_prime;
                     // Pmax at 1s from OmniPD model
-                    const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
+                    const pmax1s = ompd_power(1, cpResult.cp, cpResult.w_prime, cpResult.pmax, cpResult.a_param);
                     stats.Pmax = pmax1s ? Math.round(pmax1s) : null;
                 }
                 
@@ -876,33 +879,34 @@ async function calculateCategoryStatistics(athletes, dateRangeOpt = { days: 90 }
             if (filtered.selectedCount < 4) continue;
             
             try {
-                const cpResult = calculateOmniPD(filtered.times, filtered.powers);
+                const cpResult = calculateCPModel(filtered.times, filtered.powers, athlete.weight_kg);
+                if (!cpResult) continue;
                 
-                // Old method (stored in DB)
-                totalWPrime += cpResult.W_prime;
+                // OmniPD calculated values
+                totalWPrime += cpResult.w_prime;
                 withWPrimeCount++;
                 
                 if (athlete.weight_kg) {
-                    totalWPrimeKg += cpResult.W_prime / athlete.weight_kg / 1000;
+                    totalWPrimeKg += cpResult.w_prime_kg;
                     withWPrimeKgCount++;
                 }
                 
                 // New OmniPD calculated values
-                totalCalcCP += cpResult.CP;
+                totalCalcCP += cpResult.cp;
                 withCalcCPCount++;
                 
-                totalCalcWPrime += cpResult.W_prime;
+                totalCalcWPrime += cpResult.w_prime;
                 withCalcWPrimeCount++;
                 
                 if (athlete.weight_kg) {
-                    totalCalcWPrimeKg += cpResult.W_prime / athlete.weight_kg / 1000;
+                    totalCalcWPrimeKg += cpResult.w_prime_kg;
                     withCalcWPrimeKgCount++;
                 }
                 
                 // Pmax at 1s from OmniPD model
-                const pmax1s = ompd_power(1, cpResult.CP, cpResult.W_prime, cpResult.Pmax, cpResult.A);
+                const pmax1s = ompd_power(1, cpResult.cp, cpResult.w_prime, cpResult.pmax, cpResult.a_param);
                 if (pmax1s && !isNaN(pmax1s)) {
-                    totalPmax += pmax1s;
+                    totalPmax += cpResult.pmax;
                     withPmaxCount++;
                 }
                 

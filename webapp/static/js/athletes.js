@@ -1483,7 +1483,7 @@ function updateCPStats(result, filtered) {
                 <div style="font-size: 2rem; font-weight: 700;">${result.Pmax} W</div>
             </div>
             <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 112, 154, 0.3);">
-                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">A (Fatigue Parameter)</h6>
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">A</h6>
                 <div style="font-size: 2rem; font-weight: 700;">${result.A}</div>
             </div>
         </div>
