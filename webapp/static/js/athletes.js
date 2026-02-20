@@ -788,7 +788,7 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
 
         // Default filter parameters for CP calculation
         const valuesPerWindow = 1;
-        const minPercentile = 70;
+        const minPercentile = 100;  // Start from 100% and auto-search downwards
         const sprintSeconds = 1;
 
         // 1. Calculate for 90 days
@@ -843,6 +843,7 @@ async function renderStatisticsTab(athleteId, athlete, tabContent) {
 }
 
 // Calculate statistics for a specific period (90d or season)
+// Uses centralized calculateCPModel from omnipd.js
 async function calculatePeriodStatistics(powerData, periodName, weight, valuesPerWindow, minPercentile, sprintSeconds) {
     try {
         const durations = powerData.secs || [];
@@ -852,58 +853,17 @@ async function calculatePeriodStatistics(powerData, periodName, weight, valuesPe
             return null;
         }
 
-        // Try filtering with decreasing percentiles until we have enough data
-        let filtered = null;
-        let currentPercentile = minPercentile;
-
-        while (currentPercentile >= 0) {
-            const tempFiltered = filterPowerCurveData(durations, watts, valuesPerWindow, currentPercentile, sprintSeconds);
-            
-            if (tempFiltered.selectedCount >= 4) {
-                filtered = tempFiltered;
-                break;
-            }
-            
-            currentPercentile--;
-        }
-
-        if (!filtered) {
+        // Use centralized CP calculation (omnipd.js) - single source of truth
+        const cpModel = calculateCPModel(durations, watts, weight);
+        
+        if (!cpModel) {
             return null;
         }
 
-        // Calculate CP model
-        const cpResult = calculateOmniPD(filtered.times, filtered.powers);
-
-        // Extract MMP for specific durations
-        const targetDurations = [1, 5, 180, 360, 720]; // 1s, 5s, 3m, 6m, 12m
-        const mmps = {};
-
-        for (const duration of targetDurations) {
-            const index = durations.findIndex(d => d >= duration);
-            if (index !== -1) {
-                mmps[duration] = watts[index] || 0;
-            } else {
-                mmps[duration] = null;
-            }
-        }
-
+        // Return result with period name + all CP model data
         return {
             periodName: periodName,
-            cp: Math.round(cpResult.CP),
-            w_prime: Math.round(cpResult.W_prime),
-            pmax: Math.round(cpResult.Pmax),
-            rmse: cpResult.RMSE.toFixed(2),
-            cp_kg: (cpResult.CP / weight).toFixed(2),
-            w_prime_kg: (cpResult.W_prime / weight / 1000).toFixed(3), // kJ/kg
-            pmax_kg: (cpResult.Pmax / weight).toFixed(2),
-            usedPercentile: currentPercentile,
-            pointsUsed: filtered.selectedCount,
-            mmp_1s: mmps[1],
-            mmp_5s: mmps[5],
-            mmp_3m: mmps[180],
-            mmp_6m: mmps[360],
-            mmp_12m: mmps[720],
-            weight: weight
+            ...cpModel
         };
     } catch (error) {
         console.warn(`Error calculating statistics for ${periodName}:`, error);
@@ -1103,7 +1063,7 @@ async function renderCPTab(athleteId, athlete, tabContent) {
 
         // Default filter parameters
         const defaultValuesPerWindow = 1;
-        const defaultMinPercentile = 70;
+        const defaultMinPercentile = 80;
         const defaultSprintSeconds = 1;
 
         // Render UI with controls and placeholders for charts
@@ -1146,6 +1106,9 @@ async function renderCPTab(athleteId, athlete, tabContent) {
                             <label>Durata sprint (s)</label>
                             <input type="number" id="cp-sprint-seconds" value="${defaultSprintSeconds}" min="1" onchange="recalculateCP()">
                         </div>
+                        <div class="input-field">
+                            <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto > 10 min (sì/no)</label>
+                        </div>
                     </div>
                 </div>
 
@@ -1163,8 +1126,9 @@ async function renderCPTab(athleteId, athlete, tabContent) {
             </div>
         `;
 
-        // Calculate and render with default parameters
-        calculateAndRenderCP(allTimes, allPowers, defaultValuesPerWindow, defaultMinPercentile, defaultSprintSeconds);
+        // Calculate and render with auto-search from 100% percentile
+        const useLongPointFallback = 1; // default enabled
+        calculateAndRenderCPWithAutoSearch(allTimes, allPowers, defaultValuesPerWindow, defaultSprintSeconds, useLongPointFallback);
 
     } catch (error) {
         console.error('Error loading CP model:', error);
@@ -1183,27 +1147,306 @@ async function renderCPTab(athleteId, athlete, tabContent) {
 }
 
 // Calculate and render CP model
-function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds) {
+function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useLongPointFallback = 1) {
     try {
-        // Filter data
-        const filtered = filterPowerCurveData(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds);
+        // Filter data using same logic as calculateAndRenderCPWithAutoSearch
+        let selectedTimes = [];
+        let selectedPowers = [];
         
-        if (filtered.selectedCount < 4) {
+        // Fit all data to get residuals
+        const params = curveFit(allTimes, allPowers);
+        const predictions = allTimes.map((t) => ompd_power(t, ...params));
+        const residuals = allPowers.map((p, i) => p - predictions[i]);
+
+        // Calculate percentile threshold
+        const residualsClean = residuals.filter(r => !isNaN(r));
+        if (residualsClean.length === 0) {
             showToast('Dati insufficienti dopo il filtraggio. Diminuisci il percentile minimo.', 'warning');
             return;
         }
 
+        residualsClean.sort((a, b) => a - b);
+        const h = (residualsClean.length - 1) * (minPercentile / 100);
+        const floor_idx = Math.floor(h);
+        const ceil_idx = Math.ceil(h);
+        const frac = h - floor_idx;
+        
+        let percentileThreshold;
+        if (floor_idx === ceil_idx) {
+            percentileThreshold = residualsClean[floor_idx];
+        } else {
+            percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
+        }
+
+        // Define time windows: 2-minute intervals up to 30 min, then 15-minute intervals to 90 min
+        const timeWindows = [];
+        for (let start = 120; start < 1800; start += 120) {
+            timeWindows.push([start, start + 120]);
+        }
+        for (let start = 1800; start < 5400; start += 900) {
+            timeWindows.push([start, start + 900]);
+        }
+
+        let selectedMask = new Array(allTimes.length).fill(false);
+
+        // Select points from each window
+        for (const [tmin, tmax] of timeWindows) {
+            const windowIndices = [];
+            for (let i = 0; i < allTimes.length; i++) {
+                if (allTimes[i] >= tmin && allTimes[i] <= tmax) {
+                    windowIndices.push(i);
+                }
+            }
+            if (windowIndices.length === 0) continue;
+
+            // Sort by residual descending
+            const sortedIndices = windowIndices.sort((a, b) => residuals[b] - residuals[a]);
+
+            // Take up to valuesPerWindow where residual >= threshold
+            let count = 0;
+            for (const i of sortedIndices) {
+                if (!isNaN(residuals[i]) && residuals[i] >= percentileThreshold && !selectedMask[i]) {
+                    selectedTimes.push(allTimes[i]);
+                    selectedPowers.push(allPowers[i]);
+                    selectedMask[i] = true;
+                    count++;
+                    if (count >= valuesPerWindow) break;
+                }
+            }
+        }
+
+        // Sprint point
+        let minDist = Infinity;
+        let sprintIdx = -1;
+        for (let i = 0; i < allTimes.length; i++) {
+            const dist = Math.abs(allTimes[i] - sprintSeconds);
+            if (dist < minDist) {
+                minDist = dist;
+                sprintIdx = i;
+            }
+        }
+        if (sprintIdx >= 0 && !selectedMask[sprintIdx]) {
+            selectedTimes.push(allTimes[sprintIdx]);
+            selectedPowers.push(allPowers[sprintIdx]);
+            selectedMask[sprintIdx] = true;
+        }
+
+        // CHECK: If no points > 600s, add best point from 10-30 min range (only if useLongPointFallback = 1)
+        const hasLongPoint = selectedTimes.some(t => t > 600);
+        if (!hasLongPoint && useLongPointFallback === 1) {
+            let bestIdx = -1;
+            let bestResidual = -Infinity;
+            
+            // Find highest residual in 10-30 min range (600-1800s)
+            for (let i = 0; i < allTimes.length; i++) {
+                if (allTimes[i] >= 600 && allTimes[i] <= 1800 && !selectedMask[i]) {
+                    if (residuals[i] > bestResidual) {
+                        bestResidual = residuals[i];
+                        bestIdx = i;
+                    }
+                }
+            }
+            
+            if (bestIdx >= 0) {
+                selectedTimes.push(allTimes[bestIdx]);
+                selectedPowers.push(allPowers[bestIdx]);
+                selectedMask[bestIdx] = true;
+            }
+        }
+
+        if (selectedTimes.length < 4) {
+            showToast('Dati insufficienti dopo il filtraggio. Diminuisci il percentile minimo.', 'warning');
+            return;
+        }
+
+        // Sort selected data by time for proper plotting
+        const sortedIndices = selectedTimes.map((_, i) => i).sort((a, b) => selectedTimes[a] - selectedTimes[b]);
+        selectedTimes = sortedIndices.map(i => selectedTimes[i]);
+        selectedPowers = sortedIndices.map(i => selectedPowers[i]);
+
         // Calculate omniPD parameters
-        const result = calculateOmniPD(filtered.times, filtered.powers);
+        const result = calculateOmniPD(selectedTimes, selectedPowers);
+
+        // Create filtered object for updateCPStats
+        const filtered = {
+            times: selectedTimes,
+            powers: selectedPowers,
+            selectedCount: selectedTimes.length,
+            totalCount: allTimes.length
+        };
 
         // Update stats display
         updateCPStats(result, filtered);
 
         // Create charts
-        createCPCharts(allTimes, allPowers, filtered.times, filtered.powers, result);
+        createCPCharts(allTimes, allPowers, selectedTimes, selectedPowers, result);
 
     } catch (error) {
         console.error('Error calculating CP:', error);
+        showToast('Errore nel calcolo del modello: ' + error.message, 'error');
+    }
+}
+
+// Calculate CP with automatic percentile search (from 100% down)
+function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow, sprintSeconds, useLongPointFallback = 1) {
+    try {
+        let currentPercentile = 100;
+        let usedPercentile = 100;
+        let selectedTimes = [];
+        let selectedPowers = [];
+
+        // Search for percentile starting from 100, decreasing until we have enough points
+        while (currentPercentile >= 0) {
+            selectedTimes = [];
+            selectedPowers = [];
+            
+            // Fit all data to get residuals
+            const params = curveFit(allTimes, allPowers);
+            const predictions = allTimes.map((t) => ompd_power(t, ...params));
+            const residuals = allPowers.map((p, i) => p - predictions[i]);
+
+            // Calculate percentile threshold
+            const residualsClean = residuals.filter(r => !isNaN(r));
+            if (residualsClean.length === 0) {
+                currentPercentile--;
+                continue;
+            }
+
+            residualsClean.sort((a, b) => a - b);
+            const h = (residualsClean.length - 1) * (currentPercentile / 100);
+            const floor_idx = Math.floor(h);
+            const ceil_idx = Math.ceil(h);
+            const frac = h - floor_idx;
+            
+            let percentileThreshold;
+            if (floor_idx === ceil_idx) {
+                percentileThreshold = residualsClean[floor_idx];
+            } else {
+                percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
+            }
+
+            // Define time windows: 2-minute intervals up to 30 min, then 15-minute intervals to 90 min
+            const timeWindows = [];
+            for (let start = 120; start < 1800; start += 120) {
+                timeWindows.push([start, start + 120]);
+            }
+            for (let start = 1800; start < 5400; start += 900) {
+                timeWindows.push([start, start + 900]);
+            }
+
+            let selectedMask = new Array(allTimes.length).fill(false);
+
+            // Select points from each window
+            for (const [tmin, tmax] of timeWindows) {
+                const windowIndices = [];
+                for (let i = 0; i < allTimes.length; i++) {
+                    if (allTimes[i] >= tmin && allTimes[i] <= tmax) {
+                        windowIndices.push(i);
+                    }
+                }
+                if (windowIndices.length === 0) continue;
+
+                // Sort by residual descending
+                const sortedIndices = windowIndices.sort((a, b) => residuals[b] - residuals[a]);
+
+                // Take up to valuesPerWindow where residual >= threshold
+                let count = 0;
+                for (const i of sortedIndices) {
+                    if (!isNaN(residuals[i]) && residuals[i] >= percentileThreshold && !selectedMask[i]) {
+                        selectedTimes.push(allTimes[i]);
+                        selectedPowers.push(allPowers[i]);
+                        selectedMask[i] = true;
+                        count++;
+                        if (count >= valuesPerWindow) break;
+                    }
+                }
+            }
+
+            // Sprint point (1 second)
+            let minDist = Infinity;
+            let sprintIdx = -1;
+            for (let i = 0; i < allTimes.length; i++) {
+                const dist = Math.abs(allTimes[i] - sprintSeconds);
+                if (dist < minDist) {
+                    minDist = dist;
+                    sprintIdx = i;
+                }
+            }
+            if (sprintIdx >= 0 && !selectedMask[sprintIdx]) {
+                selectedTimes.push(allTimes[sprintIdx]);
+                selectedPowers.push(allPowers[sprintIdx]);
+                selectedMask[sprintIdx] = true;
+            }
+
+            // CHECK: If no points > 600s, add best point from 10-30 min range (only if useLongPointFallback = 1)
+            const hasLongPoint = selectedTimes.some(t => t > 600);
+            if (!hasLongPoint && useLongPointFallback === 1) {
+                let bestIdx = -1;
+                let bestResidual = -Infinity;
+                
+                // Find highest residual in 10-30 min range (600-1800s)
+                for (let i = 0; i < allTimes.length; i++) {
+                    if (allTimes[i] >= 600 && allTimes[i] <= 1800 && !selectedMask[i]) {
+                        if (residuals[i] > bestResidual) {
+                            bestResidual = residuals[i];
+                            bestIdx = i;
+                        }
+                    }
+                }
+                
+                if (bestIdx >= 0) {
+                    selectedTimes.push(allTimes[bestIdx]);
+                    selectedPowers.push(allPowers[bestIdx]);
+                    selectedMask[bestIdx] = true;
+                }
+            }
+
+            // Check if we have enough points
+            if (selectedTimes.length >= 4) {
+                usedPercentile = currentPercentile;
+                break;
+            }
+            
+            currentPercentile--;
+        }
+
+        if (selectedTimes.length < 4) {
+            showToast('Dati insufficienti dopo il filtraggio. Non ci sono abbastanza punti validi.', 'warning');
+            return;
+        }
+
+        // Sort selected data by time for proper plotting
+        const sortedIndices = selectedTimes.map((_, i) => i).sort((a, b) => selectedTimes[a] - selectedTimes[b]);
+        selectedTimes = sortedIndices.map(i => selectedTimes[i]);
+        selectedPowers = sortedIndices.map(i => selectedPowers[i]);
+
+        // Update the input field with the found percentile
+        const input = document.getElementById('cp-min-percentile');
+        if (input) {
+            input.value = usedPercentile;
+        }
+
+        // Calculate omniPD parameters
+        const result = calculateOmniPD(selectedTimes, selectedPowers);
+
+        // Create filtered object for updateCPStats
+        const filtered = {
+            times: selectedTimes,
+            powers: selectedPowers,
+            selectedCount: selectedTimes.length,
+            totalCount: allTimes.length
+        };
+
+        // Update stats display
+        updateCPStats(result, filtered);
+
+        // Create charts
+        createCPCharts(allTimes, allPowers, selectedTimes, selectedPowers, result);
+
+        console.log(`[CP Model] Auto-search found ${selectedTimes.length} points at ${usedPercentile}% percentile`);
+
+    } catch (error) {
+        console.error('Error calculating CP with auto-search:', error);
         showToast('Errore nel calcolo del modello: ' + error.message, 'error');
     }
 }
@@ -1264,8 +1507,9 @@ function updateCPStats(result, filtered) {
 // Recalculate CP when filters change
 window.recalculateCP = function() {
     const valuesPerWindow = parseInt(document.getElementById('cp-values-per-window').value) || 1;
-    const minPercentile = parseInt(document.getElementById('cp-min-percentile').value) || 70;
+    const minPercentile = parseInt(document.getElementById('cp-min-percentile').value) || 90;
     const sprintSeconds = parseInt(document.getElementById('cp-sprint-seconds').value) || 10;
+    const useLongPointFallback = document.getElementById('cp-use-long-point-fallback').checked ? 1 : 0;
 
     // Get current period data
     const period = window.cpCurrentPeriod;
@@ -1280,7 +1524,7 @@ window.recalculateCP = function() {
     const allTimes = data.secs || [];
     const allPowers = data.watts || [];
 
-    calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds);
+    calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useLongPointFallback);
 };
 
 // Switch CP period

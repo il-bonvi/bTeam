@@ -1039,33 +1039,14 @@ async function calculateTeamRankings(athletes, dateRangeOpt = { days: 90 }) {
                 }
             }
 
-            // Calculate CP
-            const valuesPerWindow = 1;
-            const minPercentile = 70;
-            const sprintSeconds = 10;
-
-            let filtered = null;
-            let currentPercentile = minPercentile;
-
-            while (currentPercentile >= 0) {
-                const tempFiltered = filterPowerCurveData(durations, watts, valuesPerWindow, currentPercentile, sprintSeconds);
-                if (tempFiltered.selectedCount >= 4) {
-                    filtered = tempFiltered;
-                    break;
-                }
-                currentPercentile--;
-            }
+            // Calculate CP using centralized function (omnipd.js)
+            const cpModel = calculateCPModel(durations, watts, athlete.weight_kg || 1);
 
             let cp = null;
             let w_prime = null;
-            if (filtered) {
-                try {
-                    const cpResult = calculateOmniPD(filtered.times, filtered.powers);
-                    cp = Math.round(cpResult.CP);
-                    w_prime = Math.round(cpResult.W_prime);
-                } catch (err) {
-                    console.warn(`Failed to calculate CP for athlete ${athlete.id}:`, err);
-                }
+            if (cpModel) {
+                cp = cpModel.cp;
+                w_prime = cpModel.w_prime;
             }
 
             rankings.push({
