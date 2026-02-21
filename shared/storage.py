@@ -42,6 +42,20 @@ class Team(Base):
         return {"id": self.id, "name": self.name, "created_at": self.created_at}
 
 
+class Category(Base):
+    """SQLAlchemy ORM model for athlete categories."""
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), unique=True, nullable=False)
+    created_at = Column(String(255), nullable=False)
+
+    athletes = relationship("Athlete", back_populates="category")
+
+    def to_dict(self) -> Dict:
+        return {"id": self.id, "name": self.name, "created_at": self.created_at}
+
+
 class Athlete(Base):
     """SQLAlchemy ORM model for athletes."""
     __tablename__ = "athletes"
@@ -50,6 +64,7 @@ class Athlete(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     team_id = Column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     birth_date = Column(String(255), nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
@@ -65,8 +80,10 @@ class Athlete(Base):
     created_at = Column(String(255), nullable=False)
 
     team = relationship("Team", back_populates="athletes")
+    category = relationship("Category", back_populates="athletes")
     activities = relationship("Activity", back_populates="athlete", cascade="all, delete-orphan")
     wellness = relationship("Wellness", back_populates="athlete", cascade="all, delete-orphan")
+    seasons = relationship("Season", back_populates="athlete", cascade="all, delete-orphan")
 
     def to_dict(self, with_team_name: bool = True) -> Dict:
         data = {
@@ -74,6 +91,7 @@ class Athlete(Base):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "team_id": self.team_id,
+            "category_id": self.category_id,
             "birth_date": self.birth_date,
             "weight_kg": self.weight_kg,
             "height_cm": self.height_cm,
@@ -90,6 +108,7 @@ class Athlete(Base):
         }
         if with_team_name:
             data["team_name"] = self.team.name if self.team else None
+            data["category_name"] = self.category.name if self.category else None
         return data
 
 
@@ -272,6 +291,28 @@ class Wellness(Base):
         }
 
 
+class Season(Base):
+    """Stagioni sportive per ogni atleta"""
+    __tablename__ = "seasons"
+
+    id = Column(Integer, primary_key=True)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)  # es. "Stagione 2025-2026"
+    start_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    created_at = Column(String(255), nullable=False)
+
+    athlete = relationship("Athlete", back_populates="seasons")
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "athlete_id": self.athlete_id,
+            "name": self.name,
+            "start_date": self.start_date,
+            "created_at": self.created_at,
+        }
+
+
 class Race(Base):
     """SQLAlchemy ORM model for planned races."""
     __tablename__ = "races"
@@ -437,6 +478,15 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
+
+            # Add category_id column to athletes if missing
+            if "category_id" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN category_id INTEGER DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'category_id' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'category_id': {e}")
 
             # Add max_hr column to athletes if missing
             if "max_hr" not in athletes_cols:
@@ -629,11 +679,52 @@ class BTeamStorage:
             self.session.delete(team)
             self.session.commit()
 
+    def add_category(self, name: str) -> int:
+        """Add a new category."""
+        now = datetime.utcnow().isoformat()
+        name = name.strip()
+        try:
+            category = Category(name=name, created_at=now)
+            self.session.add(category)
+            self.session.commit()
+            return category.id
+        except Exception as e:
+            self.session.rollback()
+            existing = self.session.query(Category).filter_by(name=name).first()
+            if existing:
+                return existing.id
+            raise e
+
+    def list_categories(self) -> List[Dict[str, str]]:
+        """List all categories ordered by name."""
+        categories = self.session.query(Category).order_by(Category.name.asc()).all()
+        return [category.to_dict() for category in categories]
+
+    def get_category(self, category_id: int) -> Optional[Dict]:
+        """Get a single category by ID."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        return category.to_dict() if category else None
+
+    def update_category(self, category_id: int, name: str) -> None:
+        """Update a category name."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        if category:
+            category.name = name.strip()
+            self.session.commit()
+
+    def delete_category(self, category_id: int) -> None:
+        """Delete a category."""
+        category = self.session.query(Category).filter_by(id=category_id).first()
+        if category:
+            self.session.delete(category)
+            self.session.commit()
+
     def add_athlete(
         self,
         first_name: str,
         last_name: str,
         team_id: Optional[int] = None,
+        category_id: Optional[int] = None,
         birth_date: str = "",
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
@@ -650,6 +741,7 @@ class BTeamStorage:
             first_name=first_name.strip(),
             last_name=last_name.strip(),
             team_id=team_id,
+            category_id=category_id,
             birth_date=birth_date.strip() or None,
             weight_kg=weight_kg,
             height_cm=height_cm,
@@ -671,6 +763,7 @@ class BTeamStorage:
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
         team_id: Optional[int] = None,
+        category_id: Optional[int] = None,
         birth_date: Optional[str] = None,
         weight_kg: Optional[float] = None,
         height_cm: Optional[float] = None,
@@ -693,6 +786,8 @@ class BTeamStorage:
                 athlete.last_name = last_name.strip()
             if team_id is not None:
                 athlete.team_id = team_id
+            if category_id is not None:
+                athlete.category_id = category_id
             if birth_date is not None:
                 athlete.birth_date = birth_date.strip() or None
             if weight_kg is not None:
@@ -1315,6 +1410,79 @@ class BTeamStorage:
             Wellness.weight_kg.isnot(None)
         ).order_by(Wellness.wellness_date.desc()).first()
         return wellness.weight_kg if wellness else None
+
+    # ========== SEASONS ==========
+
+    def create_season(self, athlete_id: int, name: str, start_date: str) -> Dict:
+        """Create a new season for an athlete."""
+        now = datetime.now().isoformat()
+        season = Season(
+            athlete_id=athlete_id,
+            name=name,
+            start_date=start_date,
+            created_at=now
+        )
+        self.session.add(season)
+        self.session.commit()
+        return season.to_dict()
+
+    def get_seasons(self, athlete_id: int) -> List[Dict]:
+        """Get all seasons for an athlete, ordered by start_date DESC."""
+        seasons = self.session.query(Season).filter(
+            Season.athlete_id == athlete_id
+        ).order_by(Season.start_date.desc()).all()
+        
+        # Calculate end_date for each season (= start of next season or None)
+        result = []
+        for i, season in enumerate(seasons):
+            season_dict = season.to_dict()
+            # End date is start of next season (which is previous in DESC order)
+            if i > 0:
+                season_dict['end_date'] = seasons[i - 1].start_date
+            else:
+                season_dict['end_date'] = None  # Most recent season, still ongoing
+            result.append(season_dict)
+        
+        return result
+
+    def get_season(self, season_id: int) -> Optional[Dict]:
+        """Get a specific season by ID."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return None
+        
+        season_dict = season.to_dict()
+        # Calculate end_date
+        next_season = self.session.query(Season).filter(
+            Season.athlete_id == season.athlete_id,
+            Season.start_date > season.start_date
+        ).order_by(Season.start_date.asc()).first()
+        
+        season_dict['end_date'] = next_season.start_date if next_season else None
+        return season_dict
+
+    def update_season(self, season_id: int, **kwargs) -> bool:
+        """Update a season."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return False
+        
+        for key, value in kwargs.items():
+            if hasattr(season, key) and value is not None:
+                setattr(season, key, value)
+        
+        self.session.commit()
+        return True
+
+    def delete_season(self, season_id: int) -> bool:
+        """Delete a season."""
+        season = self.session.query(Season).filter(Season.id == season_id).first()
+        if not season:
+            return False
+        
+        self.session.delete(season)
+        self.session.commit()
+        return True
     
     def close(self) -> None:
         """

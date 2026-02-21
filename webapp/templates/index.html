@@ -17,6 +17,11 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin=""></script>
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"
+            crossorigin="anonymous"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -34,6 +39,10 @@
                 <li class="nav-item" data-page="teams">
                     <i class="bi bi-people-fill"></i>
                     <span>Squadre</span>
+                </li>
+                <li class="nav-item" data-page="categories">
+                    <i class="bi bi-tags-fill"></i>
+                    <span>Categorie</span>
                 </li>
                 <li class="nav-item" data-page="athletes">
                     <i class="bi bi-person-circle"></i>
@@ -89,6 +98,7 @@
     <!-- Core Scripts -->
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/api.js"></script>
+    <script src="/static/js/omnipd.js"></script>
     
     <!-- Races Module Scripts -->
     <script src="/static/modules/races/frontend/js/races-main.js"></script>
@@ -100,6 +110,7 @@
     
     <!-- Other Module Scripts -->
     <script src="/static/js/teams.js"></script>
+    <script src="/static/js/categories.js"></script>
     <script src="/static/js/athletes.js"></script>
     <script src="/static/js/activities.js"></script>
     <script src="/static/js/wellness.js"></script>

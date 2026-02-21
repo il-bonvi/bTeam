@@ -111,6 +111,14 @@ function createModal(title, content, actions = [], modalClass = '') {
     return modal;
 }
 
+// Close modal dialog
+function closeModal() {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
 // Confirm dialog
 window._pendingConfirmCallback = null;
 

@@ -1,84 +1,84 @@
 /**
- * Teams Module - Frontend
- * Multi-team dashboard with team detail views
+ * Categories Module - Frontend
+ * Multi-category dashboard with category detail views
  */
 
 // Global state
-window.currentTeamView = null; // null = dashboard, number = team ID
+window.currentCategoryView = null; // null = dashboard, number = category ID
 
-window.renderTeamsPage = async function() {
+window.renderCategoriesPage = async function() {
     const contentArea = document.getElementById('content-area');
     
-    console.log('[TEAMS] renderTeamsPage started. currentTeamView:', window.currentTeamView);
+    console.log('[CATEGORIES] renderCategoriesPage started. currentCategoryView:', window.currentCategoryView);
     
     try {
         showLoading();
-        const teams = await api.getTeams();
+        const categories = await api.getCategories();
         
-        console.log('[TEAMS] Loaded', teams.length, 'teams');
+        console.log('[CATEGORIES] Loaded', categories.length, 'categories');
         
         // Store globally
-        window.allTeams = teams;
+        window.allCategories = categories;
         
         // Render based on current view
-        if (window.currentTeamView === null) {
-            console.log('[TEAMS] Rendering dashboard view');
-            await renderTeamsDashboard(teams, contentArea);
+        if (window.currentCategoryView === null) {
+            console.log('[CATEGORIES] Rendering dashboard view');
+            await renderCategoriesDashboard(categories, contentArea);
         } else {
-            console.log('[TEAMS] Rendering detail view for team', window.currentTeamView);
-            renderTeamDetail(window.currentTeamView, teams, contentArea);
+            console.log('[CATEGORIES] Rendering detail view for category', window.currentCategoryView);
+            renderCategoryDetail(window.currentCategoryView, categories, contentArea);
         }
         
     } catch (error) {
-        console.error('[TEAMS] Error:', error);
-        showToast('Errore nel caricamento delle squadre', 'error');
+        console.error('[CATEGORIES] Error:', error);
+        showToast('Errore nel caricamento delle categorie', 'error');
         console.error(error);
     } finally {
         hideLoading();
     }
 };
 
-async function renderTeamsDashboard(teams, contentArea) {
+async function renderCategoriesDashboard(categories, contentArea) {
     contentArea.innerHTML = `
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">📊 Dashboard Squadre</h3>
-                <button class="btn btn-primary" onclick="showCreateTeamDialog()">
-                    <i class="bi bi-plus"></i> Nuova Squadra
+                <h3 class="card-title">📊 Dashboard Categorie</h3>
+                <button class="btn btn-primary" onclick="showCreateCategoryDialog()">
+                    <i class="bi bi-plus"></i> Nuova Categoria
                 </button>
             </div>
             <div class="card-body">
-                <!-- Teams Grid -->
-                <div id="teams-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
-                    ${teams.map(team => `<div id="team-card-${team.id}" class="team-card-placeholder">Caricamento...</div>`).join('')}
+                <!-- Categories Grid -->
+                <div id="categories-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+                    ${categories.map(category => `<div id="category-card-${category.id}" class="team-card-placeholder">Caricamento...</div>`).join('')}
                 </div>
             </div>
         </div>
     `;
     
-    // Load member counts for each team
-    for (const team of teams) {
+    // Load member counts for each category
+    for (const category of categories) {
         try {
-            const athletes = await api.getAthletes(team.id);
-            const cardHtml = createTeamCard(team, athletes.length);
-            const placeholder = document.getElementById(`team-card-${team.id}`);
+            const athletes = await api.getAthletes(null, category.id);
+            const cardHtml = createCategoryCard(category, athletes.length);
+            const placeholder = document.getElementById(`category-card-${category.id}`);
             if (placeholder) {
                 placeholder.innerHTML = cardHtml;
             }
         } catch (err) {
-            console.warn(`Failed to load member count for team ${team.id}:`, err);
+            console.warn(`Failed to load member count for category ${category.id}:`, err);
         }
     }
 }
 
-function createTeamCard(team, memberCount = 0) {
-    const initials = team.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+function createCategoryCard(category, memberCount = 0) {
+    const initials = category.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
     const colors = ['#667eea', '#f093fb', '#4facfe', '#fa709a', '#43e97b', '#38f9d7'];
-    const colorIdx = team.id % colors.length;
+    const colorIdx = category.id % colors.length;
     const bgColor = colors[colorIdx];
     
     return `
-        <div onclick="showTeamDetail(${team.id})" style="
+        <div onclick="showCategoryDetail(${category.id})" style="
             cursor: pointer;
             background: white;
             border-radius: 12px;
@@ -101,7 +101,7 @@ function createTeamCard(team, memberCount = 0) {
                     font-size: 1.25rem;
                 ">${initials}</div>
                 <div>
-                    <div style="font-weight: 600; color: #333; font-size: 1.1rem;">${team.name}</div>
+                    <div style="font-weight: 600; color: #333; font-size: 1.1rem;">${category.name}</div>
                 </div>
             </div>
             <div style="border-top: 1px solid #eee; padding-top: 1rem;">
@@ -117,34 +117,34 @@ function createTeamCard(team, memberCount = 0) {
     `;
 }
 
-window.showTeamDetail = function(teamId) {
-    console.log('[TEAMS] Switching to detail view for team', teamId);
-    window.currentTeamView = teamId;
-    window.renderTeamsPage();
+window.showCategoryDetail = function(categoryId) {
+    console.log('[CATEGORIES] Switching to detail view for category', categoryId);
+    window.currentCategoryView = categoryId;
+    window.renderCategoriesPage();
 };
 
-window.backToTeamsDashboard = function() {
-    console.log('[TEAMS] Switching back to dashboard');
-    window.currentTeamView = null;
-    window.renderTeamsPage();
+window.backToCategoriesDashboard = function() {
+    console.log('[CATEGORIES] Switching back to dashboard');
+    window.currentCategoryView = null;
+    window.renderCategoriesPage();
 };
 
-async function renderTeamDetail(teamId, teams, contentArea) {
-    const team = teams.find(t => t.id === teamId);
-    if (!team) {
-        showToast('Squadra non trovata', 'error');
-        window.backToTeamsDashboard();
+async function renderCategoryDetail(categoryId, categories, contentArea) {
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) {
+        showToast('Categoria non trovata', 'error');
+        window.backToCategoriesDashboard();
         return;
     }
 
-    // Load team athletes
-    const athletes = await api.getAthletes(teamId);
+    // Load category athletes
+    const athletes = await api.getAthletes(null, categoryId);
     // Sort athletes alphabetically by last name
     athletes.sort((a, b) => a.last_name.localeCompare(b.last_name, 'it'));
     
     contentArea.innerHTML = `
         <div style="margin-bottom: 1.5rem;">
-            <button class="btn btn-secondary" onclick="backToTeamsDashboard()">
+            <button class="btn btn-secondary" onclick="backToCategoriesDashboard()">
                 <i class="bi bi-arrow-left"></i> Dashboard
             </button>
         </div>
@@ -152,18 +152,18 @@ async function renderTeamDetail(teamId, teams, contentArea) {
         <div class="card">
             <div class="card-header" style="background: white; border-left: 4px solid #667eea; display: flex; justify-content: space-between; align-items: center; padding-left: 1.5rem;">
                 <div style="padding-left: 0.75rem;">
-                    <h2 style="margin: 0; color: #333;">${team.name}</h2>
+                    <h2 style="margin: 0; color: #333;">${category.name}</h2>
                     <p style="margin: 0.5rem 0 0 0; color: #666; font-size: 0.9rem;">${athletes.length} membri</p>
                 </div>
-                <button class="btn btn-primary" onclick="editTeam(${teamId})" style="margin-left: 1rem;">
-                    <i class="bi bi-pencil"></i> Modifica Squadra
+                <button class="btn btn-primary" onclick="editCategory(${categoryId})" style="margin-left: 1rem;">
+                    <i class="bi bi-pencil"></i> Modifica Categoria
                 </button>
             </div>
             
             <!-- Date Range Filter -->
             <div style="padding: 1rem; background: #f0f4ff; border-bottom: 1px solid #ddd;">
                 <label style="display: inline-block; margin-right: 1rem; font-weight: 600;">📅 Filtra per Periodo:</label>
-                <select id="team-date-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
+                <select id="category-date-filter" style="padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
                     <option value="90days">Ultimi 90 giorni</option>
                     <option value="season_2026">Stagione 2026 (Nov 2025 - Ott 2026)</option>
                     <option value="season_2025">Stagione 2025 (Nov 2024 - Ott 2025)</option>
@@ -173,64 +173,64 @@ async function renderTeamDetail(teamId, teams, contentArea) {
             
             <!-- Tabs -->
             <div class="tabs" style="border-bottom: 1px solid #ddd; background: #f8f9fa; display: flex; gap: 0;">
-                <button class="tab-btn active" data-tab="overview" onclick="switchTeamTab('overview', ${teamId})">
+                <button class="tab-btn active" data-tab="overview" onclick="switchCategoryTab('overview', ${categoryId})">
                     📊 Overview
                 </button>
-                <button class="tab-btn" data-tab="members" onclick="switchTeamTab('members', ${teamId})">
+                <button class="tab-btn" data-tab="members" onclick="switchCategoryTab('members', ${categoryId})">
                     👥 Membri
                 </button>
-                <button class="tab-btn" data-tab="rankings" onclick="switchTeamTab('rankings', ${teamId})">
+                <button class="tab-btn" data-tab="rankings" onclick="switchCategoryTab('rankings', ${categoryId})">
                     🏆 Rankings
                 </button>
-                <button class="tab-btn" data-tab="comparison" onclick="switchTeamTab('comparison', ${teamId})">
+                <button class="tab-btn" data-tab="comparison" onclick="switchCategoryTab('comparison', ${categoryId})">
                     📈 Comparazione
                 </button>
             </div>
             
             <!-- Tab Content -->
-            <div id="team-tab-content" class="card-body" style="min-height: 400px;">
+            <div id="category-tab-content" class="card-body" style="min-height: 400px;">
                 <!-- Content will be loaded here -->
             </div>
         </div>
     `;
 
-    // Store team and athletes globally
-    window.currentTeam = team;
-    window.currentTeamAthletes = athletes;
-    window.currentTeamDateRange = { days: 90 }; // Default: last 90 days
+    // Store category and athletes globally
+    window.currentCategory = category;
+    window.currentCategoryAthletes = athletes;
+    window.currentCategoryDateRange = { days: 90 }; // Default: last 90 days
 
     // Add event listener to date filter
     setTimeout(() => {
-        const dateFilter = document.getElementById('team-date-filter');
+        const dateFilter = document.getElementById('category-date-filter');
         if (dateFilter) {
             dateFilter.addEventListener('change', (e) => {
                 const value = e.target.value;
                 if (value === '90days') {
-                    window.currentTeamDateRange = { days: 90 };
+                    window.currentCategoryDateRange = { days: 90 };
                 } else if (value === 'season_2026') {
-                    window.currentTeamDateRange = { season: 2026 };
+                    window.currentCategoryDateRange = { season: 2026 };
                 } else if (value === 'season_2025') {
-                    window.currentTeamDateRange = { season: 2025 };
+                    window.currentCategoryDateRange = { season: 2025 };
                 } else if (value === 'season_2024') {
-                    window.currentTeamDateRange = { season: 2024 };
+                    window.currentCategoryDateRange = { season: 2024 };
                 }
                 // Reload current tab with new date range
                 const activeTab = document.querySelector('.tab-btn.active');
                 if (activeTab) {
                     const tabName = activeTab.getAttribute('data-tab');
-                    switchTeamTab(tabName, teamId);
+                    switchCategoryTab(tabName, categoryId);
                 }
             });
         }
     }, 0);
 
     // Load default tab (overview)
-    switchTeamTab('overview', teamId);
+    switchCategoryTab('overview', categoryId);
 }
 
-window.switchTeamTab = function(tabName, teamId) {
+window.switchCategoryTab = function(tabName, categoryId) {
     // Track which tab is active to prevent race conditions
-    window.currentTeamActiveTab = tabName;
+    window.currentCategoryActiveTab = tabName;
     
     // Update active tab button
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -240,56 +240,56 @@ window.switchTeamTab = function(tabName, teamId) {
         }
     });
 
-    const tabContent = document.getElementById('team-tab-content');
-    const team = window.currentTeam;
-    const athletes = window.currentTeamAthletes;
+    const tabContent = document.getElementById('category-tab-content');
+    const category = window.currentCategory;
+    const athletes = window.currentCategoryAthletes;
 
     if (tabName === 'overview') {
-        renderTeamOverviewTab(teamId, team, athletes, tabContent);
+        renderCategoryOverviewTab(categoryId, category, athletes, tabContent);
     } else if (tabName === 'members') {
-        renderTeamMembersTab(teamId, team, athletes, tabContent);
+        renderCategoryMembersTab(categoryId, category, athletes, tabContent);
     } else if (tabName === 'rankings') {
-        renderTeamRankingsTab(teamId, team, athletes, tabContent);
+        renderCategoryRankingsTab(categoryId, category, athletes, tabContent);
     } else if (tabName === 'comparison') {
-        renderTeamComparisonTab(teamId, team, athletes, tabContent);
+        renderCategoryComparisonTab(categoryId, category, athletes, tabContent);
     }
 };
 
 // ========== OVERVIEW TAB ==========
 
-async function renderTeamOverviewTab(teamId, team, athletes, tabContent) {
+async function renderCategoryOverviewTab(categoryId, category, athletes, tabContent) {
     tabContent.innerHTML = `
         <div style="padding: 1.5rem;">
-            <h4>📊 Statistiche Squadra</h4>
+            <h4>📊 Statistiche Categoria</h4>
             <p style="color: #666;">Caricamento statistiche...</p>
         </div>
     `;
 
     // Get current date range from global filter
-    const dateRange = window.currentTeamDateRange || { days: 90 };
+    const dateRange = window.currentCategoryDateRange || { days: 90 };
 
     // Initialize cache if needed
-    if (!window.teamOverviewCache) {
-        window.teamOverviewCache = {};
+    if (!window.categoryOverviewCache) {
+        window.categoryOverviewCache = {};
     }
     
     // Create cache key
-    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    const cacheKey = `${categoryId}_${JSON.stringify(dateRange)}`;
     
     // Check if data is already cached with the same date range
     let stats;
-    if (window.teamOverviewCache[cacheKey]) {
-        console.log('[TEAMS] Using cached overview data for team', teamId);
-        stats = window.teamOverviewCache[cacheKey];
+    if (window.categoryOverviewCache[cacheKey]) {
+        console.log('[CATEGORIES] Using cached overview data for category', categoryId);
+        stats = window.categoryOverviewCache[cacheKey];
     } else {
-        console.log('[TEAMS] Loading fresh overview data for team', teamId);
-        stats = await calculateTeamStatistics(athletes, dateRange);
+        console.log('[CATEGORIES] Loading fresh overview data for category', categoryId);
+        stats = await calculateCategoryStatistics(athletes, dateRange);
         // Cache the loaded data
-        window.teamOverviewCache[cacheKey] = stats;
+        window.categoryOverviewCache[cacheKey] = stats;
     }
 
     // Check if this tab is still active - prevent race condition
-    if (window.currentTeamActiveTab !== 'overview') {
+    if (window.currentCategoryActiveTab !== 'overview') {
         return;
     }
 
@@ -354,11 +354,11 @@ async function renderTeamOverviewTab(teamId, team, athletes, tabContent) {
 
 // ========== MEMBERS TAB ==========
 
-async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
+async function renderCategoryMembersTab(categoryId, category, athletes, tabContent) {
     if (athletes.length === 0) {
         tabContent.innerHTML = `
             <div style="padding: 2rem; text-align: center;">
-                <p style="color: #666;">Nessun membro in questa squadra</p>
+                <p style="color: #666;">Nessun membro in questa categoria</p>
             </div>
         `;
         return;
@@ -367,30 +367,30 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
     // Show loading state
     tabContent.innerHTML = `
         <div style="padding: 1.5rem;">
-            <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
+            <h4 style="margin-bottom: 1rem;">👥 Membri della Categoria</h4>
             <div style="text-align: center; color: #666;">Caricamento dati calcolati...</div>
         </div>
     `;
 
     // Get current date range from global filter
-    const dateRange = window.currentTeamDateRange || { days: 90 };
-    const { dateStr90, todayStr } = getNormalizedDateRange(dateRange);
+    const dateRange = window.currentCategoryDateRange || { days: 90 };
+    const { dateStr90, todayStr } = getCategoryNormalizedDateRange(dateRange);
     
     // Initialize cache if needed
-    if (!window.teamMembersCache) {
-        window.teamMembersCache = {};
+    if (!window.categoryMembersCache) {
+        window.categoryMembersCache = {};
     }
     
     // Create cache key
-    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    const cacheKey = `${categoryId}_${JSON.stringify(dateRange)}`;
     
     // Check if data is already cached with the same date range
     let athletesWithStats;
-    if (window.teamMembersCache[cacheKey]) {
-        console.log('[TEAMS] Using cached members data for team', teamId);
-        athletesWithStats = window.teamMembersCache[cacheKey];
+    if (window.categoryMembersCache[cacheKey]) {
+        console.log('[CATEGORIES] Using cached members data for category', categoryId);
+        athletesWithStats = window.categoryMembersCache[cacheKey];
     } else {
-        console.log('[TEAMS] Loading fresh members data for team', teamId);
+        console.log('[CATEGORIES] Loading fresh members data for category', categoryId);
         // Load calculated statistics for each athlete
         athletesWithStats = await Promise.all(athletes.map(async (athlete) => {
             const stats = { ...athlete, eCP: null, eWPrime: null, Pmax: null };
@@ -436,22 +436,21 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
         }));
         
         // Cache the loaded data
-        window.teamMembersCache[cacheKey] = athletesWithStats;
+        window.categoryMembersCache[cacheKey] = athletesWithStats;
     }
 
     // Check if this tab is still active - prevent race condition
-    if (window.currentTeamActiveTab !== 'members') {
+    if (window.currentCategoryActiveTab !== 'members') {
         return;
     }
     
-    // Initialize sorting state
-    if (!window.teamMembersSortState) {
-        window.teamMembersSortState = { field: 'name', direction: 'asc' };
+    // Initialize sorting state for categories
+    if (!window.categoryMembersSortState) {
+        window.categoryMembersSortState = { field: 'name', direction: 'asc' };
     }
     
     // Function to render members table with sorting
-    const renderMembersTable = (athletes, sortState) => {
-        // Sort athletes based on current sort state
+    const renderCatMembersTable = (athletes, sortState) => {
         const sortedAthletes = [...athletes];
         sortedAthletes.sort((a, b) => {
             let aVal, bVal;
@@ -507,56 +506,53 @@ async function renderTeamMembersTab(teamId, team, athletes, tabContent) {
                 return sortState.direction === 'asc' ? aVal - bVal : bVal - aVal;
             }
         });
-        
         return sortedAthletes;
     };
     
-    // Function to get sort indicator
-    const getSortIndicator = (field) => {
-        if (window.teamMembersSortState.field !== field) return '';
-        return window.teamMembersSortState.direction === 'asc' ? ' ↑' : ' ↓';
+    const getCatSortIndicator = (field) => {
+        if (window.categoryMembersSortState.field !== field) return '';
+        return window.categoryMembersSortState.direction === 'asc' ? ' ↑' : ' ↓';
     };
     
-    // Function to handle column click
-    window.sortTeamMembers = (field) => {
-        if (window.teamMembersSortState.field === field) {
-            window.teamMembersSortState.direction = window.teamMembersSortState.direction === 'asc' ? 'desc' : 'asc';
+    window.sortCategoryMembers = (field) => {
+        if (window.categoryMembersSortState.field === field) {
+            window.categoryMembersSortState.direction = window.categoryMembersSortState.direction === 'asc' ? 'desc' : 'asc';
         } else {
-            window.teamMembersSortState.field = field;
-            window.teamMembersSortState.direction = 'asc';
+            window.categoryMembersSortState.field = field;
+            window.categoryMembersSortState.direction = 'asc';
         }
         // Re-render with cached data, don't refetch
-        renderMembersTableOnly(teamId, window.currentTeam, window.currentTeamAthletes, tabContent, athletesWithStats, window.teamMembersSortState);
+        renderCatMembersTableOnly(categoryId, window.currentCategory, window.currentCategoryAthletes, tabContent, athletesWithStats, window.categoryMembersSortState);
     };
 
     let html = `
         <div style="padding: 1.5rem;">
-            <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
+            <h4 style="margin-bottom: 1rem;">👥 Membri della Categoria</h4>
             <div style="background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: #f8f9fa;">
                         <tr>
-                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('name')">Atleta${getSortIndicator('name')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('weight')">Peso (kg)${getSortIndicator('weight')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp')">CP (W)${getSortIndicator('cp')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp_kg')">CP (W/kg)${getSortIndicator('cp_kg')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp')">CP calc (W)${getSortIndicator('ecp')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp_kg')">CP calc (W/kg)${getSortIndicator('ecp_kg')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('wprime')">W' (J)${getSortIndicator('wprime')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ewprime')">W' calc (J)${getSortIndicator('ewprime')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortTeamMembers('power5s')">Power 5s (W)${getSortIndicator('power5s')}</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortTeamMembers('power5s_kg')">5s W/kg${getSortIndicator('power5s_kg')}</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortCategoryMembers('name')">Atleta${getCatSortIndicator('name')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortCategoryMembers('weight')">Peso (kg)${getCatSortIndicator('weight')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('cp')">CP (W)${getCatSortIndicator('cp')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('cp_kg')">CP (W/kg)${getCatSortIndicator('cp_kg')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ecp')">CP calc (W)${getCatSortIndicator('ecp')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ecp_kg')">CP calc (W/kg)${getCatSortIndicator('ecp_kg')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('wprime')">W' (J)${getCatSortIndicator('wprime')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ewprime')">W' calc (J)${getCatSortIndicator('ewprime')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortCategoryMembers('power5s')">Power 5s (W)${getCatSortIndicator('power5s')}</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortCategoryMembers('power5s_kg')">5s W/kg${getCatSortIndicator('power5s_kg')}</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Azioni</th>
                         </tr>
                     </thead>
                     <tbody>`;
     
     // Render the table with cached data
-    renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWithStats, window.teamMembersSortState);
+    renderCatMembersTableOnly(categoryId, category, athletes, tabContent, athletesWithStats, window.categoryMembersSortState);
 }
 
 // Separate function to render table only, without fetching data
-function renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWithStats, sortState) {
+function renderCatMembersTableOnly(categoryId, category, athletes, tabContent, athletesWithStats, sortState) {
     // Sort athletes based on current sort state
     const sortedAthletes = [...athletesWithStats];
     sortedAthletes.sort((a, b) => {
@@ -616,21 +612,21 @@ function renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWith
 
     let html = `
         <div style="padding: 1.5rem;">
-            <h4 style="margin-bottom: 1rem;">👥 Membri della Squadra</h4>
+            <h4 style="margin-bottom: 1rem;">👥 Membri della Categoria</h4>
             <div style="background: white; border-radius: 8px; overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="background: #f8f9fa;">
                         <tr>
-                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('name')">Atleta</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortTeamMembers('weight')">Peso (kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp')">CP (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('cp_kg')">CP (W/kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp')">CP calc (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ecp_kg')">CP calc (W/kg)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortTeamMembers('wprime')">W' (J)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortTeamMembers('ewprime')">W' calc (J)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortTeamMembers('power5s')">Power 5s (W)</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortTeamMembers('power5s_kg')">5s W/kg</th>
+                            <th style="padding: 1rem; text-align: left; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortCategoryMembers('name')">Atleta</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" onclick="sortCategoryMembers('weight')">Peso (kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('cp')">CP (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('cp_kg')">CP (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ecp')">CP calc (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ecp_kg')">CP calc (W/kg)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Valore impostato manualmente" onclick="sortCategoryMembers('wprime')">W' (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Calcolato dal modello OmniPD" onclick="sortCategoryMembers('ewprime')">W' calc (J)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi" onclick="sortCategoryMembers('power5s')">Power 5s (W)</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; cursor: pointer;" title="Power a 5 secondi per kg" onclick="sortCategoryMembers('power5s_kg')">5s W/kg</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">Azioni</th>
                         </tr>
                     </thead>
@@ -678,7 +674,7 @@ function renderMembersTableOnly(teamId, team, athletes, tabContent, athletesWith
 
 // ========== RANKINGS TAB ==========
 
-async function renderTeamRankingsTab(teamId, team, athletes, tabContent) {
+async function renderCategoryRankingsTab(categoryId, category, athletes, tabContent) {
     tabContent.innerHTML = `
         <div style="padding: 2rem; text-align: center;">
             <div class="spinner" style="margin: 2rem auto;"></div>
@@ -699,39 +695,39 @@ async function renderTeamRankingsTab(teamId, team, athletes, tabContent) {
     }
 
     // Get current date range from global filter
-    const dateRange = window.currentTeamDateRange || { days: 90 };
+    const dateRange = window.currentCategoryDateRange || { days: 90 };
 
     // Initialize cache if needed
-    if (!window.teamRankingsCache) {
-        window.teamRankingsCache = {};
+    if (!window.categoryRankingsCache) {
+        window.categoryRankingsCache = {};
     }
     
     // Create cache key
-    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    const cacheKey = `${categoryId}_${JSON.stringify(dateRange)}`;
     
     // Check if data is already cached with the same date range
     let rankings;
-    if (window.teamRankingsCache[cacheKey]) {
-        console.log('[TEAMS] Using cached rankings data for team', teamId);
-        rankings = window.teamRankingsCache[cacheKey];
+    if (window.categoryRankingsCache[cacheKey]) {
+        console.log('[CATEGORIES] Using cached rankings data for category', categoryId);
+        rankings = window.categoryRankingsCache[cacheKey];
     } else {
-        console.log('[TEAMS] Loading fresh rankings data for team', teamId);
-        rankings = await calculateTeamRankings(athletesWithKeys, dateRange);
+        console.log('[CATEGORIES] Loading fresh rankings data for category', categoryId);
+        rankings = await calculateCategoryRankings(athletesWithKeys, dateRange);
         // Cache the loaded data
-        window.teamRankingsCache[cacheKey] = rankings;
+        window.categoryRankingsCache[cacheKey] = rankings;
     }
 
     // Check if this tab is still active - prevent race condition
-    if (window.currentTeamActiveTab !== 'rankings') {
+    if (window.currentCategoryActiveTab !== 'rankings') {
         return;
     }
 
-    renderRankingsTable(rankings, tabContent);
+    renderCategoryRankingsTable(rankings, tabContent);
 }
 
 // ========== COMPARISON TAB ==========
 
-async function renderTeamComparisonTab(teamId, team, athletes, tabContent) {
+async function renderCategoryComparisonTab(categoryId, category, athletes, tabContent) {
     tabContent.innerHTML = `
         <div style="padding: 2rem; text-align: center;">
             <div class="spinner" style="margin: 2rem auto;"></div>
@@ -751,34 +747,34 @@ async function renderTeamComparisonTab(teamId, team, athletes, tabContent) {
     }
 
     // Get current date range from global filter
-    const dateRange = window.currentTeamDateRange || { days: 90 };
+    const dateRange = window.currentCategoryDateRange || { days: 90 };
 
     // Initialize cache if needed
-    if (!window.teamComparisonCache) {
-        window.teamComparisonCache = {};
+    if (!window.categoryComparisonCache) {
+        window.categoryComparisonCache = {};
     }
     
     // Create cache key
-    const cacheKey = `${teamId}_${JSON.stringify(dateRange)}`;
+    const cacheKey = `${categoryId}_${JSON.stringify(dateRange)}`;
     
     // Check if data is already cached with the same date range
     let powerCurves;
-    if (window.teamComparisonCache[cacheKey]) {
-        console.log('[TEAMS] Using cached comparison data for team', teamId);
-        powerCurves = window.teamComparisonCache[cacheKey];
+    if (window.categoryComparisonCache[cacheKey]) {
+        console.log('[CATEGORIES] Using cached comparison data for category', categoryId);
+        powerCurves = window.categoryComparisonCache[cacheKey];
     } else {
-        console.log('[TEAMS] Loading fresh comparison data for team', teamId);
-        powerCurves = await fetchAllPowerCurves(athletesWithKeys, dateRange);
+        console.log('[CATEGORIES] Loading fresh comparison data for category', categoryId);
+        powerCurves = await fetchAllCategoryPowerCurves(athletesWithKeys, dateRange);
         // Cache the loaded data
-        window.teamComparisonCache[cacheKey] = powerCurves;
+        window.categoryComparisonCache[cacheKey] = powerCurves;
     }
 
     // Check if this tab is still active - prevent race condition
-    if (window.currentTeamActiveTab !== 'comparison') {
+    if (window.currentCategoryActiveTab !== 'comparison') {
         return;
     }
 
-    renderPowerCurvesComparison(powerCurves, athletesWithKeys, tabContent);
+    renderCategoryPowerCurvesComparison(powerCurves, athletesWithKeys, tabContent);
 }
 
 // ========== HELPER FUNCTIONS ==========
@@ -795,7 +791,7 @@ window.navigateToAthlete = function(athleteId) {
 };
 
 // Helper function to normalize date range
-function getNormalizedDateRange(dateRangeOpt = { days: 90 }) {
+function getCategoryNormalizedDateRange(dateRangeOpt = { days: 90 }) {
     let dateStr90, todayStr;
     if (dateRangeOpt.days) {
         // Last N days
@@ -821,9 +817,9 @@ function getNormalizedDateRange(dateRangeOpt = { days: 90 }) {
     return { dateStr90, todayStr };
 }
 
-async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
+async function calculateCategoryStatistics(athletes, dateRangeOpt = { days: 90 }) {
     // Normalize date range using helper function
-    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
+    const { dateStr90, todayStr } = getCategoryNormalizedDateRange(dateRangeOpt);
     const withCP = athletes.filter(a => a.cp);
     const withWeight = athletes.filter(a => a.weight_kg);
 
@@ -996,7 +992,7 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
             color: '#ec4899',
             unit: ' W'
         }
-    ];
+    ]
 
     return {
         avgCP,
@@ -1014,8 +1010,8 @@ async function calculateTeamStatistics(athletes, dateRangeOpt = { days: 90 }) {
     };
 }
 
-async function calculateTeamRankings(athletes, dateRangeOpt = { days: 90 }) {
-    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
+async function calculateCategoryRankings(athletes, dateRangeOpt = { days: 90 }) {
+    const { dateStr90, todayStr } = getCategoryNormalizedDateRange(dateRangeOpt);
 
     const rankings = [];
 
@@ -1072,7 +1068,7 @@ async function calculateTeamRankings(athletes, dateRangeOpt = { days: 90 }) {
     return rankings;
 }
 
-function renderRankingsTable(rankings, tabContent) {
+function renderCategoryRankingsTable(rankings, tabContent) {
     const durations = [
         { key: 'mmp_1s', label: '1s', name: '1 secondo' },
         { key: 'mmp_5s', label: '5s', name: '5 secondi' },
@@ -1083,7 +1079,7 @@ function renderRankingsTable(rankings, tabContent) {
 
     let html = `
         <div style="padding: 1.5rem;">
-            <h4 style="margin-bottom: 1.5rem;">🏆 Rankings della Squadra</h4>
+            <h4 style="margin-bottom: 1.5rem;">🏆 Rankings della Categoria</h4>
     `;
 
     // Create ranking table for each duration
@@ -1152,8 +1148,8 @@ function renderRankingsTable(rankings, tabContent) {
     tabContent.innerHTML = html;
 }
 
-async function fetchAllPowerCurves(athletes, dateRangeOpt = { days: 90 }) {
-    const { dateStr90, todayStr } = getNormalizedDateRange(dateRangeOpt);
+async function fetchAllCategoryPowerCurves(athletes, dateRangeOpt = { days: 90 }) {
+    const { dateStr90, todayStr } = getCategoryNormalizedDateRange(dateRangeOpt);
 
     const powerCurves = [];
 
@@ -1177,7 +1173,7 @@ async function fetchAllPowerCurves(athletes, dateRangeOpt = { days: 90 }) {
     return powerCurves;
 }
 
-function renderPowerCurvesComparison(powerCurves, athletes, tabContent) {
+function renderCategoryPowerCurvesComparison(powerCurves, athletes, tabContent) {
     if (powerCurves.length === 0) {
         tabContent.innerHTML = `
             <div style="padding: 2rem; text-align: center;">
@@ -1193,12 +1189,12 @@ function renderPowerCurvesComparison(powerCurves, athletes, tabContent) {
             
             <div style="margin-bottom: 2rem;">
                 <h5 style="margin-bottom: 1rem;">Potenza Assoluta (W)</h5>
-                <div id="team-comparison-chart-absolute" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+                <div id="category-comparison-chart-absolute" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
             </div>
             
             <div>
                 <h5 style="margin-bottom: 1rem;">Potenza per Kg (W/kg)</h5>
-                <div id="team-comparison-chart-per-kg" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
+                <div id="category-comparison-chart-per-kg" style="width: 100%; height: 500px; background: white; border: 1px solid #e0e0e0; border-radius: 8px;"></div>
             </div>
         </div>
     `;
@@ -1206,10 +1202,10 @@ function renderPowerCurvesComparison(powerCurves, athletes, tabContent) {
     tabContent.innerHTML = html;
 
     // Render comparison charts
-    renderComparisonCharts(powerCurves);
+    renderCategoryComparisonCharts(powerCurves);
 }
 
-function renderComparisonCharts(powerCurves) {
+function renderCategoryComparisonCharts(powerCurves) {
     // Colors for each athlete
     const colors = ['#667eea', '#f093fb', '#4facfe', '#fa709a', '#43e97b', '#38f9d7', '#f6d365', '#fda085'];
 
@@ -1486,31 +1482,31 @@ function renderComparisonCharts(powerCurves) {
     };
 
     // Render charts
-    if (window.teamComparisonChartAbsolute) {
-        window.teamComparisonChartAbsolute.destroy();
+    if (window.categoryComparisonChartAbsolute) {
+        window.categoryComparisonChartAbsolute.destroy();
     }
-    if (window.teamComparisonChartPerKg) {
-        window.teamComparisonChartPerKg.destroy();
+    if (window.categoryComparisonChartPerKg) {
+        window.categoryComparisonChartPerKg.destroy();
     }
 
-    const chartAbsolute = new ApexCharts(document.querySelector("#team-comparison-chart-absolute"), optionsAbsolute);
+    const chartAbsolute = new ApexCharts(document.querySelector("#category-comparison-chart-absolute"), optionsAbsolute);
     chartAbsolute.render();
-    window.teamComparisonChartAbsolute = chartAbsolute;
+    window.categoryComparisonChartAbsolute = chartAbsolute;
 
-    const chartPerKg = new ApexCharts(document.querySelector("#team-comparison-chart-per-kg"), optionsPerKg);
+    const chartPerKg = new ApexCharts(document.querySelector("#category-comparison-chart-per-kg"), optionsPerKg);
     chartPerKg.render();
-    window.teamComparisonChartPerKg = chartPerKg;
+    window.categoryComparisonChartPerKg = chartPerKg;
 }
 
 // ========== CRUD OPERATIONS ==========
 
-window.showCreateTeamDialog = function() {
+window.showCreateCategoryDialog = function() {
     createModal(
-        'Nuova Squadra',
+        'Nuova Categoria',
         `
         <div class="form-group">
-            <label class="form-label">Nome Squadra</label>
-            <input type="text" id="team-name" class="form-input" placeholder="Es. Team Pro" required>
+            <label class="form-label">Nome Categoria</label>
+            <input type="text" id="category-name" class="form-input" placeholder="Es. U23" required>
         </div>
         `,
         [
@@ -1522,43 +1518,43 @@ window.showCreateTeamDialog = function() {
             {
                 label: 'Crea',
                 class: 'btn-primary',
-                onclick: 'createTeam()'
+                onclick: 'createCategory()'
             }
         ]
     );
 };
 
-window.createTeam = async function() {
-    const name = document.getElementById('team-name').value.trim();
+window.createCategory = async function() {
+    const name = document.getElementById('category-name').value.trim();
     
     if (!name) {
-        showToast('Inserisci un nome per la squadra', 'warning');
+        showToast('Inserisci un nome per la categoria', 'warning');
         return;
     }
     
     try {
         showLoading();
-        await api.createTeam({ name });
-        showToast('Squadra creata con successo', 'success');
+        await api.createCategory({ name });
+        showToast('Categoria creata con successo', 'success');
         document.querySelector('.modal-overlay').remove();
-        window.backToTeamsDashboard();
+        window.backToCategoriesDashboard();
     } catch (error) {
-        showToast('Errore nella creazione della squadra: ' + error.message, 'error');
+        showToast('Errore nella creazione della categoria: ' + error.message, 'error');
     } finally {
         hideLoading();
     }
 };
 
-window.editTeam = async function(teamId) {
+window.editCategory = async function(categoryId) {
     try {
-        const team = await api.getTeam(teamId);
+        const category = await api.getCategory(categoryId);
         
         createModal(
-            'Modifica Squadra',
+            'Modifica Categoria',
             `
             <div class="form-group">
-                <label class="form-label">Nome Squadra</label>
-                <input type="text" id="team-name-edit" class="form-input" value="${team.name}" required>
+                <label class="form-label">Nome Categoria</label>
+                <input type="text" id="category-name-edit" class="form-input" value="${category.name}" required>
             </div>
             `,
             [
@@ -1570,7 +1566,7 @@ window.editTeam = async function(teamId) {
                 {
                     label: 'Salva',
                     class: 'btn-primary',
-                    onclick: `updateTeam(${teamId})`
+                    onclick: `updateCategory(${categoryId})`
                 }
             ]
         );
@@ -1579,20 +1575,20 @@ window.editTeam = async function(teamId) {
     }
 };
 
-window.updateTeam = async function(teamId) {
-    const name = document.getElementById('team-name-edit').value.trim();
+window.updateCategory = async function(categoryId) {
+    const name = document.getElementById('category-name-edit').value.trim();
     
     if (!name) {
-        showToast('Inserisci un nome per la squadra', 'warning');
+        showToast('Inserisci un nome per la categoria', 'warning');
         return;
     }
     
     try {
         showLoading();
-        await api.updateTeam(teamId, { name });
-        showToast('Squadra aggiornata con successo', 'success');
+        await api.updateCategory(categoryId, { name });
+        showToast('Categoria aggiornata con successo', 'success');
         document.querySelector('.modal-overlay').remove();
-        window.renderTeamsPage();
+        window.renderCategoriesPage();
     } catch (error) {
         showToast('Errore nell\'aggiornamento: ' + error.message, 'error');
     } finally {
@@ -1600,10 +1596,10 @@ window.updateTeam = async function(teamId) {
     }
 };
 
-window.deleteTeamConfirm = function(teamId) {
+window.deleteCategoryConfirm = function(categoryId) {
     createModal(
         '⚠️ Conferma Eliminazione',
-        '<p>Sei sicuro di voler eliminare questa squadra? Questa azione non può essere annullata.</p>',
+        '<p>Sei sicuro di voler eliminare questa categoria? Questa azione non può essere annullata.</p>',
         [
             {
                 label: 'Annulla',
@@ -1611,21 +1607,21 @@ window.deleteTeamConfirm = function(teamId) {
                 onclick: 'this.closest(".modal-overlay").remove()'
             },
             {
-                label: 'Elimina Squadra',
+                label: 'Elimina Categoria',
                 class: 'btn-danger',
-                onclick: `deleteTeamExecute(${teamId})`
+                onclick: `deleteCategoryExecute(${categoryId})`
             }
         ]
     );
 };
 
-window.deleteTeamExecute = async function(teamId) {
+window.deleteCategoryExecute = async function(categoryId) {
     try {
         showLoading();
-        await api.deleteTeam(teamId);
-        showToast('Squadra eliminata con successo', 'success');
+        await api.deleteCategory(categoryId);
+        showToast('Categoria eliminata con successo', 'success');
         document.querySelector('.modal-overlay')?.remove();
-        window.backToTeamsDashboard();
+        window.backToCategoriesDashboard();
     } catch (error) {
         showToast('Errore nell\'eliminazione: ' + error.message, 'error');
     } finally {

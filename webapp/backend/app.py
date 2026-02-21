@@ -84,7 +84,8 @@ async def debug_test():
 
 # Import route modules
 from modules.teams.backend import teams_routes
-from modules.athletes.backend import athletes_routes
+from modules.categories.backend import categories_routes
+from modules.athletes.backend import athletes_routes, seasons_routes
 from modules.activities.backend import activities_routes
 from modules.races.backend import races_routes
 from modules.wellness.backend import wellness_routes
@@ -92,7 +93,9 @@ from modules.sync.backend import sync_routes
 
 # Include routers
 app.include_router(teams_routes.router, prefix="/api/teams", tags=["Teams"])
+app.include_router(categories_routes.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(athletes_routes.router, prefix="/api/athletes", tags=["Athletes"])
+app.include_router(seasons_routes.router, prefix="/api/athletes", tags=["Seasons"])
 app.include_router(activities_routes.router, prefix="/api/activities", tags=["Activities"])
 app.include_router(races_routes.router, prefix="/api/races", tags=["Races"])
 app.include_router(wellness_routes.router, prefix="/api/wellness", tags=["Wellness"])

@@ -90,9 +90,12 @@ class APIClient {
     }
 
     // Athletes
-    async getAthletes(teamId = null) {
-        const params = teamId ? `?team_id=${teamId}` : '';
-        return this.request(`/athletes/${params}`);
+    async getAthletes(teamId = null, categoryId = null) {
+        const params = new URLSearchParams();
+        if (teamId) params.append('team_id', teamId);
+        if (categoryId) params.append('category_id', categoryId);
+        const query = params.toString();
+        return this.request(`/athletes/${query ? `?${query}` : ''}`);
     }
 
     async getAthlete(id) {
@@ -116,6 +119,40 @@ class APIClient {
     async deleteAthlete(id) {
         return this.request(`/athletes/${id}`, {
             method: 'DELETE',
+        });
+    }
+
+    async getAthletePowerCurve(id, oldest = null, newest = null) {
+        let url = `/athletes/${id}/power-curve`;
+        const params = [];
+        if (oldest) params.push(`oldest=${oldest}`);
+        if (newest) params.push(`newest=${newest}`);
+        if (params.length > 0) url += `?${params.join('&')}`;
+        return this.request(url);
+    }
+
+    // Seasons
+    async getAthleteSeasons(athleteId) {
+        return this.request(`/athletes/${athleteId}/seasons`);
+    }
+
+    async createSeason(athleteId, data) {
+        return this.request(`/athletes/${athleteId}/seasons`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async updateSeason(seasonId, data) {
+        return this.request(`/athletes/seasons/${seasonId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async deleteSeason(seasonId) {
+        return this.request(`/athletes/seasons/${seasonId}`, {
+            method: 'DELETE'
         });
     }
 
@@ -257,13 +294,43 @@ class APIClient {
     }
 
     async syncAthleteMetrics(athleteId, apiKey) {
-        return this.request(`/sync/athlete-metrics?athlete_id=${athleteId}&api_key=${apiKey}`, {
+        return this.request(`/sync/athlete-metrics`, {
             method: 'POST',
+            body: JSON.stringify({ athlete_id: athleteId, api_key: apiKey }),
         });
     }
 
     async getPowerCurve(athleteId, apiKey, daysBack = 90) {
         return this.request(`/sync/power-curve/${athleteId}?api_key=${apiKey}&days_back=${daysBack}`);
+    }
+
+    // Categories
+    async getCategories() {
+        return this.request('/categories/');
+    }
+
+    async getCategory(id) {
+        return this.request(`/categories/${id}`);
+    }
+
+    async createCategory(data) {
+        return this.request('/categories/', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async updateCategory(id, data) {
+        return this.request(`/categories/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deleteCategory(id) {
+        return this.request(`/categories/${id}`, {
+            method: 'DELETE',
+        });
     }
 }
 
