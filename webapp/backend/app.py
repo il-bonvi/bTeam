@@ -26,6 +26,15 @@ sys.path.insert(0, webapp_dir)
 
 from shared.storage import get_storage
 
+# Import route modules
+from modules.teams import teams_routes
+from modules.categories import categories_routes
+from modules.athletes import athletes_routes, seasons_routes
+from modules.activities import activities_routes
+from modules.races import races_routes
+from modules.wellness import wellness_routes
+from modules.sync import sync_routes
+
 # Initialize FastAPI app
 app = FastAPI(
     title="bTeam API",
@@ -34,7 +43,7 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend
-# NOTE: In production change allow_origins to the actual server origin, e.g.:
+# NOTE: In production change allow_origins to the actual server origin, e.g.
 # allow_origins=["http://your-server-ip:8000", "https://your-domain.com"]
 app.add_middleware(
     CORSMiddleware,
@@ -71,15 +80,6 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "ok", "message": "bTeam API is running"}
 
-
-# Import route modules
-from modules.teams import teams_routes
-from modules.categories import categories_routes
-from modules.athletes import athletes_routes, seasons_routes
-from modules.activities import activities_routes
-from modules.races import races_routes
-from modules.wellness import wellness_routes
-from modules.sync import sync_routes
 
 # Include routers
 app.include_router(teams_routes.router, prefix="/api/teams", tags=["Teams"])

@@ -34,23 +34,18 @@ async def get_activities(
     limit: Optional[int] = Query(100, le=1000),
     is_race: Optional[bool] = None
 ):
-    """Get all activities with optional filters"""
-    activities = get_storage().list_activities()
-
-    if athlete_id:
-        activities = [a for a in activities if a['athlete_id'] == athlete_id]
-
-    if is_race is not None:
-        activities = [a for a in activities if a.get('is_race') == is_race]
-
-    return activities[:limit]
+    """Get activities with optional filters — filtering done at DB level"""
+    return get_storage().list_activities(
+        athlete_id=athlete_id,
+        is_race=is_race,
+        limit=limit or 100,
+    )
 
 
 @router.get("/athlete/{athlete_id}/stats")
 async def get_athlete_stats(athlete_id: int):
     """Get statistics for an athlete's activities"""
-    activities = get_storage().list_activities()
-    athlete_activities = [a for a in activities if a['athlete_id'] == athlete_id]
+    athlete_activities = get_storage().list_activities(athlete_id=athlete_id)
 
     if not athlete_activities:
         return {
@@ -87,7 +82,7 @@ async def create_activity(activity: ActivityCreate):
     """Create a new activity"""
     try:
         storage = get_storage()
-        activity_id, is_new = storage.add_activity(
+        activity_id, _ = storage.add_activity(
             athlete_id=activity.athlete_id,
             title=activity.title,
             activity_date=activity.activity_date,
@@ -95,7 +90,7 @@ async def create_activity(activity: ActivityCreate):
             duration_minutes=activity.duration_minutes,
             distance_km=activity.distance_km,
             tss=activity.tss,
-            source=activity.source or "",
+            source=activity.source or "manual",
             is_race=activity.is_race,
             avg_watts=activity.avg_watts,
             normalized_watts=activity.normalized_watts,
@@ -103,9 +98,11 @@ async def create_activity(activity: ActivityCreate):
             max_hr=activity.max_hr,
             training_load=activity.training_load,
             intensity=activity.intensity,
-            feel=activity.feel
+            feel=activity.feel,
         )
         return storage.get_activity(activity_id)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

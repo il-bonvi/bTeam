@@ -1047,20 +1047,42 @@ class BTeamStorage:
             _logger.error(f"Errore lettura attività: {e}")
             return None
 
-    def list_activities(self) -> List[Dict[str, str]]:
-        """List all activities with athlete names."""
+    def list_activities(
+        self,
+        athlete_id: Optional[int] = None,
+        is_race: Optional[bool] = None,
+        limit: int = 1000,
+    ) -> List[Dict[str, str]]:
+        """List activities with athlete names, with optional DB-level filtering.
+
+        Args:
+            athlete_id: se fornito, ritorna solo le attività di quell'atleta
+            is_race:    se fornito, filtra per is_race True/False
+            limit:      numero massimo di righe da restituire (default 1000)
+        """
         _logger.debug("[list_activities] Starting query")
-        activities = (
+        q = (
             self.session.query(Activity)
             .order_by(Activity.activity_date.desc(), Activity.created_at.desc())
-            .all()
         )
+        if athlete_id is not None:
+            q = q.filter(Activity.athlete_id == athlete_id)
+        if is_race is not None:
+            q = q.filter(Activity.is_race == is_race)
+        activities = q.limit(limit).all()
         _logger.info(f"[list_activities] Loaded {len(activities)} activities")
 
-        athlete_rows = self.session.query(Athlete.id, Athlete.first_name, Athlete.last_name).all()
+        # Build athlete name lookup solo per gli atleti presenti nei risultati,
+        # non per tutti gli atleti del DB.
+        athlete_ids = {a.athlete_id for a in activities}
+        athlete_rows = (
+            self.session.query(Athlete.id, Athlete.first_name, Athlete.last_name)
+            .filter(Athlete.id.in_(athlete_ids))
+            .all()
+        ) if athlete_ids else []
         athlete_lookup = {
-            athlete_id: f"{first_name} {last_name}"
-            for athlete_id, first_name, last_name in athlete_rows
+            aid: f"{first_name} {last_name}"
+            for aid, first_name, last_name in athlete_rows
         }
 
         result = []
@@ -1073,7 +1095,7 @@ class BTeamStorage:
                 )
             activity_dict["athlete_name"] = athlete_name
             result.append(activity_dict)
-        
+
         _logger.debug(f"[list_activities] Converted to dict, first activity athlete_name: {result[0].get('athlete_name') if result else 'N/A'}")
         return result
 
