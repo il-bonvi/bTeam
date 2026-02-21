@@ -39,20 +39,6 @@ class WellnessCreate(BaseModel):
     comments: Optional[str] = None
 
 
-def _find_wellness_by_id(wellness_id: int):
-    """
-    Helper: cerca un entry wellness per ID.
-    Scansiona tutti gli atleti cercando l'entry con l'ID dato.
-    """
-    storage = get_storage()
-    for athlete in storage.list_athletes():
-        athlete_id = int(athlete['id'])
-        for entry in storage.get_wellness(athlete_id, days_back=365):
-            if entry.get('id') == wellness_id:
-                return entry
-    return None
-
-
 @router.get("/")
 async def get_wellness(athlete_id: Optional[int] = None, days_back: int = 30):
     """Get wellness data, optionally filtered by athlete"""
@@ -78,7 +64,7 @@ async def get_latest_wellness(athlete_id: int):
 @router.get("/{wellness_id}")
 async def get_wellness_entry(wellness_id: int):
     """Get a specific wellness entry by ID"""
-    entry = _find_wellness_by_id(wellness_id)
+    entry = get_storage().get_wellness_by_id(wellness_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Wellness entry not found")
     return entry
@@ -136,11 +122,11 @@ async def create_wellness_entry(wellness: WellnessCreate):
 @router.put("/{wellness_id}")
 async def update_wellness_entry(wellness_id: int, wellness: WellnessCreate):
     """Update a wellness entry"""
-    if not _find_wellness_by_id(wellness_id):
+    storage = get_storage()
+    if not storage.get_wellness_by_id(wellness_id):
         raise HTTPException(status_code=404, detail="Wellness entry not found")
 
     try:
-        storage = get_storage()
         result = storage.add_wellness(
             athlete_id=wellness.athlete_id,
             wellness_date=wellness.wellness_date,
@@ -181,5 +167,13 @@ async def update_wellness_entry(wellness_id: int, wellness: WellnessCreate):
 
 @router.delete("/{wellness_id}")
 async def delete_wellness_entry(wellness_id: int):
-    """Delete a wellness entry (not yet implemented in storage)"""
-    raise HTTPException(status_code=501, detail="Delete wellness not implemented yet")
+    """Delete a wellness entry"""
+    storage = get_storage()
+    if not storage.get_wellness_by_id(wellness_id):
+        raise HTTPException(status_code=404, detail="Wellness entry not found")
+
+    try:
+        storage.delete_wellness(wellness_id)
+        return {"message": "Wellness entry deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

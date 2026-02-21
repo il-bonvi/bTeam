@@ -1432,6 +1432,25 @@ class BTeamStorage:
             Wellness.weight_kg.isnot(None)
         ).order_by(Wellness.wellness_date.desc()).first()
         return wellness.weight_kg if wellness else None
+    
+    def get_wellness_by_id(self, wellness_id: int) -> Optional[Dict]:
+        """Get a single wellness entry by its primary key ID."""
+        wellness = self.session.query(Wellness).filter(Wellness.id == wellness_id).first()
+        return wellness.to_dict() if wellness else None
+
+    def delete_wellness(self, wellness_id: int) -> bool:
+        """Delete a wellness entry by ID."""
+        try:
+            wellness = self.session.query(Wellness).filter(Wellness.id == wellness_id).first()
+            if not wellness:
+                return False
+            self.session.delete(wellness)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"[bTeam] Errore eliminazione wellness: {e}")
+            return False
 
     # ========== SEASONS ==========
 
