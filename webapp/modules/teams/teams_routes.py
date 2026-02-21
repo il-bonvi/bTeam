@@ -1,17 +1,12 @@
-﻿"""Teams API Routes"""
+"""Teams API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
-from pathlib import Path
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 router = APIRouter()
-
-# Get storage instance
-storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class TeamCreate(BaseModel):
@@ -27,14 +22,13 @@ class TeamResponse(BaseModel):
 @router.get("/", response_model=List[TeamResponse])
 async def get_teams():
     """Get all teams"""
-    teams = storage.list_teams()
-    return teams
+    return get_storage().list_teams()
 
 
 @router.get("/{team_id}", response_model=TeamResponse)
 async def get_team(team_id: int):
     """Get a specific team by ID"""
-    team = storage.get_team(team_id)
+    team = get_storage().get_team(team_id)
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     return team
@@ -44,15 +38,15 @@ async def get_team(team_id: int):
 async def create_team(team: TeamCreate):
     """Create a new team"""
     try:
+        storage = get_storage()
         team_id = storage.add_team(name=team.name)
-        # Retrieve the created team to return full object
-        from datetime import datetime
-        new_team = {
-            "id": team_id,
-            "name": team.name,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        # Recupera dal DB così created_at è quello reale
+        new_team = storage.get_team(team_id)
+        if not new_team:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created team")
         return new_team
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -60,21 +54,14 @@ async def create_team(team: TeamCreate):
 @router.put("/{team_id}", response_model=TeamResponse)
 async def update_team(team_id: int, team: TeamCreate):
     """Update an existing team"""
-    # Get teams and check if exists
-    teams = storage.list_teams()
-    existing_team = next((t for t in teams if t['id'] == team_id), None)
+    storage = get_storage()
+    existing_team = storage.get_team(team_id)
     if not existing_team:
         raise HTTPException(status_code=404, detail="Team not found")
-    
+
     try:
         storage.update_team(team_id, name=team.name)
-        # Return updated team
-        updated_team = {
-            "id": team_id,
-            "name": team.name,
-            "created_at": existing_team["created_at"]
-        }
-        return updated_team
+        return storage.get_team(team_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -82,11 +69,10 @@ async def update_team(team_id: int, team: TeamCreate):
 @router.delete("/{team_id}")
 async def delete_team(team_id: int):
     """Delete a team"""
-    teams = storage.list_teams()
-    existing_team = next((t for t in teams if t['id'] == team_id), None)
-    if not existing_team:
+    storage = get_storage()
+    if not storage.get_team(team_id):
         raise HTTPException(status_code=404, detail="Team not found")
-    
+
     try:
         storage.delete_team(team_id)
         return {"message": "Team deleted successfully"}

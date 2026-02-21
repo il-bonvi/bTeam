@@ -1513,3 +1513,16 @@ class BTeamStorage:
         """Context manager exit - ensures cleanup."""
         self.close()
         return False  # Don't suppress exceptions
+
+
+# Singleton accessor for shared storage
+_storage_instance = None
+
+def get_storage() -> "BTeamStorage":
+    global _storage_instance
+    if _storage_instance is None:
+        storage_dir = Path(__file__).resolve().parent.parent / "data"
+        storage_dir.mkdir(exist_ok=True)
+        _storage_instance = BTeamStorage(storage_dir)
+    return _storage_instance
+

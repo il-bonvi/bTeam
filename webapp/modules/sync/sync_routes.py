@@ -4,17 +4,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
 import logging
+from datetime import datetime, timedelta
 
 from shared.intervals.sync import IntervalsSyncService
 from shared.intervals.client import IntervalsAPIClient
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
-
-storage_dir = Path(__file__).parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class APIKeyRequest(BaseModel):
@@ -55,6 +53,8 @@ async def test_connection(request: APIKeyRequest):
             }
         else:
             raise HTTPException(status_code=401, detail="Connection failed")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Connection failed: {str(e)}")
 
@@ -63,6 +63,7 @@ async def test_connection(request: APIKeyRequest):
 async def sync_activities(request: SyncRequest):
     """Sync activities from Intervals.icu"""
     try:
+        storage = get_storage()
         sync_service = IntervalsSyncService(api_key=request.api_key)
 
         if not sync_service.is_connected():
@@ -104,7 +105,7 @@ async def sync_activities(request: SyncRequest):
                 else:
                     skipped_count += 1
             except Exception as e:
-                print(f"Error importing activity: {e}")
+                logger.warning(f"Error importing activity: {e}")
                 continue
 
         return {
@@ -114,6 +115,8 @@ async def sync_activities(request: SyncRequest):
             "skipped": skipped_count,
             "total": len(activities)
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -122,6 +125,7 @@ async def sync_activities(request: SyncRequest):
 async def sync_wellness(request: WellnessSyncRequest):
     """Sync wellness data from Intervals.icu"""
     try:
+        storage = get_storage()
         sync_service = IntervalsSyncService(api_key=request.api_key)
 
         if not sync_service.is_connected():
@@ -170,6 +174,7 @@ async def sync_wellness(request: WellnessSyncRequest):
                 )
                 imported_count += 1
             except Exception as e:
+                logger.warning(f"Error importing wellness entry: {e}")
                 continue
 
         return {
@@ -178,28 +183,150 @@ async def sync_wellness(request: WellnessSyncRequest):
             "imported": imported_count,
             "total_found": len(wellness_data)
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/debug/races")
-async def debug_list_races():
-    """Debug endpoint to list all races in database"""
+@router.post("/athlete-metrics")
+async def sync_athlete_metrics(request: SyncRequest):
+    """Sync athlete metrics (weight, FTP, W', height, eCP, eW', HR max, gender, birth_date) from Intervals.icu"""
     try:
-        from shared.storage import Race
-        races = storage.session.query(Race.id, Race.name, Race.race_date).all()
+        storage = get_storage()
+        api_key = request.api_key
+
+        if not api_key or not api_key.strip():
+            raise HTTPException(status_code=400, detail="API key non fornita per l'atleta")
+
+        logger.info(f"[SYNC] Starting athlete metrics sync for athlete_id={request.athlete_id}")
+
+        client = IntervalsAPIClient(api_key=api_key)
+
+        try:
+            athlete_data = client.get_athlete()
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Failed to connect to Intervals.icu: {str(e)}")
+
+        updates: dict = {}
+
+        # ===== Weight =====
+        weight = athlete_data.get('weight')
+        if weight:
+            try:
+                updates['weight_kg'] = float(weight)
+            except (ValueError, TypeError):
+                pass
+
+        # ===== Height (convert from meters to cm) =====
+        height = athlete_data.get('height')
+        if height:
+            try:
+                height_m = float(height)
+                if height_m > 0:
+                    updates['height_cm'] = height_m * 100
+            except (ValueError, TypeError):
+                pass
+
+        # ===== Power data from sportSettings (cycling sport settings) =====
+        sport_settings = athlete_data.get('sportSettings', [])
+        if sport_settings and len(sport_settings) > 0:
+            cycling_settings = sport_settings[0]  # First sport is cycling
+            
+            # FTP = Critical Power
+            ftp = cycling_settings.get('ftp')
+            if ftp:
+                try:
+                    updates['cp'] = float(ftp)
+                except (ValueError, TypeError):
+                    pass
+            
+            # W Prime (W')
+            w_prime = cycling_settings.get('w_prime')
+            if w_prime:
+                try:
+                    updates['w_prime'] = float(w_prime)
+                except (ValueError, TypeError):
+                    pass
+            
+            # Max heart rate
+            max_hr = cycling_settings.get('max_heartrate')
+            if max_hr:
+                try:
+                    updates['max_hr'] = float(max_hr)
+                except (ValueError, TypeError):
+                    pass
+            
+            # Estimated values from MMP Model (more accurate, calculated by Intervals)
+            mmp_model = cycling_settings.get('mmp_model', {})
+            if mmp_model:
+                # Estimated Critical Power
+                ecp = mmp_model.get('criticalPower')
+                if ecp:
+                    try:
+                        updates['ecp'] = float(ecp)
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Estimated W Prime
+                ew_prime = mmp_model.get('wPrime')
+                if ew_prime:
+                    try:
+                        updates['ew_prime'] = float(ew_prime)
+                    except (ValueError, TypeError):
+                        pass
+
+        # ===== Gender =====
+        gender_raw = (
+            athlete_data.get('gender') or
+            athlete_data.get('sex') or
+            athlete_data.get('athleteGender') or ''
+        )
+        if gender_raw:
+            # Map to Italian gender names (Maschile/Femminile) as stored in database
+            gender_map = {
+                'male': 'Maschile',
+                'female': 'Femminile',
+                'm': 'Maschile',
+                'f': 'Femminile',
+                '0': 'Maschile',
+                '1': 'Femminile',
+                'maschile': 'Maschile',
+                'femminile': 'Femminile'
+            }
+            updates['gender'] = gender_map.get(str(gender_raw).lower(), str(gender_raw))
+
+        # ===== Birth date =====
+        birth_date_raw = (
+            athlete_data.get('birthDate') or
+            athlete_data.get('dateOfBirth') or
+            athlete_data.get('birth_date') or ''
+        )
+        if birth_date_raw:
+            updates['birth_date'] = str(birth_date_raw)[:10]
+
+        if not updates:
+            return {"success": True, "message": "Nessun dato disponibile da sincronizzare", "synced_fields": {}}
+
+        storage.update_athlete(request.athlete_id, **updates)
+
         return {
-            "total": len(races),
-            "races": [{"id": r.id, "name": r.name, "date": r.race_date} for r in races]
+            "success": True,
+            "message": f"Sincronizzate {len(updates)} metriche",
+            "synced_fields": updates,
+            "updated_fields": list(updates.keys())
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/push-race")
 async def push_race(request: PushRaceRequest):
     """Push a race to Intervals.icu as a planned event"""
     try:
+        storage = get_storage()
         logger.info(f"[PUSH-RACE] race_id={request.race_id}, athlete_id={request.athlete_id}")
 
         race = storage.get_race(request.race_id)
@@ -212,41 +339,37 @@ async def push_race(request: PushRaceRequest):
 
         client = IntervalsAPIClient(api_key=request.api_key)
 
-        # Extract race data with defaults
         distance_km = race.get('distance_km') or 0
         elevation_m = race.get('elevation_m') or 0
         predicted_kj = race.get('predicted_kj') or 0
         category = race.get('category') or 'C'
         notes = race.get('notes') or ''
 
-        # Calculate duration
         predicted_duration = race.get('predicted_duration_minutes')
-        if predicted_duration:
-            duration_minutes = float(predicted_duration)
-        else:
-            duration_minutes = (distance_km / 38.5) * 60 if distance_km > 0 else 240
-
+        duration_minutes = float(predicted_duration) if predicted_duration else (
+            (distance_km / 38.5) * 60 if distance_km > 0 else 240
+        )
         duration_seconds = int(duration_minutes * 60)
 
-        # Build start/end dates
-        from datetime import datetime, timedelta
         start_date_local = f"{race['race_date']}T10:00:00"
         start_dt = datetime.fromisoformat(start_date_local)
         end_dt = start_dt + timedelta(seconds=duration_seconds)
         end_date_local = end_dt.isoformat()
 
-        # Map category A/B/C → RACE_A/RACE_B/RACE_C
         category_upper = str(category).upper()
         intervals_category = f"RACE_{category_upper}" if category_upper in ['A', 'B', 'C'] else "RACE_C"
 
-        def format_duration(minutes):
+        def format_duration(minutes: float) -> str:
             hours = int(minutes // 60)
             mins = int(minutes % 60)
             return f"{hours}h {mins}m"
 
-        # Build HTML description (same as OLDAPP)
-        race_description = f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
-        race_description += f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+        race_description = (
+            f'<div><b>{race["name"]}</b></div>'
+            f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
+            f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
+            f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+        )
 
         athlete_weight = athlete.get('weight_kg')
         if athlete_weight and predicted_kj > 0 and duration_minutes > 0:
@@ -266,7 +389,7 @@ async def push_race(request: PushRaceRequest):
         if notes:
             race_description += f'<div><b><span class="text-purple">Note</span>: {notes}</b></div>'
 
-        result = client.create_event(
+        event = client.create_event(
             athlete_id="0",
             category=intervals_category,
             start_date_local=start_date_local,
@@ -281,12 +404,27 @@ async def push_race(request: PushRaceRequest):
         return {
             "success": True,
             "message": "Race pushed to Intervals.icu successfully",
-            "event_id": result.get('id')
+            "event_id": event.get('id')
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/debug/races")
+async def debug_list_races():
+    """Debug endpoint to list all races in database"""
+    try:
+        from shared.storage import Race
+        storage = get_storage()
+        races = storage.session.query(Race.id, Race.name, Race.race_date).all()
+        return {
+            "total": len(races),
+            "races": [{"id": r.id, "name": r.name, "date": r.race_date} for r in races]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.get("/debug/athlete-data/{api_key}")
@@ -303,69 +441,3 @@ async def debug_athlete_data(api_key: str):
         }
     except Exception as e:
         return {"error": str(e)}
-
-
-@router.post("/athlete-metrics")
-async def sync_athlete_metrics(request: SyncRequest):
-    """Sync athlete metrics from Intervals.icu"""
-    try:
-        athlete_id = request.athlete_id
-        api_key = request.api_key
-
-        if not api_key or not api_key.strip():
-            raise HTTPException(status_code=400, detail="API key non fornita per l'atleta")
-
-        logger.info(f"[SYNC] Starting athlete metrics sync for athlete_id={athlete_id}")
-
-        client = IntervalsAPIClient(api_key=api_key)
-
-        try:
-            athlete_data = client.get_athlete()
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Failed to connect to Intervals.icu: {str(e)}")
-
-        updates = {}
-
-        weight = athlete_data.get('weight')
-        if weight:
-            updates['weight_kg'] = float(weight)
-
-        ftp = athlete_data.get('icu_ftp')
-        if ftp:
-            updates['cp'] = float(ftp)
-
-        max_hr = athlete_data.get('icu_hr_max')
-        if max_hr:
-            updates['max_hr'] = float(max_hr)
-
-        gender_raw = (
-            athlete_data.get('gender') or
-            athlete_data.get('sex') or
-            athlete_data.get('athleteGender') or ''
-        )
-        if gender_raw:
-            gender_map = {'male': 'M', 'female': 'F', 'm': 'M', 'f': 'F', '0': 'M', '1': 'F'}
-            updates['gender'] = gender_map.get(str(gender_raw).lower(), str(gender_raw))
-
-        birth_date_raw = (
-            athlete_data.get('birthDate') or
-            athlete_data.get('dateOfBirth') or
-            athlete_data.get('birth_date') or ''
-        )
-        if birth_date_raw:
-            updates['birth_date'] = str(birth_date_raw)[:10]
-
-        if not updates:
-            return {"success": True, "message": "No metrics to update", "updated_fields": []}
-
-        storage.update_athlete(athlete_id, **updates)
-
-        return {
-            "success": True,
-            "message": f"Updated {len(updates)} metrics",
-            "updated_fields": list(updates.keys())
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))

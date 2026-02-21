@@ -1,23 +1,19 @@
-﻿"""Athletes API Routes"""
+"""Athletes API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List, Dict
-from datetime import date, timedelta
+from typing import Optional
+from datetime import date
 from pathlib import Path
 import sys
-import os
 import logging
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class AthleteCreate(BaseModel):
@@ -52,7 +48,7 @@ class AthleteUpdate(BaseModel):
 @router.get("/")
 async def get_athletes(team_id: Optional[int] = None, category_id: Optional[int] = None):
     """Get all athletes, optionally filtered by team or category"""
-    athletes = storage.list_athletes()
+    athletes = get_storage().list_athletes()
     if team_id:
         athletes = [a for a in athletes if a.get('team_id') == team_id]
     if category_id:
@@ -64,6 +60,7 @@ async def get_athletes(team_id: Optional[int] = None, category_id: Optional[int]
 async def create_athlete(athlete: AthleteCreate):
     """Create a new athlete"""
     try:
+        storage = get_storage()
         athlete_id = storage.add_athlete(
             first_name=athlete.first_name,
             last_name=athlete.last_name,
@@ -74,15 +71,12 @@ async def create_athlete(athlete: AthleteCreate):
             kj_per_hour_per_kg=athlete.kj_per_hour_per_kg,
             api_key=athlete.api_key
         )
-        # Retrieve the created athlete
-        new_athlete = storage.get_athlete(athlete_id)
-        return new_athlete
+        return storage.get_athlete(athlete_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 # IMPORTANT: Specific routes must come BEFORE generic routes with path parameters!
-# This route must be before GET /{athlete_id} so it doesn't get matched as athlete_id="1/power-curve"
 
 @router.get("/{athlete_id}/power-curve")
 async def get_athlete_power_curve(
@@ -91,6 +85,7 @@ async def get_athlete_power_curve(
     newest: Optional[str] = None
 ):
     """Get power curve data from Intervals.icu for a specific athlete"""
+    storage = get_storage()
     athlete = storage.get_athlete(athlete_id)
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
@@ -99,7 +94,6 @@ async def get_athlete_power_curve(
         raise HTTPException(status_code=400, detail="API key not configured for this athlete")
 
     try:
-        # Ensure shared module is importable
         root_dir = Path(__file__).resolve().parent.parent.parent.parent
         if str(root_dir) not in sys.path:
             sys.path.insert(0, str(root_dir))
@@ -108,7 +102,6 @@ async def get_athlete_power_curve(
 
         client = IntervalsAPIClient(api_key=athlete['api_key'])
 
-        # Intervals.icu uses /power-curves{ext} for athlete curves
         params = {'type': 'Ride'}
         if oldest:
             if not newest:
@@ -127,47 +120,45 @@ async def get_athlete_power_curve(
             return {'secs': [], 'watts': []}
 
         first_curve = curves[0]
-        secs = first_curve.get('secs', [])
-        watts = first_curve.get('values', [])
-
-        return {'secs': secs, 'watts': watts}
+        return {
+            'secs': first_curve.get('secs', []),
+            'watts': first_curve.get('values', [])
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching power curve: {str(e)}")
-
-
-@router.put("/{athlete_id}")
-async def update_athlete(athlete_id: int, athlete: AthleteUpdate):
-    """Update an existing athlete"""
-    existing_athlete = storage.get_athlete(athlete_id)
-    if not existing_athlete:
-        raise HTTPException(status_code=404, detail="Athlete not found")
-
-    try:
-        update_data = {k: v for k, v in athlete.dict().items() if v is not None}
-        storage.update_athlete(athlete_id, **update_data)
-        # Return updated athlete
-        updated_athlete = storage.get_athlete(athlete_id)
-        return updated_athlete
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{athlete_id}")
 async def get_athlete(athlete_id: int):
     """Get a specific athlete by ID"""
-    athlete = storage.get_athlete(athlete_id)
+    athlete = get_storage().get_athlete(athlete_id)
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found")
     return athlete
 
 
+@router.put("/{athlete_id}")
+async def update_athlete(athlete_id: int, athlete: AthleteUpdate):
+    """Update an existing athlete"""
+    storage = get_storage()
+    if not storage.get_athlete(athlete_id):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    try:
+        update_data = {k: v for k, v in athlete.dict().items() if v is not None}
+        storage.update_athlete(athlete_id, **update_data)
+        return storage.get_athlete(athlete_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/{athlete_id}")
 async def delete_athlete(athlete_id: int):
     """Delete an athlete"""
-    existing_athlete = storage.get_athlete(athlete_id)
-    if not existing_athlete:
+    storage = get_storage()
+    if not storage.get_athlete(athlete_id):
         raise HTTPException(status_code=404, detail="Athlete not found")
-    
+
     try:
         storage.delete_athlete(athlete_id)
         return {"message": "Athlete deleted successfully"}

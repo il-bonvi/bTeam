@@ -1,17 +1,12 @@
-﻿"""Categories API Routes"""
+"""Categories API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
-from pathlib import Path
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 router = APIRouter()
-
-# Get storage instance
-storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class CategoryCreate(BaseModel):
@@ -27,14 +22,13 @@ class CategoryResponse(BaseModel):
 @router.get("/", response_model=List[CategoryResponse])
 async def get_categories():
     """Get all categories"""
-    categories = storage.list_categories()
-    return categories
+    return get_storage().list_categories()
 
 
 @router.get("/{category_id}", response_model=CategoryResponse)
 async def get_category(category_id: int):
     """Get a specific category by ID"""
-    category = storage.get_category(category_id)
+    category = get_storage().get_category(category_id)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return category
@@ -44,6 +38,7 @@ async def get_category(category_id: int):
 async def create_category(category: CategoryCreate):
     """Create a new category"""
     try:
+        storage = get_storage()
         category_id = storage.add_category(name=category.name)
         created_category = storage.get_category(category_id)
         if not created_category:
@@ -58,19 +53,13 @@ async def create_category(category: CategoryCreate):
 @router.put("/{category_id}", response_model=CategoryResponse)
 async def update_category(category_id: int, category: CategoryCreate):
     """Update an existing category"""
-    categories = storage.list_categories()
-    existing_category = next((c for c in categories if c['id'] == category_id), None)
-    if not existing_category:
+    storage = get_storage()
+    if not storage.get_category(category_id):
         raise HTTPException(status_code=404, detail="Category not found")
 
     try:
         storage.update_category(category_id, name=category.name)
-        updated_category = {
-            "id": category_id,
-            "name": category.name,
-            "created_at": existing_category["created_at"]
-        }
-        return updated_category
+        return storage.get_category(category_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -78,9 +67,8 @@ async def update_category(category_id: int, category: CategoryCreate):
 @router.delete("/{category_id}")
 async def delete_category(category_id: int):
     """Delete a category"""
-    categories = storage.list_categories()
-    existing_category = next((c for c in categories if c['id'] == category_id), None)
-    if not existing_category:
+    storage = get_storage()
+    if not storage.get_category(category_id):
         raise HTTPException(status_code=404, detail="Category not found")
 
     try:

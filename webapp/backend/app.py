@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 bTeam WebApp - Main Backend Application
 FastAPI-based REST API for cycling team management
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 webapp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, webapp_dir)
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -34,9 +34,11 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend
+# NOTE: In production change allow_origins to the actual server origin, e.g.:
+# allow_origins=["http://your-server-ip:8000", "https://your-domain.com"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,16 +52,9 @@ app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 modules_path = Path(__file__).parent.parent / "modules"
 app.mount("/modules", StaticFiles(directory=str(modules_path)), name="modules")
 
-# Initialize storage
-storage_dir = Path(__file__).parent.parent / "data"
-storage_dir.mkdir(exist_ok=True)
-storage = BTeamStorage(storage_dir)
-logger.info(f"[bTeam] Storage initialized at {storage_dir}")
-
-
-def get_db():
-    """Dependency for database session"""
-    return storage.session
+# Initialize singleton storage at startup
+storage = get_storage()
+logger.info(f"[bTeam] Storage initialized")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -75,12 +70,6 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "ok", "message": "bTeam API is running"}
-
-
-@app.get("/debug/test")
-async def debug_test():
-    """Test endpoint for debugging"""
-    return {"status": "ok", "message": "Test endpoint works"}
 
 
 # Import route modules

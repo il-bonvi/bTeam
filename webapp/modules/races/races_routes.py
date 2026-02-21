@@ -1,16 +1,12 @@
-﻿"""Races API Routes"""
+"""Races API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from pathlib import Path
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 router = APIRouter()
-
-storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class RaceCreate(BaseModel):
@@ -36,14 +32,13 @@ class RaceAthleteAdd(BaseModel):
 @router.get("/")
 async def get_races():
     """Get all races"""
-    races = storage.list_races()
-    return races
+    return get_storage().list_races()
 
 
 @router.get("/{race_id}")
 async def get_race(race_id: int):
     """Get a specific race by ID"""
-    race = storage.get_race(race_id)
+    race = get_storage().get_race(race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     return race
@@ -53,6 +48,7 @@ async def get_race(race_id: int):
 async def create_race(race: RaceCreate):
     """Create a new race"""
     try:
+        storage = get_storage()
         race_id = storage.add_race(
             name=race.name,
             race_date=race.race_date,
@@ -66,9 +62,7 @@ async def create_race(race: RaceCreate):
             route_file=race.route_file,
             notes=race.notes
         )
-        # Retrieve the created race
-        new_race = storage.get_race(race_id)
-        return new_race
+        return storage.get_race(race_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -76,10 +70,10 @@ async def create_race(race: RaceCreate):
 @router.put("/{race_id}")
 async def update_race(race_id: int, race: RaceCreate):
     """Update an existing race"""
-    existing_race = storage.get_race(race_id)
-    if not existing_race:
+    storage = get_storage()
+    if not storage.get_race(race_id):
         raise HTTPException(status_code=404, detail="Race not found")
-    
+
     try:
         storage.update_race(
             race_id=race_id,
@@ -95,9 +89,7 @@ async def update_race(race_id: int, race: RaceCreate):
             route_file=race.route_file,
             notes=race.notes
         )
-        # Retrieve the updated race
-        updated_race = storage.get_race(race_id)
-        return updated_race
+        return storage.get_race(race_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -105,10 +97,10 @@ async def update_race(race_id: int, race: RaceCreate):
 @router.delete("/{race_id}")
 async def delete_race(race_id: int):
     """Delete a race"""
-    existing_race = storage.get_race(race_id)
-    if not existing_race:
+    storage = get_storage()
+    if not storage.get_race(race_id):
         raise HTTPException(status_code=404, detail="Race not found")
-    
+
     try:
         storage.delete_race(race_id)
         return {"message": "Race deleted successfully"}
@@ -119,14 +111,12 @@ async def delete_race(race_id: int):
 @router.post("/{race_id}/athletes")
 async def add_athlete_to_race(race_id: int, athlete_data: RaceAthleteAdd):
     """Add an athlete to a race"""
-    race = storage.get_race(race_id)
-    if not race:
+    storage = get_storage()
+    if not storage.get_race(race_id):
         raise HTTPException(status_code=404, detail="Race not found")
-    
-    athlete = storage.get_athlete(athlete_data.athlete_id)
-    if not athlete:
+    if not storage.get_athlete(athlete_data.athlete_id):
         raise HTTPException(status_code=404, detail="Athlete not found")
-    
+
     try:
         storage.add_athlete_to_race(
             race_id=race_id,
@@ -143,7 +133,7 @@ async def add_athlete_to_race(race_id: int, athlete_data: RaceAthleteAdd):
 async def remove_athlete_from_race(race_id: int, athlete_id: int):
     """Remove an athlete from a race"""
     try:
-        storage.remove_athlete_from_race(race_id, athlete_id)
+        get_storage().remove_athlete_from_race(race_id, athlete_id)
         return {"message": "Athlete removed from race successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -152,8 +142,7 @@ async def remove_athlete_from_race(race_id: int, athlete_id: int):
 @router.get("/{race_id}/athletes")
 async def get_race_athletes(race_id: int):
     """Get all athletes for a race"""
-    race = storage.get_race(race_id)
+    race = get_storage().get_race(race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
-    
     return race.get('athletes', [])

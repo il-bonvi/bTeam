@@ -1,16 +1,12 @@
-﻿"""Activities API Routes"""
+"""Activities API Routes"""
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
-from pathlib import Path
 
-from shared.storage import BTeamStorage
+from shared.storage import get_storage
 
 router = APIRouter()
-
-storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
-storage = BTeamStorage(storage_dir)
 
 
 class ActivityCreate(BaseModel):
@@ -39,21 +35,48 @@ async def get_activities(
     is_race: Optional[bool] = None
 ):
     """Get all activities with optional filters"""
-    activities = storage.list_activities()
-    
+    activities = get_storage().list_activities()
+
     if athlete_id:
         activities = [a for a in activities if a['athlete_id'] == athlete_id]
-    
+
     if is_race is not None:
         activities = [a for a in activities if a.get('is_race') == is_race]
-    
+
     return activities[:limit]
+
+
+@router.get("/athlete/{athlete_id}/stats")
+async def get_athlete_stats(athlete_id: int):
+    """Get statistics for an athlete's activities"""
+    activities = get_storage().list_activities()
+    athlete_activities = [a for a in activities if a['athlete_id'] == athlete_id]
+
+    if not athlete_activities:
+        return {
+            "total_activities": 0,
+            "total_distance_km": 0,
+            "total_duration_hours": 0,
+            "avg_tss": 0
+        }
+
+    total_distance = sum(float(a.get('distance_km', 0) or 0) for a in athlete_activities)
+    total_duration = sum(float(a.get('duration_minutes', 0) or 0) for a in athlete_activities)
+    tss_values = [float(a.get('tss', 0) or 0) for a in athlete_activities if a.get('tss')]
+    avg_tss = sum(tss_values) / len(tss_values) if tss_values else 0
+
+    return {
+        "total_activities": len(athlete_activities),
+        "total_distance_km": round(total_distance, 2),
+        "total_duration_hours": round(total_duration / 60, 2),
+        "avg_tss": round(avg_tss, 2)
+    }
 
 
 @router.get("/{activity_id}")
 async def get_activity(activity_id: int):
     """Get a specific activity by ID"""
-    activity = storage.get_activity(activity_id)
+    activity = get_storage().get_activity(activity_id)
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
     return activity
@@ -63,6 +86,7 @@ async def get_activity(activity_id: int):
 async def create_activity(activity: ActivityCreate):
     """Create a new activity"""
     try:
+        storage = get_storage()
         activity_id, is_new = storage.add_activity(
             athlete_id=activity.athlete_id,
             title=activity.title,
@@ -71,7 +95,7 @@ async def create_activity(activity: ActivityCreate):
             duration_minutes=activity.duration_minutes,
             distance_km=activity.distance_km,
             tss=activity.tss,
-            source=activity.source,
+            source=activity.source or "",
             is_race=activity.is_race,
             avg_watts=activity.avg_watts,
             normalized_watts=activity.normalized_watts,
@@ -81,10 +105,7 @@ async def create_activity(activity: ActivityCreate):
             intensity=activity.intensity,
             feel=activity.feel
         )
-        
-        # Retrieve and return the activity (skip if already exists)
-        new_activity = storage.get_activity(activity_id)
-        return new_activity
+        return storage.get_activity(activity_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -92,39 +113,12 @@ async def create_activity(activity: ActivityCreate):
 @router.delete("/{activity_id}")
 async def delete_activity(activity_id: int):
     """Delete an activity"""
-    existing_activity = storage.get_activity(activity_id)
-    if not existing_activity:
+    storage = get_storage()
+    if not storage.get_activity(activity_id):
         raise HTTPException(status_code=404, detail="Activity not found")
-    
+
     try:
         storage.delete_activity(activity_id)
         return {"message": "Activity deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/athlete/{athlete_id}/stats")
-async def get_athlete_stats(athlete_id: int):
-    """Get statistics for an athlete's activities"""
-    activities = storage.list_activities()
-    athlete_activities = [a for a in activities if a['athlete_id'] == athlete_id]
-    
-    if not athlete_activities:
-        return {
-            "total_activities": 0,
-            "total_distance_km": 0,
-            "total_duration_hours": 0,
-            "avg_tss": 0
-        }
-    
-    total_distance = sum(a.get('distance_km', 0) or 0 for a in athlete_activities)
-    total_duration = sum(a.get('duration_minutes', 0) or 0 for a in athlete_activities)
-    tss_values = [a.get('tss', 0) or 0 for a in athlete_activities if a.get('tss')]
-    avg_tss = sum(tss_values) / len(tss_values) if tss_values else 0
-    
-    return {
-        "total_activities": len(athlete_activities),
-        "total_distance_km": round(total_distance, 2),
-        "total_duration_hours": round(total_duration / 60, 2),
-        "avg_tss": round(avg_tss, 2)
-    }
