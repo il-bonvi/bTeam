@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Dict, Optional
 
+# shared/ è dentro webapp/, quindi parent è webapp/ (dove sta il config)
 CONFIG_FILE = Path(__file__).resolve().parent.parent / "bteam_config.json"
 # Use cross-platform path: user home directory instead of Windows-specific drive
 DEFAULT_STORAGE_DIR = Path.home() / "bTeam"

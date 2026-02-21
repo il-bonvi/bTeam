@@ -1,4 +1,4 @@
-"""Activities API Routes"""
+﻿"""Activities API Routes"""
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).resolve().parent.parent.parent.parent / "data"
+storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 

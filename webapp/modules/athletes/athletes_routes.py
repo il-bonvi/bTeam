@@ -1,4 +1,4 @@
-"""Athletes API Routes"""
+﻿"""Athletes API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-storage_dir = Path(__file__).resolve().parent.parent.parent.parent / "data"
+storage_dir = Path(__file__).resolve().parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 

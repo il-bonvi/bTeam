@@ -1,4 +1,4 @@
-/**
+﻿/**
  * bTeam WebApp - Main Application
  */
 
@@ -215,7 +215,7 @@ async function loadDashboard() {
 async function loadTeams() {
     if (typeof window.renderTeamsPage !== 'function') {
         const script = document.createElement('script');
-        script.src = '/static/js/teams.js';
+        script.src = '/modules/teams/teams.js';
         document.body.appendChild(script);
         await new Promise(resolve => {
             script.onload = resolve;
@@ -230,7 +230,7 @@ async function loadTeams() {
 async function loadCategories() {
     if (typeof window.renderCategoriesPage !== 'function') {
         const script = document.createElement('script');
-        script.src = '/static/js/categories.js';
+        script.src = '/modules/categories/categories.js';
         document.body.appendChild(script);
         await new Promise(resolve => {
             script.onload = resolve;
@@ -244,7 +244,7 @@ async function loadCategories() {
 
 async function loadAthletes() {
     const script = document.createElement('script');
-    script.src = '/static/js/athletes.js';
+    script.src = '/modules/athletes/athletes.js';
     document.body.appendChild(script);
     
     await new Promise(resolve => {
@@ -258,7 +258,7 @@ async function loadAthletes() {
 
 async function loadActivities() {
     const script = document.createElement('script');
-    script.src = '/static/js/activities.js';
+    script.src = '/modules/activities/activities.js';
     document.body.appendChild(script);
     
     await new Promise(resolve => {
@@ -281,7 +281,7 @@ async function loadRaces() {
 
 async function loadWellness() {
     const script = document.createElement('script');
-    script.src = '/static/js/wellness.js';
+    script.src = '/modules/wellness/wellness.js';
     document.body.appendChild(script);
     
     await new Promise(resolve => {
@@ -295,7 +295,7 @@ async function loadWellness() {
 
 async function loadSync() {
     const script = document.createElement('script');
-    script.src = '/static/js/sync.js';
+    script.src = '/modules/sync/sync.js';
     document.body.appendChild(script);
     
     await new Promise(resolve => {
