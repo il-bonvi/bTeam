@@ -50,7 +50,7 @@ class Category(Base):
     name = Column(String(255), unique=True, nullable=False)
     created_at = Column(String(255), nullable=False)
 
-    athletes = relationship("Athlete", back_populates="category", cascade="all, delete-orphan")
+    athletes = relationship("Athlete", back_populates="category")
 
     def to_dict(self) -> Dict:
         return {"id": self.id, "name": self.name, "created_at": self.created_at}

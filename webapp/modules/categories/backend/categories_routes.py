@@ -45,13 +45,12 @@ async def create_category(category: CategoryCreate):
     """Create a new category"""
     try:
         category_id = storage.add_category(name=category.name)
-        from datetime import datetime
-        new_category = {
-            "id": category_id,
-            "name": category.name,
-            "created_at": datetime.utcnow().isoformat()
-        }
-        return new_category
+        created_category = storage.get_category(category_id)
+        if not created_category:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created category")
+        return created_category
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

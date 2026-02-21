@@ -213,13 +213,14 @@ async function loadDashboard() {
 
 // Load other pages from modules
 async function loadTeams() {
-    const script = document.createElement('script');
-    script.src = '/static/js/teams.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderTeamsPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/static/js/teams.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderTeamsPage === 'function') {
         window.renderTeamsPage();
@@ -227,13 +228,14 @@ async function loadTeams() {
 }
 
 async function loadCategories() {
-    const script = document.createElement('script');
-    script.src = '/static/js/categories.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderCategoriesPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/static/js/categories.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderCategoriesPage === 'function') {
         window.renderCategoriesPage();

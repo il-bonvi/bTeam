@@ -522,7 +522,7 @@ async function renderCategoryMembersTab(categoryId, category, athletes, tabConte
             window.categoryMembersSortState.direction = 'asc';
         }
         // Re-render with cached data, don't refetch
-        renderCatMembersTableOnly(window.currentCategoryId, window.currentCategory, window.currentCategoryAthletes, tabContent, athletesWithStats, window.categoryMembersSortState);
+        renderCatMembersTableOnly(categoryId, window.currentCategory, window.currentCategoryAthletes, tabContent, athletesWithStats, window.categoryMembersSortState);
     };
 
     let html = `
@@ -887,7 +887,7 @@ async function calculateCategoryStatistics(athletes, dateRangeOpt = { days: 90 }
                 withWPrimeCount++;
                 
                 if (athlete.weight_kg) {
-                    totalWPrimeKg += cpResult.w_prime_kg;
+                    totalWPrimeKg += parseFloat(cpResult.w_prime_kg);
                     withWPrimeKgCount++;
                 }
                 
@@ -899,7 +899,7 @@ async function calculateCategoryStatistics(athletes, dateRangeOpt = { days: 90 }
                 withCalcWPrimeCount++;
                 
                 if (athlete.weight_kg) {
-                    totalCalcWPrimeKg += cpResult.w_prime_kg;
+                    totalCalcWPrimeKg += parseFloat(cpResult.w_prime_kg);
                     withCalcWPrimeKgCount++;
                 }
                 
@@ -931,8 +931,8 @@ async function calculateCategoryStatistics(athletes, dateRangeOpt = { days: 90 }
                 }
                 
                 // Track max calculated CP
-                if (cpResult.CP > maxCalcCP) {
-                    maxCalcCP = cpResult.CP;
+                if (cpResult.cp > maxCalcCP) {
+                    maxCalcCP = cpResult.cp;
                     maxCalcCPAthlete = athlete;
                 }
                 
@@ -1537,55 +1537,7 @@ window.createCategory = async function() {
         await api.createCategory({ name });
         showToast('Categoria creata con successo', 'success');
         document.querySelector('.modal-overlay').remove();
-        window.renderCategoriesPage();
-    } catch (error) {
-        showToast('Errore nella creazione della categoria: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-};
-
-// ========== CRUD OPERATIONS ==========
-
-window.showCreateCategoryDialog = function() {
-    createModal(
-        'Nuova Categoria',
-        `
-        <div class="form-group">
-            <label class="form-label">Nome Categoria</label>
-            <input type="text" id="category-name" class="form-input" placeholder="Es. U23" required>
-        </div>
-        `,
-        [
-            {
-                label: 'Annulla',
-                class: 'btn-secondary',
-                onclick: 'this.closest(".modal-overlay").remove()'
-            },
-            {
-                label: 'Crea',
-                class: 'btn-primary',
-                onclick: 'createCategory()'
-            }
-        ]
-    );
-};
-
-window.createCategory = async function() {
-    const name = document.getElementById('category-name').value.trim();
-    
-    if (!name) {
-        showToast('Inserisci un nome per la categoria', 'warning');
-        return;
-    }
-    
-    try {
-        showLoading();
-        await api.createCategory({ name });
-        showToast('Categoria creata con successo', 'success');
-        document.querySelector('.modal-overlay').remove();
         window.backToCategoriesDashboard();
-        window.renderCategoriesPage();
     } catch (error) {
         showToast('Errore nella creazione della categoria: ' + error.message, 'error');
     } finally {
@@ -1670,7 +1622,6 @@ window.deleteCategoryExecute = async function(categoryId) {
         showToast('Categoria eliminata con successo', 'success');
         document.querySelector('.modal-overlay')?.remove();
         window.backToCategoriesDashboard();
-        window.renderCategoriesPage();
     } catch (error) {
         showToast('Errore nell\'eliminazione: ' + error.message, 'error');
     } finally {
