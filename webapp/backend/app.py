@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 bTeam WebApp - Main Backend Application
 FastAPI-based REST API for cycling team management
