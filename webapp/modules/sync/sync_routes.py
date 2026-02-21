@@ -1,18 +1,18 @@
-"""Intervals.icu Sync API Routes"""
+﻿"""Intervals.icu Sync API Routes"""
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.intervals.sync import IntervalsSyncService
 from shared.intervals.client import IntervalsAPIClient
 from shared.storage import BTeamStorage
 
 router = APIRouter()
 
-storage_dir = Path(__file__).parent.parent.parent.parent / "data"
+storage_dir = Path(__file__).parent.parent.parent / "data"
 storage = BTeamStorage(storage_dir)
 
 

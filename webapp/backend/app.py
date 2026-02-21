@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 bTeam WebApp - Main Backend Application
 FastAPI-based REST API for cycling team management
@@ -49,6 +49,10 @@ app.add_middleware(
 static_path = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+# Mount modules directory to serve frontend assets (JS, CSS) from each module
+modules_path = Path(__file__).parent.parent / "modules"
+app.mount("/modules", StaticFiles(directory=str(modules_path)), name="modules")
+
 # Initialize storage
 storage_dir = Path(__file__).parent.parent / "data"
 storage_dir.mkdir(exist_ok=True)
@@ -83,13 +87,13 @@ async def debug_test():
 
 
 # Import route modules
-from modules.teams.backend import teams_routes
-from modules.categories.backend import categories_routes
-from modules.athletes.backend import athletes_routes, seasons_routes
-from modules.activities.backend import activities_routes
-from modules.races.backend import races_routes
-from modules.wellness.backend import wellness_routes
-from modules.sync.backend import sync_routes
+from modules.teams import teams_routes
+from modules.categories import categories_routes
+from modules.athletes import athletes_routes, seasons_routes
+from modules.activities import activities_routes
+from modules.races import races_routes
+from modules.wellness import wellness_routes
+from modules.sync import sync_routes
 
 # Include routers
 app.include_router(teams_routes.router, prefix="/api/teams", tags=["Teams"])
