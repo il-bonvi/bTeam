@@ -146,10 +146,13 @@ function filterPowerCurveData(allTimes, allPowers, valuesPerWindow, minPercentil
         }
     }
 
-    // Define time windows: 2-minute intervals from 2-30 min, then 15-minute intervals to 90 min
+    // Define time windows: 2-minute intervals from 2-6 min, 3-min from 6-30m, then 15-minute intervals to 90 min
     const timeWindows = [];
-    for (let start = 120; start < 1800; start += 120) {
+    for (let start = 120; start < 360; start += 120) {
         timeWindows.push([start, start + 120]);
+    }
+    for (let start = 360; start < 1800; start += 180) {
+        timeWindows.push([start, start + 180]);
     }
     for (let start = 1800; start < 5400; start += 900) {
         timeWindows.push([start, start + 900]);
@@ -282,6 +285,7 @@ function calculateCPModel(durations, watts, weight = 1) {
     let currentPercentile = 100;  // Start from 100% and auto-search down
     let selectedTimes = [];
     let selectedPowers = [];
+    let forcedMediumPoint = false; // Track if fallback was used for medium range
     let forcedLongPoint = false; // Track if fallback was used
 
     // Auto-search for percentile
@@ -314,16 +318,20 @@ function calculateCPModel(durations, watts, weight = 1) {
             percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
         }
 
-        // Define time windows: 2-minute intervals up to 30 min, then 15-minute intervals to 90 min
+        // Define time windows: 2-minute intervals from 2-6 min, 3-min from 6-30m, then 15-minute intervals to 90 min
         const timeWindows = [];
-        for (let start = 120; start < 1800; start += 120) {
+        for (let start = 120; start < 360; start += 120) {
             timeWindows.push([start, start + 120]);
+        }
+        for (let start = 360; start < 1800; start += 180) {
+            timeWindows.push([start, start + 180]);
         }
         for (let start = 1800; start < 5400; start += 900) {
             timeWindows.push([start, start + 900]);
         }
 
         let selectedMask = new Array(durations.length).fill(false);
+        forcedMediumPoint = false; // Reset for each iteration
         forcedLongPoint = false; // Reset for each iteration
 
         // Select points from each window
@@ -366,6 +374,37 @@ function calculateCPModel(durations, watts, weight = 1) {
             selectedTimes.push(durations[sprintIdx]);
             selectedPowers.push(watts[sprintIdx]);
             selectedMask[sprintIdx] = true;
+        }
+
+        // CHECK: If no points in 2-6 min range (120-360s), add best point from that range
+        const hasMediumPoint = selectedTimes.some(t => t >= 120 && t <= 360);
+        if (!hasMediumPoint) {
+            let bestIdx = -1;
+            let bestResidual = -Infinity;
+            
+            // Find highest residual in 2-6 min range (120-360s)
+            for (let i = 0; i < durations.length; i++) {
+                if (durations[i] >= 120 && durations[i] <= 360 && !selectedMask[i]) {
+                    if (residuals[i] > bestResidual) {
+                        bestResidual = residuals[i];
+                        bestIdx = i;
+                    }
+                }
+            }
+            
+            if (bestIdx >= 0) {
+                selectedTimes.push(durations[bestIdx]);
+                selectedPowers.push(watts[bestIdx]);
+                selectedMask[bestIdx] = true;
+                
+                // Calculate the percentile of this forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                forcedMediumPoint = Math.round(forcedPointPercentile); // Store as percentile value
+            }
         }
 
         // CHECK: If no points > 600s, add best point from 10-30 min range
@@ -440,6 +479,7 @@ function calculateCPModel(durations, watts, weight = 1) {
         t_99: cpResult.t_99,
         usedPercentile: currentPercentile,
         pointsUsed: selectedTimes.length,
+        forcedMediumPoint: forcedMediumPoint,
         forcedLongPoint: forcedLongPoint,
         mmp_1s: mmps[1],
         mmp_5s: mmps[5],

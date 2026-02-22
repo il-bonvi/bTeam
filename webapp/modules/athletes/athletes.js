@@ -873,7 +873,8 @@ function renderStatisticsTable(statistics, weight) {
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600;">pMax (W/kg)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">forced10></th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">2-6min</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">10min+</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -896,6 +897,7 @@ function renderStatisticsTable(statistics, weight) {
                 <td style="padding: 1rem; text-align: center; font-weight: 600; color: #ff6b6b;">${pmax_kg}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #999;">${stat.rmse}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${stat.usedPercentile}%</td>
+                <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${typeof stat.forcedMediumPoint === 'number' ? stat.forcedMediumPoint + '%' : 'no'}</td>
                 <td style="padding: 1rem; text-align: center; font-size: 0.9rem; color: #666;">${typeof stat.forcedLongPoint === 'number' ? stat.forcedLongPoint + '%' : 'no'}</td>
             </tr>
         `;
@@ -1101,6 +1103,9 @@ async function renderCPTab(athleteId, athlete, tabContent) {
                             <input type="number" id="cp-sprint-seconds" value="${defaultSprintSeconds}" min="1" onchange="recalculateCP()">
                         </div>
                         <div class="input-field">
+                            <label><input type="checkbox" id="cp-use-medium-point-fallback" checked onchange="recalculateCP()"> Punto 2-6 min (sì/no)</label>
+                        </div>
+                        <div class="input-field">
                             <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto > 10 min (sì/no)</label>
                         </div>
                     </div>
@@ -1121,8 +1126,9 @@ async function renderCPTab(athleteId, athlete, tabContent) {
         `;
 
         // Calculate and render with auto-search from 100% percentile
+        const useMediumPointFallback = 1; // default enabled
         const useLongPointFallback = 1; // default enabled
-        calculateAndRenderCPWithAutoSearch(allTimes, allPowers, defaultValuesPerWindow, defaultSprintSeconds, useLongPointFallback);
+        calculateAndRenderCPWithAutoSearch(allTimes, allPowers, defaultValuesPerWindow, defaultSprintSeconds, useMediumPointFallback, useLongPointFallback);
 
     } catch (error) {
         console.error('Error loading CP model:', error);
@@ -1141,7 +1147,7 @@ async function renderCPTab(athleteId, athlete, tabContent) {
 }
 
 // Calculate and render CP model
-function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useLongPointFallback = 1) {
+function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useMediumPointFallback = 1, useLongPointFallback = 1) {
     try {
         // Filter data using same logic as calculateAndRenderCPWithAutoSearch
         let selectedTimes = [];
@@ -1172,16 +1178,20 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
             percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
         }
 
-        // Define time windows: 2-minute intervals up to 30 min, then 15-minute intervals to 90 min
+        // Define time windows: 2-minute intervals from 2-6 min, 3-min from 6-30m, then 15-minute intervals to 90 min
         const timeWindows = [];
-        for (let start = 120; start < 1800; start += 120) {
+        for (let start = 120; start < 360; start += 120) {
             timeWindows.push([start, start + 120]);
+        }
+        for (let start = 360; start < 1800; start += 180) {
+            timeWindows.push([start, start + 180]);
         }
         for (let start = 1800; start < 5400; start += 900) {
             timeWindows.push([start, start + 900]);
         }
 
         let selectedMask = new Array(allTimes.length).fill(false);
+        let forcedMediumPoint = false; // Track if fallback was used for medium range
         let forcedLongPoint = false; // Track if fallback was used
 
         // Select points from each window
@@ -1224,6 +1234,37 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
             selectedTimes.push(allTimes[sprintIdx]);
             selectedPowers.push(allPowers[sprintIdx]);
             selectedMask[sprintIdx] = true;
+        }
+
+        // CHECK: If no points in 2-6 min range (120-360s), add best point from that range (only if useMediumPointFallback = 1)
+        const hasMediumPoint = selectedTimes.some(t => t >= 120 && t <= 360);
+        if (!hasMediumPoint && useMediumPointFallback === 1) {
+            let bestIdx = -1;
+            let bestResidual = -Infinity;
+            
+            // Find highest residual in 2-6 min range (120-360s)
+            for (let i = 0; i < allTimes.length; i++) {
+                if (allTimes[i] >= 120 && allTimes[i] <= 360 && !selectedMask[i]) {
+                    if (residuals[i] > bestResidual) {
+                        bestResidual = residuals[i];
+                        bestIdx = i;
+                    }
+                }
+            }
+            
+            if (bestIdx >= 0) {
+                selectedTimes.push(allTimes[bestIdx]);
+                selectedPowers.push(allPowers[bestIdx]);
+                selectedMask[bestIdx] = true;
+                
+                // Calculate the percentile of this forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                forcedMediumPoint = Math.round(forcedPointPercentile); // Store as percentile value
+            }
         }
 
         // CHECK: If no points > 600s, add best point from 10-30 min range (only if useLongPointFallback = 1)
@@ -1276,6 +1317,7 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
             powers: selectedPowers,
             selectedCount: selectedTimes.length,
             totalCount: allTimes.length,
+            forcedMediumPoint: forcedMediumPoint,
             forcedLongPoint: forcedLongPoint
         };
 
@@ -1292,18 +1334,20 @@ function calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentil
 }
 
 // Calculate CP with automatic percentile search (from 100% down)
-function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow, sprintSeconds, useLongPointFallback = 1) {
+function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow, sprintSeconds, useMediumPointFallback = 1, useLongPointFallback = 1) {
     try {
         let currentPercentile = 100;
         let usedPercentile = 100;
         let selectedTimes = [];
         let selectedPowers = [];
+        let forcedMediumPoint = false; // Track if fallback was used for medium range
         let forcedLongPoint = false; // Track if fallback was used
 
         // Search for percentile starting from 100, decreasing until we have enough points
         while (currentPercentile >= 0) {
             selectedTimes = [];
             selectedPowers = [];
+            forcedMediumPoint = false; // Reset for each iteration
             forcedLongPoint = false; // Reset for each iteration
             
             // Fit all data to get residuals
@@ -1331,10 +1375,13 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
                 percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
             }
 
-            // Define time windows: 2-minute intervals up to 30 min, then 15-minute intervals to 90 min
+            // Define time windows: 2-minute intervals from 2-6 min, 3-min from 6-30m, then 15-minute intervals to 90 min
             const timeWindows = [];
-            for (let start = 120; start < 1800; start += 120) {
+            for (let start = 120; start < 360; start += 120) {
                 timeWindows.push([start, start + 120]);
+            }
+            for (let start = 360; start < 1800; start += 180) {
+                timeWindows.push([start, start + 180]);
             }
             for (let start = 1800; start < 5400; start += 900) {
                 timeWindows.push([start, start + 900]);
@@ -1382,6 +1429,37 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
                 selectedTimes.push(allTimes[sprintIdx]);
                 selectedPowers.push(allPowers[sprintIdx]);
                 selectedMask[sprintIdx] = true;
+            }
+
+            // CHECK: If no points in 2-6 min range (120-360s), add best point from that range (only if useMediumPointFallback = 1)
+            const hasMediumPoint = selectedTimes.some(t => t >= 120 && t <= 360);
+            if (!hasMediumPoint && useMediumPointFallback === 1) {
+                let bestIdx = -1;
+                let bestResidual = -Infinity;
+                
+                // Find highest residual in 2-6 min range (120-360s)
+                for (let i = 0; i < allTimes.length; i++) {
+                    if (allTimes[i] >= 120 && allTimes[i] <= 360 && !selectedMask[i]) {
+                        if (residuals[i] > bestResidual) {
+                            bestResidual = residuals[i];
+                            bestIdx = i;
+                        }
+                    }
+                }
+                
+                if (bestIdx >= 0) {
+                    selectedTimes.push(allTimes[bestIdx]);
+                    selectedPowers.push(allPowers[bestIdx]);
+                    selectedMask[bestIdx] = true;
+                    
+                    // Calculate the percentile of this forced point
+                    let position = 0;
+                    for (let r of residualsClean) {
+                        if (r < bestResidual) position++;
+                    }
+                    const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
+                    forcedMediumPoint = Math.round(forcedPointPercentile); // Store as percentile value
+                }
             }
 
             // CHECK: If no points > 600s, add best point from 10-30 min range (only if useLongPointFallback = 1)
@@ -1449,6 +1527,7 @@ function calculateAndRenderCPWithAutoSearch(allTimes, allPowers, valuesPerWindow
             powers: selectedPowers,
             selectedCount: selectedTimes.length,
             totalCount: allTimes.length,
+            forcedMediumPoint: forcedMediumPoint,
             forcedLongPoint: forcedLongPoint
         };
 
@@ -1524,6 +1603,7 @@ window.recalculateCP = function() {
     const valuesPerWindow = parseInt(document.getElementById('cp-values-per-window').value) || 1;
     const minPercentile = parseInt(document.getElementById('cp-min-percentile').value) || 90;
     const sprintSeconds = parseInt(document.getElementById('cp-sprint-seconds').value) || 10;
+    const useMediumPointFallback = document.getElementById('cp-use-medium-point-fallback').checked ? 1 : 0;
     const useLongPointFallback = document.getElementById('cp-use-long-point-fallback').checked ? 1 : 0;
 
     // Get current period data
@@ -1539,7 +1619,7 @@ window.recalculateCP = function() {
     const allTimes = data.secs || [];
     const allPowers = data.watts || [];
 
-    calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useLongPointFallback);
+    calculateAndRenderCP(allTimes, allPowers, valuesPerWindow, minPercentile, sprintSeconds, useMediumPointFallback, useLongPointFallback);
 };
 
 // Switch CP period
