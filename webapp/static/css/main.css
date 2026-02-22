@@ -590,11 +590,10 @@ tr:hover {
     background: var(--bg-secondary);
 }
 
-.large-modal .modal-content {
-    max-width: 98vw;
-    max-height: 95vh;
-    overflow-y: auto;
-    width: 98vw;
+.modal.large-modal {
+    max-width: 92vw;
+    width: 92vw;
+    max-height: 90vh;
 }
 
 .large-modal .table-responsive {

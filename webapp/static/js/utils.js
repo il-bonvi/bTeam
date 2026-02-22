@@ -258,6 +258,12 @@ modalStyles.textContent = `
         display: flex;
         flex-direction: column;
     }
+
+        .modal.large-modal {
+        width: 92vw;
+        max-width: 92vw;
+        max-height: 90vh;
+    }
     
     .modal-header {
         padding: 1.5rem;

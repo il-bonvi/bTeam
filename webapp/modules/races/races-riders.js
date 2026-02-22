@@ -200,9 +200,9 @@ window.showAddRidersDialog = async function() {
             <div class="form-group" style="margin-top: 15px;">
                 <label class="form-label">Obiettivo predefinito per atleti selezionati</label>
                 <select id="default-objective" class="form-input">
-                    <option value="A" style="background-color: #4ade80;">A - Priorità Alta (Podio)</option>
-                    <option value="B" style="background-color: #60a5fa;">B - Priorità Media (Top 10)</option>
-                    <option value="C" selected style="background-color: #fbbf24;">C - Priorità Bassa (Finire)</option>
+                    <option value="A" style="background-color: #d000b8;">A</option>
+                    <option value="B" style="background-color: #60fa68;">B</option>
+                    <option value="C" selected style="background-color: #249afb;">C</option>
                 </select>
             </div>
             <div style="display: flex; gap: 10px;">
