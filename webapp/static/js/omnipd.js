@@ -6,6 +6,22 @@
 // Constants
 const TCPMAX = 1800; // 30 minutes
 
+// Time windows for point selection: 2-min intervals for 2-6min, 3-min for 6-30min, 15-min for 30-90min
+// Used in all CP calculation functions to ensure consistency
+const TIME_WINDOWS = (() => {
+    const windows = [];
+    for (let start = 120; start < 360; start += 120) {
+        windows.push([start, start + 120]);
+    }
+    for (let start = 360; start < 1800; start += 180) {
+        windows.push([start, start + 180]);
+    }
+    for (let start = 1800; start < 5400; start += 900) {
+        windows.push([start, start + 900]);
+    }
+    return windows;
+})();
+
 /**
  * Calculate power at time t using omniPD model
  * Formula: P(t) = (W'/t) × (1 - e^(-t × (Pmax - CP) / W')) + CP for t ≤ 1800s
@@ -42,6 +58,169 @@ function formatTimeLabel(seconds) {
     } else {
         return `${seconds}s`;
     }
+}
+
+/**
+ * Calculate percentile threshold from residuals
+ * @param {Array} residuals - Residual values
+ * @param {Number} percentile - Percentile (0-100)
+ * @returns {Number} Threshold value
+ */
+function calculatePercentileThreshold(residuals, percentile) {
+    const residualsClean = residuals.filter(r => !isNaN(r));
+    if (residualsClean.length === 0) return -Infinity;
+    
+    residualsClean.sort((a, b) => a - b);
+    const h = (residualsClean.length - 1) * (percentile / 100);
+    const floor_idx = Math.floor(h);
+    const ceil_idx = Math.ceil(h);
+    const frac = h - floor_idx;
+    
+    if (floor_idx === ceil_idx) {
+        return residualsClean[floor_idx];
+    } else {
+        return residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
+    }
+}
+
+/**
+ * Select best points from time windows for a given percentile
+ * Encapsulates the core point selection logic used throughout the app
+ * 
+ * @param {Array} durations - Time values in seconds
+ * @param {Array} watts - Power values in watts
+ * @param {Number} percentile - Percentile threshold (0-100)
+ * @param {Number} valuesPerWindow - Points to select per window
+ * @param {Number} sprintSeconds - Sprint duration for sprint point
+ * @param {Boolean} useMediumPointFallback - Add forced point from 2-6min if missing
+ * @param {Boolean} useLongPointFallback - Add forced point from 10+min if missing
+ * @returns {Object} {times, powers, forcedMediumPoint, forcedLongPoint}
+ */
+function selectPointsForPercentile(durations, watts, percentile, valuesPerWindow, sprintSeconds, useMediumPointFallback = true, useLongPointFallback = true) {
+    const params = curveFit(durations, watts);
+    const predictions = durations.map((t) => ompd_power(t, ...params));
+    const residuals = watts.map((p, i) => p - predictions[i]);
+    
+    const residualsClean = residuals.filter(r => !isNaN(r));
+    if (residualsClean.length === 0) {
+        return { times: [], powers: [], forcedMediumPoint: false, forcedLongPoint: false };
+    }
+    
+    const percentileThreshold = calculatePercentileThreshold(residuals, percentile);
+    
+    let selectedTimes = [];
+    let selectedPowers = [];
+    let selectedMask = new Array(durations.length).fill(false);
+    let forcedMediumPoint = false;
+    let forcedLongPoint = false;
+    
+    // Select points from each window
+    for (const [tmin, tmax] of TIME_WINDOWS) {
+        const windowIndices = [];
+        for (let i = 0; i < durations.length; i++) {
+            if (durations[i] >= tmin && durations[i] <= tmax) {
+                windowIndices.push(i);
+            }
+        }
+        if (windowIndices.length === 0) continue;
+        
+        // Sort by residual descending
+        const sortedIndices = windowIndices.sort((a, b) => residuals[b] - residuals[a]);
+        
+        // Take up to valuesPerWindow where residual >= threshold
+        let count = 0;
+        for (const i of sortedIndices) {
+            if (!isNaN(residuals[i]) && residuals[i] >= percentileThreshold && !selectedMask[i]) {
+                selectedTimes.push(durations[i]);
+                selectedPowers.push(watts[i]);
+                selectedMask[i] = true;
+                count++;
+                if (count >= valuesPerWindow) break;
+            }
+        }
+    }
+    
+    // Sprint point
+    if (sprintSeconds > 0) {
+        let minDist = Infinity;
+        let sprintIdx = -1;
+        for (let i = 0; i < durations.length; i++) {
+            const dist = Math.abs(durations[i] - sprintSeconds);
+            if (dist < minDist) {
+                minDist = dist;
+                sprintIdx = i;
+            }
+        }
+        if (sprintIdx >= 0 && !selectedMask[sprintIdx]) {
+            selectedTimes.push(durations[sprintIdx]);
+            selectedPowers.push(watts[sprintIdx]);
+            selectedMask[sprintIdx] = true;
+        }
+    }
+    
+    // Fallback for 2-6 min range if enabled and no points found
+    if (useMediumPointFallback) {
+        const hasMediumPoint = selectedTimes.some(t => t >= 120 && t <= 360);
+        if (!hasMediumPoint) {
+            let bestIdx = -1;
+            let bestResidual = -Infinity;
+            
+            for (let i = 0; i < durations.length; i++) {
+                if (durations[i] >= 120 && durations[i] <= 360 && !selectedMask[i]) {
+                    if (residuals[i] > bestResidual) {
+                        bestResidual = residuals[i];
+                        bestIdx = i;
+                    }
+                }
+            }
+            
+            if (bestIdx >= 0) {
+                selectedTimes.push(durations[bestIdx]);
+                selectedPowers.push(watts[bestIdx]);
+                selectedMask[bestIdx] = true;
+                
+                // Calculate percentile level of forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                forcedMediumPoint = Math.round((position / (residualsClean.length - 1)) * 100);
+            }
+        }
+    }
+    
+    // Fallback for 10+ min range if enabled and no points found
+    if (useLongPointFallback) {
+        const hasLongPoint = selectedTimes.some(t => t > 600);
+        if (!hasLongPoint) {
+            let bestIdx = -1;
+            let bestResidual = -Infinity;
+            
+            for (let i = 0; i < durations.length; i++) {
+                if (durations[i] >= 600 && durations[i] <= 1800 && !selectedMask[i]) {
+                    if (residuals[i] > bestResidual) {
+                        bestResidual = residuals[i];
+                        bestIdx = i;
+                    }
+                }
+            }
+            
+            if (bestIdx >= 0) {
+                selectedTimes.push(durations[bestIdx]);
+                selectedPowers.push(watts[bestIdx]);
+                selectedMask[bestIdx] = true;
+                
+                // Calculate percentile level of forced point
+                let position = 0;
+                for (let r of residualsClean) {
+                    if (r < bestResidual) position++;
+                }
+                forcedLongPoint = Math.round((position / (residualsClean.length - 1)) * 100);
+            }
+        }
+    }
+    
+    return { times: selectedTimes, powers: selectedPowers, forcedMediumPoint, forcedLongPoint };
 }
 
 /**
@@ -283,163 +462,25 @@ function calculateCPModel(durations, watts, weight = 1) {
     }
     const valuesPerWindow = 1;
     let currentPercentile = 100;  // Start from 100% and auto-search down
+    let usedPercentile = 100;
     let selectedTimes = [];
     let selectedPowers = [];
-    let forcedMediumPoint = false; // Track if fallback was used for medium range
-    let forcedLongPoint = false; // Track if fallback was used
+    let forcedMediumPoint = false;
+    let forcedLongPoint = false;
 
     // Auto-search for percentile
     while (currentPercentile >= 0) {
-        selectedTimes = [];
-        selectedPowers = [];
+        // Use the unified point selection function
+        const result = selectPointsForPercentile(durations, watts, currentPercentile, valuesPerWindow, 1, true, true);
         
-        // Fit all data to get residuals
-        const params = curveFit(durations, watts);
-        const predictions = durations.map((t) => ompd_power(t, ...params));
-        const residuals = watts.map((p, i) => p - predictions[i]);
-
-        // Calculate percentile threshold
-        const residualsClean = residuals.filter(r => !isNaN(r));
-        if (residualsClean.length === 0) {
-            currentPercentile--;
-            continue;
-        }
-
-        residualsClean.sort((a, b) => a - b);
-        const h = (residualsClean.length - 1) * (currentPercentile / 100);
-        const floor_idx = Math.floor(h);
-        const ceil_idx = Math.ceil(h);
-        const frac = h - floor_idx;
+        selectedTimes = result.times;
+        selectedPowers = result.powers;
+        forcedMediumPoint = result.forcedMediumPoint;
+        forcedLongPoint = result.forcedLongPoint;
         
-        let percentileThreshold;
-        if (floor_idx === ceil_idx) {
-            percentileThreshold = residualsClean[floor_idx];
-        } else {
-            percentileThreshold = residualsClean[floor_idx] * (1 - frac) + residualsClean[ceil_idx] * frac;
-        }
-
-        // Define time windows: 2-minute intervals from 2-6 min, 3-min from 6-30m, then 15-minute intervals to 90 min
-        const timeWindows = [];
-        for (let start = 120; start < 360; start += 120) {
-            timeWindows.push([start, start + 120]);
-        }
-        for (let start = 360; start < 1800; start += 180) {
-            timeWindows.push([start, start + 180]);
-        }
-        for (let start = 1800; start < 5400; start += 900) {
-            timeWindows.push([start, start + 900]);
-        }
-
-        let selectedMask = new Array(durations.length).fill(false);
-        forcedMediumPoint = false; // Reset for each iteration
-        forcedLongPoint = false; // Reset for each iteration
-
-        // Select points from each window
-        for (const [tmin, tmax] of timeWindows) {
-            const windowIndices = [];
-            for (let i = 0; i < durations.length; i++) {
-                if (durations[i] >= tmin && durations[i] <= tmax) {
-                    windowIndices.push(i);
-                }
-            }
-            if (windowIndices.length === 0) continue;
-
-            // Sort by residual descending
-            const sortedIndices = windowIndices.sort((a, b) => residuals[b] - residuals[a]);
-
-            // Take up to valuesPerWindow where residual >= threshold
-            let count = 0;
-            for (const i of sortedIndices) {
-                if (!isNaN(residuals[i]) && residuals[i] >= percentileThreshold && !selectedMask[i]) {
-                    selectedTimes.push(durations[i]);
-                    selectedPowers.push(watts[i]);
-                    selectedMask[i] = true;
-                    count++;
-                    if (count >= valuesPerWindow) break;
-                }
-            }
-        }
-
-        // Sprint point (1 second)
-        let minDist = Infinity;
-        let sprintIdx = -1;
-        for (let i = 0; i < durations.length; i++) {
-            const dist = Math.abs(durations[i] - 1);
-            if (dist < minDist) {
-                minDist = dist;
-                sprintIdx = i;
-            }
-        }
-        if (sprintIdx >= 0 && !selectedMask[sprintIdx]) {
-            selectedTimes.push(durations[sprintIdx]);
-            selectedPowers.push(watts[sprintIdx]);
-            selectedMask[sprintIdx] = true;
-        }
-
-        // CHECK: If no points in 2-6 min range (120-360s), add best point from that range
-        const hasMediumPoint = selectedTimes.some(t => t >= 120 && t <= 360);
-        if (!hasMediumPoint) {
-            let bestIdx = -1;
-            let bestResidual = -Infinity;
-            
-            // Find highest residual in 2-6 min range (120-360s)
-            for (let i = 0; i < durations.length; i++) {
-                if (durations[i] >= 120 && durations[i] <= 360 && !selectedMask[i]) {
-                    if (residuals[i] > bestResidual) {
-                        bestResidual = residuals[i];
-                        bestIdx = i;
-                    }
-                }
-            }
-            
-            if (bestIdx >= 0) {
-                selectedTimes.push(durations[bestIdx]);
-                selectedPowers.push(watts[bestIdx]);
-                selectedMask[bestIdx] = true;
-                
-                // Calculate the percentile of this forced point
-                let position = 0;
-                for (let r of residualsClean) {
-                    if (r < bestResidual) position++;
-                }
-                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
-                forcedMediumPoint = Math.round(forcedPointPercentile); // Store as percentile value
-            }
-        }
-
-        // CHECK: If no points > 600s, add best point from 10-30 min range
-        const hasLongPoint = selectedTimes.some(t => t > 600);
-        if (!hasLongPoint) {
-            let bestIdx = -1;
-            let bestResidual = -Infinity;
-            
-            // Find highest residual in 10-30 min range (600-1800s)
-            for (let i = 0; i < durations.length; i++) {
-                if (durations[i] >= 600 && durations[i] <= 1800 && !selectedMask[i]) {
-                    if (residuals[i] > bestResidual) {
-                        bestResidual = residuals[i];
-                        bestIdx = i;
-                    }
-                }
-            }
-            
-            if (bestIdx >= 0) {
-                selectedTimes.push(durations[bestIdx]);
-                selectedPowers.push(watts[bestIdx]);
-                selectedMask[bestIdx] = true;
-                
-                // Calculate the percentile of this forced point
-                let position = 0;
-                for (let r of residualsClean) {
-                    if (r < bestResidual) position++;
-                }
-                const forcedPointPercentile = (position / (residualsClean.length - 1)) * 100;
-                forcedLongPoint = Math.round(forcedPointPercentile); // Store as percentile value
-            }
-        }
-
         // Check if we have enough points
         if (selectedTimes.length >= 4) {
+            usedPercentile = currentPercentile;
             break;
         }
         
@@ -477,7 +518,7 @@ function calculateCPModel(durations, watts, weight = 1) {
         pmax_kg: (cpResult.Pmax / weight).toFixed(2),
         a_param: cpResult.A,
         t_99: cpResult.t_99,
-        usedPercentile: currentPercentile,
+        usedPercentile: usedPercentile,
         pointsUsed: selectedTimes.length,
         forcedMediumPoint: forcedMediumPoint,
         forcedLongPoint: forcedLongPoint,
