@@ -391,9 +391,8 @@ async def push_race(request: PushRaceRequest):
                 
                 client = IntervalsAPIClient(api_key=api_key)
 
-                # Build description with athlete-specific data
+                # Build description only with core metrics (remove race title, notes, athlete info)
                 race_description = (
-                    f'<div><b>{race_name}</b></div>'
                     f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
                     f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
                     f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
@@ -414,15 +413,9 @@ async def push_race(request: PushRaceRequest):
                         f'<br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
                     )
 
-                if notes:
-                    race_description += f'<div><b><span class="text-purple">Note</span>: {notes}</b></div>'
+                # no extra notes included
 
-                # Add athlete-specific info
-                objective = athlete_info['data'].get('objective', 'C')
-                kj_per_h_kg = athlete_info['data'].get('kj_per_hour_per_kg', 10.0)
-                race_description += f'<div><b>Atleta</b>: {athlete.get("first_name")} {athlete.get("last_name")} | ' \
-                                   f'<b>Obiettivo</b>: {objective} | ' \
-                                   f'<b>kJ/h/kg</b>: {kj_per_h_kg:.1f}</div>'
+                # athlete-specific info no longer needed
 
                 # Check for duplicate in this specific athlete's calendar
                 try:
