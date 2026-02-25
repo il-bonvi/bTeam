@@ -34,8 +34,6 @@ class WellnessSyncRequest(BaseModel):
 
 class PushRaceRequest(BaseModel):
     race_id: int
-    athlete_id: int
-    api_key: str
 
 
 @router.post("/test-connection")
@@ -324,21 +322,36 @@ async def sync_athlete_metrics(request: SyncRequest):
 
 @router.post("/push-race")
 async def push_race(request: PushRaceRequest):
-    """Push a race to Intervals.icu as a planned event"""
+    """Push a race to Intervals.icu as a planned event for all enrolled athletes using their own API keys"""
     try:
         storage = get_storage()
-        logger.info(f"[PUSH-RACE] race_id={request.race_id}, athlete_id={request.athlete_id}")
+        logger.info(f"[PUSH-RACE] race_id={request.race_id}")
 
         race = storage.get_race(request.race_id)
         if not race:
             raise HTTPException(status_code=404, detail=f"Race not found (ID: {request.race_id})")
 
-        athlete = storage.get_athlete(request.athlete_id)
-        if not athlete:
-            raise HTTPException(status_code=404, detail="Athlete not found")
+        # Get all athletes for this race
+        race_athletes = race.get('athletes', [])
+        if not race_athletes:
+            raise HTTPException(status_code=400, detail="No athletes enrolled in this race")
 
-        client = IntervalsAPIClient(api_key=request.api_key)
+        # Filter athletes with API keys
+        athletes_with_keys = []
+        for athlete_data in race_athletes:
+            athlete_id = athlete_data.get('id')
+            athlete = storage.get_athlete(athlete_id)
+            if athlete and athlete.get('api_key'):
+                athletes_with_keys.append({
+                    'data': athlete_data,
+                    'profile': athlete,
+                    'api_key': athlete.get('api_key')
+                })
+        
+        if not athletes_with_keys:
+            raise HTTPException(status_code=400, detail="No athletes in this race have an API key configured")
 
+        # Prepare race data (common for all athletes)
         distance_km = race.get('distance_km') or 0
         elevation_m = race.get('elevation_m') or 0
         predicted_kj = race.get('predicted_kj') or 0
@@ -364,47 +377,99 @@ async def push_race(request: PushRaceRequest):
             mins = int(minutes % 60)
             return f"{hours}h {mins}m"
 
-        race_description = (
-            f'<div><b>{race["name"]}</b></div>'
-            f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
-            f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
-            f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
-        )
+        race_name = race['name']
 
-        athlete_weight = athlete.get('weight_kg')
-        if athlete_weight and predicted_kj > 0 and duration_minutes > 0:
-            kj_per_hour = predicted_kj / (duration_minutes / 60)
-            kj_per_h_kg = kj_per_hour / float(athlete_weight)
-            race_description += f' ({kj_per_h_kg:.1f} kJ/h/kg)'
-        race_description += '</b></div>'
+        # Push race to each athlete with API key
+        pushed_count = 0
+        failed_athletes = []
+        
+        for athlete_info in athletes_with_keys:
+            try:
+                athlete_id = athlete_info['data'].get('id')
+                athlete = athlete_info['profile']
+                api_key = athlete_info['api_key']
+                
+                client = IntervalsAPIClient(api_key=api_key)
 
-        if distance_km > 0:
-            duration_36_str = format_duration((distance_km / 36.0) * 60)
-            duration_41_str = format_duration((distance_km / 41.0) * 60)
-            race_description += (
-                f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>'
-                f'<br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
-            )
+                # Build description with athlete-specific data
+                race_description = (
+                    f'<div><b>{race_name}</b></div>'
+                    f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
+                    f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
+                    f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+                )
 
-        if notes:
-            race_description += f'<div><b><span class="text-purple">Note</span>: {notes}</b></div>'
+                athlete_weight = athlete.get('weight_kg')
+                if athlete_weight and predicted_kj > 0 and duration_minutes > 0:
+                    kj_per_hour = predicted_kj / (duration_minutes / 60)
+                    kj_per_h_kg = kj_per_hour / float(athlete_weight)
+                    race_description += f' ({kj_per_h_kg:.1f} kJ/h/kg)'
+                race_description += '</b></div>'
 
-        event = client.create_event(
-            athlete_id="0",
-            category=intervals_category,
-            start_date_local=start_date_local,
-            end_date_local=end_date_local,
-            name=race['name'],
-            description=race_description,
-            activity_type='Ride',
-            distance=distance_km * 1000,  # km → meters
-            moving_time=duration_seconds
-        )
+                if distance_km > 0:
+                    duration_36_str = format_duration((distance_km / 36.0) * 60)
+                    duration_41_str = format_duration((distance_km / 41.0) * 60)
+                    race_description += (
+                        f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>'
+                        f'<br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+                    )
+
+                if notes:
+                    race_description += f'<div><b><span class="text-purple">Note</span>: {notes}</b></div>'
+
+                # Add athlete-specific info
+                objective = athlete_info['data'].get('objective', 'C')
+                kj_per_h_kg = athlete_info['data'].get('kj_per_hour_per_kg', 10.0)
+                race_description += f'<div><b>Atleta</b>: {athlete.get("first_name")} {athlete.get("last_name")} | ' \
+                                   f'<b>Obiettivo</b>: {objective} | ' \
+                                   f'<b>kJ/h/kg</b>: {kj_per_h_kg:.1f}</div>'
+
+                # Check for duplicate in this specific athlete's calendar
+                try:
+                    existing_events = client.get_events(
+                        athlete_id="0",
+                        oldest=start_date_local[:10],
+                        newest=start_date_local[:10],
+                        days_forward=1
+                    )
+                    
+                    event_exists = any(
+                        evt.get('name') == race_name 
+                        for evt in existing_events
+                    )
+                    
+                    if event_exists:
+                        logger.info(f"[PUSH-RACE] Race '{race_name}' already exists for athlete {athlete_id}")
+                        continue
+                except Exception as check_err:
+                    logger.warning(f"Could not check duplicate for athlete {athlete_id}: {check_err}")
+
+                event = client.create_event(
+                    athlete_id="0",
+                    category=intervals_category,
+                    start_date_local=start_date_local,
+                    end_date_local=end_date_local,
+                    name=race_name,
+                    description=race_description,
+                    activity_type='Ride',
+                    distance=distance_km * 1000,  # km → meters
+                    moving_time=duration_seconds
+                )
+
+                pushed_count += 1
+                logger.info(f"[PUSH-RACE] Pushed to athlete {athlete_id}: {athlete.get('first_name')} {athlete.get('last_name')}")
+
+            except Exception as e:
+                athlete_id = athlete_info['data'].get('id')
+                failed_athletes.append(f"Athlete {athlete_id}: {str(e)}")
+                logger.error(f"[PUSH-RACE] Failed to push to athlete {athlete_id}: {e}")
 
         return {
             "success": True,
-            "message": "Race pushed to Intervals.icu successfully",
-            "event_id": event.get('id')
+            "message": f"Race pushed to {pushed_count} athletes",
+            "athletes_processed": pushed_count,
+            "total_athletes": len(athletes_with_keys),
+            "failed_athletes": failed_athletes if failed_athletes else None
         }
     except HTTPException:
         raise

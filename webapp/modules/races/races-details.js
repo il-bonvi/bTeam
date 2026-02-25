@@ -4,9 +4,18 @@
  */
 
 /**
- * View race details in modal with three tabs
+ * View race details in full page (not modal)
  */
 window.viewRaceDetails = async function(raceId) {
+    window.currentRaceId = raceId;
+    await window.renderRaceDetailsPage(raceId);
+};
+
+/**
+ * Render race details page in full screen
+ */
+window.renderRaceDetailsPage = async function(raceId) {
+    const contentArea = document.getElementById('content-area');
     window.currentRaceId = raceId;
     window.gpxTraceData = null;
     window.tvList = [];
@@ -32,17 +41,54 @@ window.viewRaceDetails = async function(raceId) {
         
         const raceAthletes = race.athletes || [];
         
-        const modalContent = `
+        contentArea.innerHTML = `
             <style>
-                .tabs-container { display: flex; flex-direction: column; height: 100%; }
-                .tabs-header { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 15px; }
-                .tab-btn { 
-                    background: none; border: none; padding: 10px 20px; cursor: pointer; 
-                    font-size: 16px; border-bottom: 3px solid transparent; transition: all 0.3s;
+                #content-area { padding: 0; }
+                .race-details-container { 
+                    display: flex; 
+                    flex-direction: column; 
+                    min-height: 100vh; 
+                    position: relative;
                 }
-                .tab-btn:hover { background: #f5f5f5; }
+                .race-header { 
+                    padding: 20px; 
+                    border-bottom: 2px solid #e0e0e0; 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    flex-shrink: 0;
+                }
+                .race-title { margin: 0; }
+                .tabs-container { 
+                    display: flex; 
+                    flex-direction: column; 
+                    flex: 1; 
+                    min-height: 0;
+                }
+                .tabs-header { 
+                    display: flex; 
+                    border-bottom: 2px solid #e0e0e0; 
+                    margin: 0; 
+                    background: #fafafa;
+                    flex-shrink: 0;
+                }
+                .tab-btn { 
+                    background: none; 
+                    border: none; 
+                    padding: 12px 20px; 
+                    cursor: pointer; 
+                    font-size: 16px; 
+                    border-bottom: 3px solid transparent; 
+                    transition: all 0.3s;
+                    color: #666;
+                }
+                .tab-btn:hover { background: #f0f0f0; }
                 .tab-btn.active { border-bottom-color: #3b82f6; color: #3b82f6; font-weight: bold; }
-                .tabs-content { flex: 1; overflow-y: auto; }
+                .tabs-content { 
+                    flex: 1; 
+                    overflow-y: auto; 
+                    padding: 20px; 
+                }
                 .tab-pane { display: none; }
                 .tab-pane.active { display: block; }
                 .data-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
@@ -50,42 +96,38 @@ window.viewRaceDetails = async function(raceId) {
                 .data-table th { background: #f5f5f5; font-weight: bold; }
                 .data-table tr:hover { background: #f9f9f9; }
             </style>
-            <div class="tabs-container">
-                <div class="tabs-header">
-                    <button class="tab-btn active" onclick="switchRaceTab('details')">📋 Dettagli</button>
-                    <button class="tab-btn" onclick="switchRaceTab('riders')">🚴 Riders (${raceAthletes.length})</button>
-                    <button class="tab-btn" onclick="switchRaceTab('metrics')">📊 Metrics</button>
+            <div class="race-details-container">
+                <div class="race-header">
+                    <h2 class="race-title">📋 ${race.name}</h2>
+                    <div>
+                        <button class="btn btn-primary" onclick="saveRaceChanges()" style="margin-right: 10px;">
+                            💾 Salva
+                        </button>
+                        <button class="btn btn-secondary" onclick="loadRaces()">
+                            ← Indietro
+                        </button>
+                    </div>
                 </div>
-                <div class="tabs-content">
-                    <div id="tab-details" class="tab-pane active">
-                        ${buildDetailsTab(race)}
+                <div class="tabs-container">
+                    <div class="tabs-header">
+                        <button class="tab-btn active" onclick="switchRaceTab('details')">📋 Dettagli</button>
+                        <button class="tab-btn" onclick="switchRaceTab('riders')">🚴 Riders (${raceAthletes.length})</button>
+                        <button class="tab-btn" onclick="switchRaceTab('metrics')">📊 Metrics</button>
                     </div>
-                    <div id="tab-riders" class="tab-pane">
-                        ${buildRidersTab(race, allAthletes)}
-                    </div>
-                    <div id="tab-metrics" class="tab-pane">
-                        ${buildMetricsTab(race)}
+                    <div class="tabs-content">
+                        <div id="tab-details" class="tab-pane active">
+                            ${buildDetailsTab(race)}
+                        </div>
+                        <div id="tab-riders" class="tab-pane">
+                            ${buildRidersTab(race, allAthletes)}
+                        </div>
+                        <div id="tab-metrics" class="tab-pane">
+                            ${buildMetricsTab(race)}
+                        </div>
                     </div>
                 </div>
             </div>
         `;
-        
-        createModal(
-            `📋 ${race.name}`,
-            modalContent,
-            [
-                {
-                    label: 'Annulla',
-                    class: 'btn-secondary',
-                    onclick: 'this.closest(".modal-overlay").remove()'
-                },
-                {
-                    label: '💾 Salva Modifiche',
-                    class: 'btn-primary',
-                    onclick: 'saveRaceChanges()'
-                }
-            ]
-        );
         
         setTimeout(() => {
             updateDetailCategories();
@@ -111,7 +153,7 @@ window.viewRaceDetails = async function(raceId) {
         }, 100);
         
     } catch (error) {
-        showToast('Errore nel caricamento dei dettagli', 'error');
+        contentArea.innerHTML = `<div class="card"><p style="color: red;">Errore nel caricamento: ${error.message}</p></div>`;
         console.error(error);
     } finally {
         hideLoading();
@@ -363,8 +405,7 @@ window.saveRaceChanges = async function() {
         showLoading();
         await api.updateRace(currentRaceId, data);
         showToast('✅ Gara aggiornata con successo', 'success');
-        document.querySelector('.modal-overlay').remove();
-        window.renderRacesPage();
+        setTimeout(() => loadRaces(), 500);
     } catch (error) {
         showToast('Errore nell\'aggiornamento: ' + error.message, 'error');
     } finally {

@@ -286,10 +286,10 @@ class APIClient {
         return result;
     }
 
-    async pushRace(raceId, athleteId, apiKey) {
+    async pushRace(raceId) {
         return this.request('/sync/push-race', {
             method: 'POST',
-            body: JSON.stringify({ race_id: raceId, athlete_id: athleteId, api_key: apiKey }),
+            body: JSON.stringify({ race_id: raceId }),
         });
     }
 

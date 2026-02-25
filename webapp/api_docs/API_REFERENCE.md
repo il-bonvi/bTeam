@@ -480,22 +480,44 @@ Sincronizza dati wellness da Intervals.icu.
 
 ### POST /api/sync/push-race
 
-Pusha una gara su Intervals.icu come evento pianificato.
+Pusha una gara su Intervals.icu come evento pianificato per **tutti gli atleti iscritti** nella gara. 
+Usa automaticamente la API key di ogni atleta dal database.
+Se la gara è già presente nel calendario di un atleta, non viene creato un duplicato.
 
 **Body:**
 ```json
 {
-  "race_id": 1,
-  "api_key": "your_intervals_api_key"
+  "race_id": 1
 }
 ```
 
-**Response:**
+**Response (Success):**
 ```json
 {
   "success": true,
-  "message": "Race pushed to Intervals.icu successfully",
-  "event_id": "e12345"
+  "message": "Race pushed to 3 athletes",
+  "athletes_processed": 3,
+  "total_athletes": 3,
+  "failed_athletes": null
+}
+```
+
+**Response (Error - No API Keys):**
+```json
+{
+  "success": false,
+  "detail": "No athletes in this race have an API key configured"
+}
+```
+
+**Response (Partial Failure):**
+```json
+{
+  "success": true,
+  "message": "Race pushed to 2 athletes",
+  "athletes_processed": 2,
+  "total_athletes": 3,
+  "failed_athletes": ["Athlete 5: Connection error"]
 }
 ```
 

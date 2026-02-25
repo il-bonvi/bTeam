@@ -129,91 +129,24 @@ window.deleteRace = async function(raceId) {
 };
 
 /**
- * Push race to Intervals.icu
+ * Push race to Intervals.icu for all enrolled athletes
  */
 window.pushRaceToIntervals = async function(raceId) {
     try {
-        const athletes = await api.getAthletes();
-        
-        const athletesWithApiKey = athletes.filter(a => a.api_key);
-        
-        if (athletesWithApiKey.length === 0) {
-            createModal(
-                '⚠️ Nessuna API Key',
-                `
-                <p>Nessun atleta ha una API key salvata.</p>
-                <p>Aggiungi l'API key dal profilo di almeno un atleta prima di pushare la gara a Intervals.icu</p>
-                `,
-                [
-                    {
-                        label: 'Ok',
-                        class: 'btn-secondary',
-                        onclick: 'this.closest(".modal-overlay").remove()'
-                    }
-                ]
-            );
-            return;
-        }
-        
-        const athletesOptions = athletesWithApiKey.map(a => 
-            `<option value="${a.id}">${a.first_name} ${a.last_name}</option>`
-        ).join('');
-        
-        createModal(
-            '☁️ Push a Intervals.icu',
-            `
-            <p>Seleziona l'atleta cui associare questa gara su Intervals.icu</p>
-            <div class="form-group">
-                <label class="form-label">Atleta</label>
-                <select id="push-athlete" class="form-input">
-                    ${athletesOptions}
-                </select>
-                <small>Verrà usata la API key salvata di questo atleta</small>
-            </div>
-            `,
-            [
-                {
-                    label: 'Annulla',
-                    class: 'btn-secondary',
-                    onclick: 'this.closest(".modal-overlay").remove()'
-                },
-                {
-                    label: '☁️ Push a Intervals',
-                    class: 'btn-primary',
-                    onclick: `performRacePush(${raceId})`
-                }
-            ]
-        );
-    } catch (error) {
-        showToast('Errore nel caricamento: ' + error.message, 'error');
-    }
-};
-
-/**
- * Perform the race push to Intervals
- */
-window.performRacePush = async function(raceId) {
-    const athleteId = document.getElementById('push-athlete')?.value;
-    
-    if (!athleteId) {
-        showToast('Seleziona un atleta', 'warning');
-        return;
-    }
-    
-    try {
         showLoading();
+        const result = await api.pushRace(raceId);
         
-        const athlete = await api.getAthlete(parseInt(athleteId));
-        
-        if (!athlete.api_key) {
-            showToast('L\'atleta selezionato non ha un\'API key', 'error');
-            return;
+        if (!result.success) {
+            showToast('⚠️ ' + result.message, 'warning');
+        } else {
+            const msg = result.athletes_processed > 0 
+                ? `✅ Gara pushata a ${result.athletes_processed} atleta/i` 
+                : `⚠️ ${result.message}`;
+            showToast(msg, 'success');
         }
         
-        const result = await api.pushRace(raceId, parseInt(athleteId), athlete.api_key);
-        
-        showToast('✅ Gara aggiunta a Intervals.icu con successo', 'success');
-        document.querySelector('.modal-overlay')?.remove();
+        // Refresh races list if needed
+        await loadRaces();
         
     } catch (error) {
         let errorMsg = 'Errore sconosciuto';

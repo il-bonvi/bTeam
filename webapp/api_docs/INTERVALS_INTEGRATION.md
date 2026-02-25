@@ -97,27 +97,38 @@ Body: {
 
 ### 4. Push Gare
 
-Pusha gare pianificate su Intervals.icu come eventi:
+Pusha gare pianificate su Intervals.icu come eventi per **tutti gli atleti iscritti** nella gara:
 
 1. Vai nella sezione "Gare"
-2. Seleziona una gara
+2. Seleziona una gara con atleti iscritti (che hanno API key salvata)
 3. Clicca "Push su Intervals.icu"
-4. Inserisci la **API Key**
-5. Conferma
+4. ✨ La gara viene automaticamente pushata a tutti gli atleti
 
-La gara verrà creata su Intervals.icu come:
-- **Tipo**: RACE event
-- **Data**: Data della gara alle 10:00
-- **Nome**: Nome della gara
-- **Descrizione**: Distanza e categoria
-- **Sport**: Ride
+**Come funziona:**
+- Per ogni atleta iscritto nella gara, il sistema recupera la sua API key dal database
+- Usa quella API key per fazer il push della gara nel calendario di quello specifico atleta
+- Se la gara è già presente nel calendario di un atleta, non crea duplicati
+- Atleta A riceve la gara con i suoi dati (peso, kJ/h/kg, obiettivo)
+- Atleta B riceve la gara con i suoi dati
+
+**Requisiti:**
+- Almeno un atleta iscritto nella gara
+- Almeno un atleta con API key salvata nel profilo
 
 **API Endpoint:**
 ```
 POST /api/sync/push-race
 Body: {
-  "race_id": 1,
-  "api_key": "your_key"
+  "race_id": 1
+}
+
+Response:
+{
+  "success": true,
+  "message": "Race pushed to 3 athletes",
+  "athletes_processed": 3,
+  "total_athletes": 3,
+  "failed_athletes": null
 }
 ```
 
