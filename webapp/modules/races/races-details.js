@@ -102,9 +102,12 @@ window.renderRaceDetailsPage = async function(raceId) {
             <div class="race-details-container">
                 <div class="race-header">
                     <h2 class="race-title">📋 ${race.name}</h2>
-                    <div>
-                        <button class="btn btn-primary" onclick="saveRaceChanges()" style="margin-right: 10px;">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn btn-primary" onclick="saveRaceChanges()">
                             💾 Salva
+                        </button>
+                        <button id="export-route-btn" class="btn btn-secondary" onclick="exportRouteHTML(window.currentRaceData?.name || 'Route', window.gpxTraceData)" title="Esporta percorso come HTML standalone" ${window.gpxTraceData ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"'}>
+                            <i class="bi bi-download"></i> Export Route
                         </button>
                         <button class="btn btn-secondary" onclick="loadRaces()">
                             ← Indietro
