@@ -17,12 +17,15 @@ if (typeof currentRaceId === 'undefined') {
  * Shows races table with actions
  */
 window.renderRacesPage = async function() {
+    // Ripristina la top-bar quando si torna alla lista gare
+    document.querySelector('.top-bar')?.style.setProperty('display', '');
+
     const contentArea = document.getElementById('content-area');
-    
+
     try {
         showLoading();
         const races = await api.getRaces();
-        
+
         contentArea.innerHTML = `
             <div class="card">
                 <div class="card-header">
@@ -34,7 +37,7 @@ window.renderRacesPage = async function() {
                 <div id="races-table"></div>
             </div>
         `;
-        
+
         const tableHtml = createTable(
             [
                 { key: 'id', label: 'ID' },
@@ -64,9 +67,9 @@ window.renderRacesPage = async function() {
             ],
             races
         );
-        
+
         document.getElementById('races-table').innerHTML = tableHtml;
-        
+
     } catch (error) {
         showToast('Errore nel caricamento delle gare', 'error');
         console.error(error);
@@ -115,11 +118,11 @@ window.deleteRace = async function(raceId) {
         showLoading();
         await api.deleteRace(raceId);
         showToast('Gara eliminata con successo', 'success');
-        
+
         // Close modal and refresh
         document.querySelector('.modal-overlay')?.remove();
         renderRacesPage();
-        
+
     } catch (error) {
         showToast('Errore nell\'eliminazione della gara', 'error');
         console.error(error);
@@ -135,19 +138,19 @@ window.pushRaceToIntervals = async function(raceId) {
     try {
         showLoading();
         const result = await api.pushRace(raceId);
-        
+
         if (!result.success) {
             showToast('⚠️ ' + result.message, 'warning');
         } else {
-            const msg = result.athletes_processed > 0 
-                ? `✅ Gara pushata a ${result.athletes_processed} atleta/i` 
+            const msg = result.athletes_processed > 0
+                ? `✅ Gara pushata a ${result.athletes_processed} atleta/i`
                 : `⚠️ ${result.message}`;
             showToast(msg, 'success');
         }
-        
+
         // Refresh races list if needed
         await loadRaces();
-        
+
     } catch (error) {
         let errorMsg = 'Errore sconosciuto';
         if (error instanceof Error) {

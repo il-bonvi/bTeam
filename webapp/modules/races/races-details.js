@@ -1,8 +1,6 @@
 /**
  * Races Details Module - Race details modal with tabs
- * Handles race detail viewing/editing with Details, Riders, Metrics and Route tabs
- *
- * FILE: webapp/modules/races/races-details.js
+ * Handles race detail viewing/editing with Details, Riders, and Metrics tabs
  */
 
 /**
@@ -22,16 +20,19 @@ window.renderRaceDetailsPage = async function(raceId) {
     window.gpxTraceData = null;
     window.tvList = [];
     window.gpmList = [];
-    
+
+    // Nasconde la top-bar per massimizzare lo spazio nel dettaglio gara
+    document.querySelector('.top-bar')?.style.setProperty('display', 'none');
+
     try {
         showLoading();
         const [race, allAthletes] = await Promise.all([
             api.getRace(raceId),
             api.getAthletes()
         ]);
-        
+
         window.currentRaceData = race;
-        
+
         // Load GPX trace data if available
         if (race.route_file) {
             try {
@@ -40,9 +41,9 @@ window.renderRaceDetailsPage = async function(raceId) {
                 console.warn('Could not parse GPX data:', e);
             }
         }
-        
+
         const raceAthletes = race.athletes || [];
-        
+
         contentArea.innerHTML = `
             <style>
                 #content-area { padding: 0; }
@@ -115,7 +116,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="tab-btn active" onclick="switchRaceTab('details')">📋 Dettagli</button>
                         <button class="tab-btn" onclick="switchRaceTab('riders')">🚴 Riders (${raceAthletes.length})</button>
                         <button class="tab-btn" onclick="switchRaceTab('metrics')">📊 Metrics</button>
-                        <button class="tab-btn" onclick="switchRaceTab('route')">🗺️ Route</button>
+                        <button class="tab-btn" onclick="switchRaceTab('route'); initRouteTab();">🗺️ Route</button>
                     </div>
                     <div class="tabs-content">
                         <div id="tab-details" class="tab-pane active">
@@ -134,11 +135,11 @@ window.renderRaceDetailsPage = async function(raceId) {
                 </div>
             </div>
         `;
-        
+
         setTimeout(() => {
             updateDetailCategories();
             updateDetailPredictions();
-            
+
             // Load and display GPX map if available
             if (window.gpxTraceData && window.gpxTraceData.coordinates) {
                 displayGpxMap(window.gpxTraceData.coordinates);
@@ -157,7 +158,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                 }
             }
         }, 100);
-        
+
     } catch (error) {
         contentArea.innerHTML = `<div class="card"><p style="color: red;">Errore nel caricamento: ${error.message}</p></div>`;
         console.error(error);
@@ -172,14 +173,9 @@ window.renderRaceDetailsPage = async function(raceId) {
 window.switchRaceTab = function(tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
-    
+
     document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
     document.getElementById(`tab-${tabName}`).classList.add('active');
-
-    // Initialize route iframe on first activation
-    if (tabName === 'route') {
-        window.initRouteTab();
-    }
 };
 
 /**
@@ -206,7 +202,9 @@ function buildDetailsTab(race) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Categoria</label>
-                    <select id="detail-category" class="form-input"></select>
+                    <select id="detail-category" class="form-input">
+                        <option value="${race.category}">${race.category}</option>
+                    </select>
                 </div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -217,8 +215,8 @@ function buildDetailsTab(race) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Dislivello (m)</label>
-                    <input type="number" id="detail-elevation" class="form-input" step="1" 
-                           value="${race.elevation_m || 0}">
+                    <input type="number" id="detail-elevation" class="form-input" 
+                           value="${race.elevation_m || ''}">
                 </div>
             </div>
             <div class="form-group">
@@ -226,13 +224,14 @@ function buildDetailsTab(race) {
                 <input type="number" id="detail-speed" class="form-input" step="0.1" 
                        value="${race.avg_speed_kmh || 25}" oninput="updateDetailPredictions()" required>
             </div>
+            
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                 <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
                     <strong style="color: #4ade80;">⏱ Durata prevista:</strong>
-                    <span id="detail-duration-preview">${formatDuration(race.predicted_duration_minutes)}</span>
+                    <span id="detail-duration-preview">${race.predicted_duration_minutes ? formatDuration(race.predicted_duration_minutes) : '--'}</span>
                 </div>
                 <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
-                    <strong style="color: #60a5fa;">⚡ KJ previsti:</strong>
+                    <strong style="color: #60a5fa;">⚡ KJ previsti (media):</strong>
                     <span id="detail-kj-preview">${race.predicted_kj ? Math.round(race.predicted_kj) : '--'}</span>
                 </div>
             </div>
@@ -270,18 +269,18 @@ function buildDetailsTab(race) {
  */
 window.deleteRaceGpx = function() {
     window.gpxTraceData = null;
-    
+
     const filenameDisplay = document.getElementById('gpx-filename');
     if (filenameDisplay) {
         filenameDisplay.textContent = 'Nessun file importato';
         filenameDisplay.style.color = '#666';
     }
-    
+
     const deleteBtn = document.getElementById('gpx-delete-btn');
     if (deleteBtn) {
         deleteBtn.style.display = 'none';
     }
-    
+
     const mapContainer = document.getElementById('map-container');
     if (mapContainer) {
         mapContainer.innerHTML = `
@@ -291,12 +290,6 @@ window.deleteRaceGpx = function() {
         `;
     }
 
-    // Reset route iframe so it reloads fresh next time
-    const iframe = document.getElementById('route-visualizer-iframe');
-    if (iframe) {
-        iframe.dataset.loaded = 'false';
-    }
-    
     showToast('✅ Traccia eliminata', 'success');
 };
 
@@ -308,19 +301,19 @@ window.updateDetailCategories = function() {
     const gender = genderSelect?.value || 'Femminile';
     const categorySelect = document.getElementById('detail-category');
     if (!categorySelect) return;
-    
+
     const currentCategory = window.currentRaceData?.category || '';
-    
+
     const categories = {
         'Femminile': ['Allieve', 'Junior', 'Junior 1NC', 'Junior 2NC', 'Junior (OPEN)', 'OPEN'],
         'Maschile': ['U23']
     };
-    
+
     let categoryList = categories[gender] || [...categories.Femminile, ...categories.Maschile];
     if (currentCategory && !categoryList.includes(currentCategory)) {
         categoryList = [currentCategory, ...categoryList];
     }
-    categorySelect.innerHTML = categoryList.map(cat => 
+    categorySelect.innerHTML = categoryList.map(cat =>
         `<option value="${cat}" ${cat === currentCategory ? 'selected' : ''}>${cat}</option>`
     ).join('');
 };
@@ -332,41 +325,41 @@ window.updateDetailPredictions = function() {
     const distanceEl = document.getElementById('detail-distance');
     const speedEl = document.getElementById('detail-speed');
     if (!distanceEl || !speedEl) return;
-    
+
     const distance = parseFloat(distanceEl.value) || 0;
     const speed = parseFloat(speedEl.value) || 0;
-    
+
     const durationPreview = document.getElementById('detail-duration-preview');
     const kjPreview = document.getElementById('detail-kj-preview');
-    
+
     if (!durationPreview || !kjPreview) return;
-    
+
     if (speed <= 0 || distance <= 0) {
         durationPreview.textContent = '--';
         kjPreview.textContent = '--';
         return;
     }
-    
+
     const durationMinutes = (distance / speed) * 60;
     durationPreview.textContent = formatDuration(durationMinutes);
-    
+
     const raceAthletes = window.currentRaceData?.athletes || [];
     if (raceAthletes.length > 0) {
         let totalKj = 0;
         const durationHours = durationMinutes / 60;
-        
+
         raceAthletes.forEach(ra => {
             const weight = ra.weight_kg || 70;
             const kjPerHourPerKg = ra.kj_per_hour_per_kg || 10.0;
             totalKj += kjPerHourPerKg * weight * durationHours;
         });
-        
+
         const avgKj = totalKj / raceAthletes.length;
         kjPreview.textContent = Math.round(avgKj);
     } else {
         kjPreview.textContent = '--';
     }
-    
+
     // Update riders table if visible
     if (document.getElementById('riders-table')) {
         refreshRidersKJ();
@@ -381,28 +374,28 @@ window.saveRaceChanges = async function() {
     const raceDate = document.getElementById('detail-date')?.value;
     const distance = parseFloat(document.getElementById('detail-distance')?.value);
     const speed = parseFloat(document.getElementById('detail-speed')?.value);
-    
+
     if (!name || !raceDate || !distance || !speed) {
         showToast('Compila i campi obbligatori', 'warning');
         return;
     }
-    
+
     // Calculate predicted KJ if there are athletes
     let predictedKj = null;
     const raceAthletes = window.currentRaceData?.athletes || [];
     if (raceAthletes.length > 0) {
         let totalKj = 0;
-        const durationHours = (distance / speed) * 60 / 60; // Convert to hours
-        
+        const durationHours = (distance / speed);
+
         raceAthletes.forEach(ra => {
             const weight = ra.weight_kg || 70;
             const kjPerHourPerKg = ra.kj_per_hour_per_kg || 10.0;
             totalKj += kjPerHourPerKg * weight * durationHours;
         });
-        
+
         predictedKj = totalKj / raceAthletes.length;
     }
-    
+
     const data = {
         name: name,
         race_date: raceDate,
@@ -417,7 +410,7 @@ window.saveRaceChanges = async function() {
         // Save GPX trace data if available
         route_file: window.gpxTraceData ? JSON.stringify(window.gpxTraceData) : null
     };
-    
+
     try {
         showLoading();
         await api.updateRace(currentRaceId, data);
