@@ -1,6 +1,8 @@
 /**
  * Races Details Module - Race details modal with tabs
- * Handles race detail viewing/editing with Details, Riders, and Metrics tabs
+ * Handles race detail viewing/editing with Details, Riders, Metrics and Route tabs
+ *
+ * FILE: webapp/modules/races/races-details.js
  */
 
 /**
@@ -113,6 +115,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="tab-btn active" onclick="switchRaceTab('details')">📋 Dettagli</button>
                         <button class="tab-btn" onclick="switchRaceTab('riders')">🚴 Riders (${raceAthletes.length})</button>
                         <button class="tab-btn" onclick="switchRaceTab('metrics')">📊 Metrics</button>
+                        <button class="tab-btn" onclick="switchRaceTab('route')">🗺️ Route</button>
                     </div>
                     <div class="tabs-content">
                         <div id="tab-details" class="tab-pane active">
@@ -123,6 +126,9 @@ window.renderRaceDetailsPage = async function(raceId) {
                         </div>
                         <div id="tab-metrics" class="tab-pane">
                             ${buildMetricsTab(race)}
+                        </div>
+                        <div id="tab-route" class="tab-pane">
+                            ${buildRouteTab(race)}
                         </div>
                     </div>
                 </div>
@@ -169,6 +175,11 @@ window.switchRaceTab = function(tabName) {
     
     document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
     document.getElementById(`tab-${tabName}`).classList.add('active');
+
+    // Initialize route iframe on first activation
+    if (tabName === 'route') {
+        window.initRouteTab();
+    }
 };
 
 /**
@@ -278,6 +289,12 @@ window.deleteRaceGpx = function() {
                 Importa un file GPX per visualizzare la mappa
             </div>
         `;
+    }
+
+    // Reset route iframe so it reloads fresh next time
+    const iframe = document.getElementById('route-visualizer-iframe');
+    if (iframe) {
+        iframe.dataset.loaded = 'false';
     }
     
     showToast('✅ Traccia eliminata', 'success');
