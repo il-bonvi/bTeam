@@ -7,7 +7,8 @@ const ROUTE_VISUALIZER_HTML = `<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Visualizer</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -765,17 +766,35 @@ let map;
         
         const dataContent = document.getElementById('data-content');
         // Auto-load GPX from parent app via postMessage
+        const MAX_POINTS = 50000;
         window.addEventListener('message', function(e) {
-            if (e.data && e.data.type === 'loadGpxPoints' && e.data.points) {
-                const pts = e.data.points;
-                let gpx = '<?xml version="1.0" encoding="UTF-8"?>';
-                gpx += '<gpx version="1.1" creator="bTeam"><trk><trkseg>';
-                for (const p of pts) {
-                    gpx += '<trkpt lat="' + p[0] + '" lon="' + p[1] + '"><ele>' + p[2] + '</ele></trkpt>';
-                }
-                gpx += '</trkseg></trk></gpx>';
-                parseGPX(gpx);
+            if (e.source !== window.parent) return;
+
+            const data = e.data;
+            if (!data || data.type !== 'loadGpxPoints' || !Array.isArray(data.points)) return;
+
+            const rawPoints = data.points;
+            if (rawPoints.length === 0 || rawPoints.length > MAX_POINTS) return;
+
+            const pts = [];
+            for (const p of rawPoints) {
+                if (!Array.isArray(p) || p.length < 3) continue;
+                const lat = Number(p[0]);
+                const lon = Number(p[1]);
+                const ele = Number(p[2]);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(ele)) continue;
+                pts.push([lat, lon, ele]);
             }
+
+            if (pts.length === 0) return;
+
+            let gpx = '<?xml version="1.0" encoding="UTF-8"?>';
+            gpx += '<gpx version="1.1" creator="bTeam"><trk><trkseg>';
+            for (const p of pts) {
+                gpx += '<trkpt lat="' + p[0] + '" lon="' + p[1] + '"><ele>' + p[2] + '</ele></trkpt>';
+            }
+            gpx += '</trkseg></trk></gpx>';
+            parseGPX(gpx);
         });
 
         
@@ -967,23 +986,31 @@ let map;
                 attribution: '© OpenStreetMap'
             }).addTo(map);
             
-            // Draw gradient-colored polyline
+            // Draw gradient-colored polyline (grouped by color for performance)
             const gradients = routeData.points.map(p => p.gradient);
             const smoothedGradients = smoothGradient(gradients, 6);
-            
-            for (let i = 1; i < routeData.points.length; i++) {
-                const p1 = routeData.points[i-1];
-                const p2 = routeData.points[i];
-                const color = getGradientColor(smoothedGradients[i]);
-                
-                L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
-                    color: color,
-                    weight: 4,
-                    opacity: 0.9
-                }).addTo(map);
-            }
 
-            
+            if (routeData.points.length >= 2) {
+                let currentColor = getGradientColor(smoothedGradients[1]);
+                let currentLatLngs = [
+                    [routeData.points[0].lat, routeData.points[0].lon],
+                    [routeData.points[1].lat, routeData.points[1].lon]
+                ];
+
+                for (let i = 2; i < routeData.points.length; i++) {
+                    const p = routeData.points[i];
+                    const newColor = getGradientColor(smoothedGradients[i]);
+                    if (newColor === currentColor) {
+                        currentLatLngs.push([p.lat, p.lon]);
+                    } else {
+                        L.polyline(currentLatLngs, { color: currentColor, weight: 4, opacity: 0.9 }).addTo(map);
+                        const prevPoint = routeData.points[i - 1];
+                        currentColor = newColor;
+                        currentLatLngs = [[prevPoint.lat, prevPoint.lon], [p.lat, p.lon]];
+                    }
+                }
+                L.polyline(currentLatLngs, { color: currentColor, weight: 4, opacity: 0.9 }).addTo(map);
+            }
             
             const latlngs = routeData.points.map(p => [p.lat, p.lon]);
             const routeBounds = L.latLngBounds(latlngs);
@@ -1698,7 +1725,10 @@ let map;
             });
 
             // Blocca contextmenu da long-press mobile sull'SVG
-            svgNode.addEventListener('contextmenu', function(e) { e.preventDefault(); }, { once: false });
+            if (!svgNode._mobileContextMenuHandler) {
+                svgNode._mobileContextMenuHandler = function(e) { e.preventDefault(); };
+                svgNode.addEventListener('contextmenu', svgNode._mobileContextMenuHandler, { once: false });
+            }
         }
 
         
@@ -2119,13 +2149,7 @@ let map;
                 
                 // FORZA l'ultimo blocco ad arrivare esattamente a climb.distance
                 if (i === groupedSections.length - 1) {
-                    console.log('LAST BLOCK DEBUG:');
-                    console.log('- actualEndIdx:', actualEndIdx);
-                    console.log('- climb.endIndex:', climb.endIndex);
-                    console.log('- endDist calculated:', endDist);
-                    console.log('- climb.distance:', climb.distance);
                     endDist = climb.distance;
-                    console.log('- endDist FORCED to:', endDist);
                 }
                 
                 sectionData.push({
@@ -2203,17 +2227,6 @@ let map;
                 const x2 = xScale(section.endDist);
                 const y1 = yScale(section.startEle);
                 const y2 = yScale(section.endEle);
-                
-                // DEBUG ultimo blocco
-                if (idx === sectionData.length - 1) {
-                    console.log('DRAW LAST BLOCK:');
-                    console.log('- section.endDist:', section.endDist);
-                    console.log('- totalDist:', totalDist);
-                    console.log('- xScale domain:', xScale.domain());
-                    console.log('- xScale range:', xScale.range());
-                    console.log('- x2 calculated:', x2);
-                    console.log('- chartWidth:', chartWidth);
-                }
                 
                 // Per l'ULTIMO blocco, estendi x2 fino al bordo (compensando l'offset 3D)
                 const x2Final = (idx === sectionData.length - 1) ? x2 + offsetX : x2;
@@ -2425,10 +2438,21 @@ window.initRouteTab = function() {
     if (iframe.dataset.loaded === 'true') return;
     iframe.dataset.loaded = 'true';
 
+    if (iframe._blobUrl) {
+        URL.revokeObjectURL(iframe._blobUrl);
+        iframe._blobUrl = null;
+    }
+
     const blob = new Blob([ROUTE_VISUALIZER_HTML], { type: 'text/html' });
-    iframe.src = URL.createObjectURL(blob);
+    const blobUrl = URL.createObjectURL(blob);
+    iframe._blobUrl = blobUrl;
+    iframe.src = blobUrl;
 
     iframe.onload = function() {
+        if (iframe._blobUrl) {
+            URL.revokeObjectURL(iframe._blobUrl);
+            iframe._blobUrl = null;
+        }
         const gpx = window.gpxTraceData;
         if (gpx && gpx.points) {
             setTimeout(() => {

@@ -28,6 +28,18 @@ window.exportRouteHTML = function(raceName, gpxData) {
         return;
     }
 
+    // ── Helper: HTML-escape a string for safe injection into HTML ──────────
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    const safeRaceName = escapeHtml(raceName);
+
     // ── 1. Ricostruisci il GPX text dai punti salvati ──────────────────────
     let gpxText = '<?xml version="1.0" encoding="UTF-8"?>\n';
     gpxText += '<gpx version="1.1" creator="bTeam"><trk><trkseg>\n';
@@ -36,15 +48,21 @@ window.exportRouteHTML = function(raceName, gpxData) {
     }
     gpxText += '</trkseg></trk></gpx>';
 
-    // ── 2. Codifica in base64 ──────────────────────────────────────────────
-    const gpxB64 = btoa(unescape(encodeURIComponent(gpxText)));
+    // ── 2. Codifica in base64 usando TextEncoder (chunked per evitare stack overflow) ──
+    const gpxBytes = new TextEncoder().encode(gpxText);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < gpxBytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, gpxBytes.subarray(i, i + chunkSize));
+    }
+    const gpxB64 = btoa(binary);
     const gpxName = (raceName.replace(/[^a-zA-Z0-9_\-]/g, '_') || 'route') + '.gpx';
 
     // ── 3. Parti dall'HTML del visualizzatore embedded ────────────────────
     let html = ROUTE_VISUALIZER_HTML;
 
     // ── 4. <title> ─────────────────────────────────────────────────────────
-    html = html.replace(/<title>[^<]*<\/title>/, `<title>${raceName}</title>`);
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${safeRaceName}</title>`);
 
     // ── 5. #data-content: forza display:block (era none) ──────────────────
     html = html.replace(
@@ -68,7 +86,7 @@ window.exportRouteHTML = function(raceName, gpxData) {
         letter-spacing: -0.02em;
         border-bottom: 2px solid #fc5200;
         margin-bottom: 0;
-    ">${raceName}</div>`;
+    ">${safeRaceName}</div>`;
 
     html = html.replace(
         '<div class="container">',
@@ -81,7 +99,10 @@ window.exportRouteHTML = function(raceName, gpxData) {
 (function(){
     var GPX_B64 = "${gpxB64}";
     var GPX_NAME = "${gpxName.replace(/"/g, '\\"')}";
-    var gpxText = decodeURIComponent(escape(atob(GPX_B64)));
+    var binaryStr = atob(GPX_B64);
+    var bytes = new Uint8Array(binaryStr.length);
+    for (var i = 0; i < binaryStr.length; i++) { bytes[i] = binaryStr.charCodeAt(i); }
+    var gpxText = new TextDecoder().decode(bytes);
     window._gpxRawText = gpxText;
     window._gpxFileName = GPX_NAME;
     // Attende che parseGPX sia disponibile (caricamento asincrono delle lib)

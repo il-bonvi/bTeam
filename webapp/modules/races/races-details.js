@@ -116,10 +116,10 @@ window.renderRaceDetailsPage = async function(raceId) {
                 </div>
                 <div class="tabs-container">
                     <div class="tabs-header">
-                        <button class="tab-btn active" onclick="switchRaceTab('details')">📋 Dettagli</button>
-                        <button class="tab-btn" onclick="switchRaceTab('riders')">🚴 Riders (${raceAthletes.length})</button>
-                        <button class="tab-btn" onclick="switchRaceTab('metrics')">📊 Metrics</button>
-                        <button class="tab-btn" onclick="switchRaceTab('route'); initRouteTab();">🗺️ Route</button>
+                        <button class="tab-btn active" onclick="switchRaceTab(event, 'details')">📋 Dettagli</button>
+                        <button class="tab-btn" onclick="switchRaceTab(event, 'riders')">🚴 Riders (${raceAthletes.length})</button>
+                        <button class="tab-btn" onclick="switchRaceTab(event, 'metrics')">📊 Metrics</button>
+                        <button class="tab-btn" onclick="switchRaceTab(event, 'route'); initRouteTab();">🗺️ Route</button>
                     </div>
                     <div class="tabs-content">
                         <div id="tab-details" class="tab-pane active">
@@ -173,9 +173,9 @@ window.renderRaceDetailsPage = async function(raceId) {
 /**
  * Switch between race detail tabs
  */
-window.switchRaceTab = function(tabName) {
+window.switchRaceTab = function(evt, tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    evt.target.classList.add('active');
 
     document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
     document.getElementById(`tab-${tabName}`).classList.add('active');
@@ -291,6 +291,18 @@ window.deleteRaceGpx = function() {
                 Importa un file GPX per visualizzare la mappa
             </div>
         `;
+    }
+
+    const exportBtn = document.getElementById('export-route-btn');
+    if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.style.opacity = '0.4';
+        exportBtn.style.cursor = 'not-allowed';
+    }
+
+    const iframe = document.getElementById('route-visualizer-iframe');
+    if (iframe) {
+        iframe.dataset.loaded = 'false';
     }
 
     showToast('✅ Traccia eliminata', 'success');

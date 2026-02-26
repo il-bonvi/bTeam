@@ -103,6 +103,13 @@ function updateDetailFormFromGpx(totalDistance, elevationGain) {
         filenameDisplay.textContent = '✅ Traccia caricata';
         filenameDisplay.style.color = '#22C55E';
     }
+
+    const exportBtn = document.getElementById('export-route-btn');
+    if (exportBtn) {
+        exportBtn.disabled = false;
+        exportBtn.style.opacity = '1';
+        exportBtn.style.cursor = 'pointer';
+    }
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
