@@ -364,7 +364,7 @@ async def push_race(request: PushRaceRequest):
         )
         duration_seconds = int(duration_minutes * 60)
 
-        start_date_local = f"{race['race_date']}T10:00:00"
+        start_date_local = f"{race['race_date_start']}T10:00:00"
         start_dt = datetime.fromisoformat(start_date_local)
         end_dt = start_dt + timedelta(seconds=duration_seconds)
         end_date_local = end_dt.isoformat()
@@ -480,10 +480,10 @@ async def debug_list_races():
     try:
         from shared.storage import Race
         storage = get_storage()
-        races = storage.session.query(Race.id, Race.name, Race.race_date).all()
+        races = storage.session.query(Race.id, Race.name, Race.race_date_start).all()
         return {
             "total": len(races),
-            "races": [{"id": r.id, "name": r.name, "date": r.race_date} for r in races]
+            "races": [{"id": r.id, "name": r.name, "date": r.race_date_start} for r in races]
         }
     except Exception as e:
         return {"error": str(e)}

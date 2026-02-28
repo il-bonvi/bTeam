@@ -236,6 +236,35 @@ class APIClient {
         return this.request(`/races/${raceId}/athletes`);
     }
 
+    // Stages
+    async getStages(raceId) {
+        return this.request(`/races/${raceId}/stages`);
+    }
+
+    async getStage(raceId, stageId) {
+        return this.request(`/races/${raceId}/stages/${stageId}`);
+    }
+
+    async createStage(raceId, data) {
+        return this.request(`/races/${raceId}/stages`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async updateStage(raceId, stageId, data) {
+        return this.request(`/races/${raceId}/stages/${stageId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deleteStage(raceId, stageId) {
+        return this.request(`/races/${raceId}/stages/${stageId}`, {
+            method: 'DELETE',
+        });
+    }
+
     // Wellness
     async getWellness(filters = {}) {
         const params = new URLSearchParams(filters).toString();

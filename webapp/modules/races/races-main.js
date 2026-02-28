@@ -42,8 +42,17 @@ window.renderRacesPage = async function() {
             [
                 { key: 'id', label: 'ID' },
                 { key: 'name', label: 'Nome Gara' },
-                { key: 'race_date', label: 'Data', format: formatDate },
-                { key: 'race_days', label: 'Giorni', format: v => v ? `${v}g` : '1g' },
+                { 
+                    key: 'date_range', 
+                    label: 'Periodo', 
+                    format: (_, row) => {
+                        const start = formatDate(row.race_date_start);
+                        const end = formatDate(row.race_date_end);
+                        if (start === end) return start;
+                        return `${start} → ${end}`;
+                    }
+                },
+                { key: 'num_stages', label: 'Tappe', format: v => v ? `${v}t` : '1t' },
                 { key: 'distance_km', label: 'Distanza (km)', format: v => formatNumber(v, 1) },
                 { key: 'category', label: 'Categoria' },
                 { key: 'gender', label: 'Genere' },

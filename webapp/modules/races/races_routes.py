@@ -11,9 +11,10 @@ router = APIRouter()
 
 class RaceCreate(BaseModel):
     name: str
-    race_date: str
+    race_date_start: str
+    race_date_end: str
     distance_km: float
-    race_days: int = 1
+    num_stages: int = 1
     gender: Optional[str] = None
     category: Optional[str] = None
     elevation_m: Optional[float] = None
@@ -28,6 +29,13 @@ class RaceAthleteAdd(BaseModel):
     athlete_id: int
     kj_per_hour_per_kg: float = 10.0
     objective: str = "C"
+
+
+class StageUpdate(BaseModel):
+    distance_km: Optional[float] = None
+    elevation_m: Optional[float] = None
+    route_file: Optional[str] = None
+    notes: Optional[str] = None
 
 
 @router.get("/")
@@ -52,9 +60,10 @@ async def create_race(race: RaceCreate):
         storage = get_storage()
         race_id = storage.add_race(
             name=race.name,
-            race_date=race.race_date,
+            race_date_start=race.race_date_start,
+            race_date_end=race.race_date_end,
             distance_km=race.distance_km,
-            race_days=race.race_days,
+            num_stages=race.num_stages,
             gender=race.gender,
             category=race.category,
             elevation_m=race.elevation_m,
@@ -80,9 +89,10 @@ async def update_race(race_id: int, race: RaceCreate):
         storage.update_race(
             race_id=race_id,
             name=race.name,
-            race_date=race.race_date,
+            race_date_start=race.race_date_start,
+            race_date_end=race.race_date_end,
             distance_km=race.distance_km,
-            race_days=race.race_days,
+            num_stages=race.num_stages,
             gender=race.gender,
             category=race.category,
             elevation_m=race.elevation_m,
@@ -174,3 +184,114 @@ async def get_race_athletes(race_id: int):
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     return race.get('athletes', [])
+
+
+# ============ STAGE MANAGEMENT ENDPOINTS ============
+
+@router.get("/{race_id}/stages")
+async def get_race_stages(race_id: int):
+    """Get all stages for a race"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        stages = storage.get_stages(race_id)
+        return [stage.to_dict() if hasattr(stage, 'to_dict') else stage for stage in stages]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{race_id}/stages/{stage_id}")
+async def get_stage(race_id: int, stage_id: int):
+    """Get a specific stage by ID"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        stage = storage.get_stage(stage_id)
+        if not stage:
+            raise HTTPException(status_code=404, detail="Stage not found")
+        return stage.to_dict() if hasattr(stage, 'to_dict') else stage
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{race_id}/stages")
+async def create_stage(race_id: int, stage: StageUpdate):
+    """Create a new stage for a race"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        # Get current number of stages to determine next stage number
+        current_stages = storage.get_stages(race_id)
+        stage_number = len(current_stages) + 1
+        
+        # Add the new stage
+        stage_id = storage.add_stage(
+            race_id=race_id,
+            stage_number=stage_number,
+            distance_km=stage.distance_km,
+            elevation_m=stage.elevation_m,
+            route_file=stage.route_file,
+            notes=stage.notes
+        )
+        
+        new_stage = storage.get_stage(stage_id)
+        return new_stage.to_dict() if hasattr(new_stage, 'to_dict') else new_stage
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/{race_id}/stages/{stage_id}")
+async def update_stage(race_id: int, stage_id: int, stage: StageUpdate):
+    """Update a specific stage"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        existing_stage = storage.get_stage(stage_id)
+        if not existing_stage:
+            raise HTTPException(status_code=404, detail="Stage not found")
+        
+        # Update the stage with provided data
+        storage.update_stage(
+            stage_id=stage_id,
+            distance_km=stage.distance_km,
+            elevation_m=stage.elevation_m,
+            route_file=stage.route_file,
+            notes=stage.notes
+        )
+        
+        updated_stage = storage.get_stage(stage_id)
+        return updated_stage.to_dict() if hasattr(updated_stage, 'to_dict') else updated_stage
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{race_id}/stages/{stage_id}")
+async def delete_stage(race_id: int, stage_id: int):
+    """Delete a specific stage"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        stage = storage.get_stage(stage_id)
+        if not stage:
+            raise HTTPException(status_code=404, detail="Stage not found")
+        
+        storage.delete_stage(stage_id)
+        return {"message": "Stage deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

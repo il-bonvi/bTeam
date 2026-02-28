@@ -16,13 +16,19 @@ window.showCreateRaceDialog = function() {
             <label class="form-label">Nome Gara *</label>
             <input type="text" id="race-name" class="form-input" required>
         </div>
-        <div class="form-group">
-            <label class="form-label">Data *</label>
-            <input type="date" id="race-date" class="form-input" value="${today}" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+                <label class="form-label">Data Inizio *</label>
+                <input type="date" id="race-date-start" class="form-input" value="${today}" required onchange="syncCreateRaceDateEnd()">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Data Fine *</label>
+                <input type="date" id="race-date-end" class="form-input" value="${today}" required onchange="validateCreateRaceDateEnd()">
+            </div>
         </div>
         <div class="form-group">
-            <label class="form-label">Giorni Gara *</label>
-            <input type="number" id="race-days" class="form-input" min="1" value="1" required>
+            <label class="form-label">N. Tappe *</label>
+            <input type="number" id="race-num-stages" class="form-input" min="1" value="1" required>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
@@ -170,19 +176,26 @@ window.updateCreateRacePredictions = async function() {
  */
 window.createRace = async function() {
     const name = document.getElementById('race-name').value.trim();
-    const raceDate = document.getElementById('race-date').value;
+    const raceDateStart = document.getElementById('race-date-start').value;
+    const raceDateEnd = document.getElementById('race-date-end').value;
     const distance = parseFloat(document.getElementById('race-distance').value);
     const speed = parseFloat(document.getElementById('race-speed').value);
     
-    if (!name || !raceDate || !distance || !speed) {
+    if (!name || !raceDateStart || !raceDateEnd || !distance || !speed) {
         showToast('Compila i campi obbligatori', 'warning');
+        return;
+    }
+    
+    if (new Date(raceDateEnd) < new Date(raceDateStart)) {
+        showToast('La data fine deve essere successiva o uguale alla data inizio', 'warning');
         return;
     }
     
     const data = {
         name: name,
-        race_date: raceDate,
-        race_days: parseInt(document.getElementById('race-days').value) || 1,
+        race_date_start: raceDateStart,
+        race_date_end: raceDateEnd,
+        num_stages: parseInt(document.getElementById('race-num-stages').value) || 1,
         distance_km: distance,
         category: document.getElementById('race-category').value,
         gender: document.getElementById('race-gender').value,
@@ -205,5 +218,31 @@ window.createRace = async function() {
         showToast('Errore nella creazione: ' + error.message, 'error');
     } finally {
         hideLoading();
+    }
+};
+
+/**
+ * Sync end date when start date changes - only if end date becomes invalid
+ */
+window.syncCreateRaceDateEnd = function() {
+    const startDate = document.getElementById('race-date-start').value;
+    const endDate = document.getElementById('race-date-end').value;
+    
+    // Only sync if end date is before start date
+    if (new Date(endDate) < new Date(startDate)) {
+        document.getElementById('race-date-end').value = startDate;
+    }
+};
+
+/**
+ * Validate that end date is not before start date
+ */
+window.validateCreateRaceDateEnd = function() {
+    const startDate = document.getElementById('race-date-start').value;
+    const endDate = document.getElementById('race-date-end').value;
+    
+    if (new Date(endDate) < new Date(startDate)) {
+        document.getElementById('race-date-end').value = startDate;
+        showToast('La data fine non può essere prima della data inizio', 'warning');
     }
 };
