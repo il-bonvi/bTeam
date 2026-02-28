@@ -185,11 +185,50 @@ window.showAddRidersDialog = async function() {
             return (a.first_name || '').toLowerCase().localeCompare((b.first_name || '').toLowerCase());
         });
 
+        // Extract unique teams and categories for filter
+        const teams = [...new Set(sortedAthletes.map(a => a.team_name).filter(t => t))].sort();
+        const categories = [...new Set(sortedAthletes.map(a => a.category).filter(c => c))].sort();
+        const genders = [...new Set(sortedAthletes.map(a => a.gender).filter(g => g))].sort();
+
+        // If race has a gender, auto-select it (no "Tutti" option for gender)
+        const raceGender = window.currentRaceData?.gender;
+        const preselectedGender = (raceGender === 'M' || raceGender === 'F') ? raceGender : '';
+
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <strong>Aggiungi Atleti alla Gara</strong>
                 <button class="btn btn-secondary btn-sm" onclick="hideAddRidersPanel()">Chiudi</button>
             </div>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px;">Genere</label>
+                    <select id="filter-gender" class="form-input" onchange="applyAthletesFilter()" style="width: 100%;">
+                        ${preselectedGender ? `
+                            <option value="${preselectedGender}" selected>${preselectedGender === 'M' ? 'Maschio' : 'Femmina'}</option>
+                        ` : `
+                            <option value="">Tutti</option>
+                            <option value="M">Maschio</option>
+                            <option value="F">Femmina</option>
+                        `}
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px;">Squadra</label>
+                    <select id="filter-team" class="form-input" onchange="applyAthletesFilter()" style="width: 100%;">
+                        <option value="">Tutte</option>
+                        ${teams.map(t => `<option value="${t}">${t}</option>`).join('')}
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 150px;">
+                    <label style="display: block; font-size: 12px; font-weight: bold; margin-bottom: 4px;">Categoria</label>
+                    <select id="filter-category" class="form-input" onchange="applyAthletesFilter()" style="width: 100%;">
+                        <option value="">Tutte</option>
+                        ${categories.length > 0 ? categories.map(c => `<option value="${c}">${c}</option>`).join('') : '<option value="" disabled>Nessuna categoria disponibile</option>'}
+                    </select>
+                </div>
+            </div>
+
             <div style="max-height: 300px; overflow-y: auto;">
                 <table class="data-table" style="width: 100%;">
                     <thead>
@@ -201,9 +240,9 @@ window.showAddRidersDialog = async function() {
                             <th>kJ/h/kg</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="riders-filter-tbody">
                         ${sortedAthletes.map(athlete => `
-                            <tr>
+                            <tr class="rider-row" data-team="${athlete.team_name || ''}" data-category="${athlete.category || ''}" data-gender="${athlete.gender || ''}">
                                 <td><input type="checkbox" class="rider-checkbox" value="${athlete.id}"></td>
                                 <td>${athlete.last_name} ${athlete.first_name}</td>
                                 <td>${athlete.team_name || '-'}</td>
@@ -230,6 +269,11 @@ window.showAddRidersDialog = async function() {
 
         panel.style.display = 'block';
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        // Apply gender filter automatically if race has a gender specified
+        if (preselectedGender) {
+            setTimeout(() => applyAthletesFilter(), 100);
+        }
     } catch (error) {
         showToast('Errore nel caricamento degli atleti', 'error');
     }
@@ -244,11 +288,45 @@ window.hideAddRidersPanel = function() {
 };
 
 /**
- * Toggle all rider checkboxes
+ * Apply filters to athletes table
+ */
+window.applyAthletesFilter = function() {
+    const filterGender = document.getElementById('filter-gender')?.value || '';
+    const filterTeam = document.getElementById('filter-team')?.value || '';
+    const filterCategory = document.getElementById('filter-category')?.value || '';
+    
+    const rows = document.querySelectorAll('.rider-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const rowGender = row.getAttribute('data-gender');
+        const rowTeam = row.getAttribute('data-team');
+        const rowCategory = row.getAttribute('data-category');
+        
+        const matchGender = !filterGender || rowGender === filterGender;
+        const matchTeam = !filterTeam || rowTeam === filterTeam;
+        const matchCategory = !filterCategory || rowCategory === filterCategory;
+        
+        const shouldShow = matchGender && matchTeam && matchCategory;
+        row.style.display = shouldShow ? '' : 'none';
+        
+        if (shouldShow) visibleCount++;
+    });
+    
+    // Uncheck "select all" if filters applied
+    const selectAll = document.getElementById('select-all-riders');
+    if (selectAll) {
+        selectAll.checked = false;
+    }
+};
+
+/**
+ * Toggle all rider checkboxes (only visible ones after filters)
  */
 window.toggleAllRiders = function() {
     const selectAll = document.getElementById('select-all-riders').checked;
-    document.querySelectorAll('.rider-checkbox').forEach(cb => {
+    // Only select checkboxes in visible rows
+    document.querySelectorAll('.rider-row:not([style*="display: none"]) .rider-checkbox').forEach(cb => {
         cb.checked = selectAll;
     });
 };

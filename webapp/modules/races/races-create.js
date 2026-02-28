@@ -20,6 +20,10 @@ window.showCreateRaceDialog = function() {
             <label class="form-label">Data *</label>
             <input type="date" id="race-date" class="form-input" value="${today}" required>
         </div>
+        <div class="form-group">
+            <label class="form-label">Giorni Gara *</label>
+            <input type="number" id="race-days" class="form-input" min="1" value="1" required>
+        </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="form-group">
                 <label class="form-label">Genere</label>
@@ -178,6 +182,7 @@ window.createRace = async function() {
     const data = {
         name: name,
         race_date: raceDate,
+        race_days: parseInt(document.getElementById('race-days').value) || 1,
         distance_km: distance,
         category: document.getElementById('race-category').value,
         gender: document.getElementById('race-gender').value,

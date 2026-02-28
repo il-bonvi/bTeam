@@ -320,6 +320,7 @@ class Race(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     race_date = Column(String(255), nullable=False)  # YYYY-MM-DD format
+    race_days = Column(Integer, nullable=False, default=1)  # Number of race days
     gender = Column(String(50), nullable=True)  # "Femminile" o "Maschile"
     category = Column(String(100), nullable=True)  # Es: "Allieve", "U23", ecc.
     distance_km = Column(Float, nullable=False)
@@ -350,6 +351,7 @@ class Race(Base):
             "id": self.id,
             "name": self.name,
             "race_date": self.race_date,
+            "race_days": self.race_days,
             "gender": self.gender,
             "category": self.category,
             "distance_km": self.distance_km,
@@ -524,6 +526,15 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
+                
+                # Add race_days column if missing
+                if "race_days" not in races_cols:
+                    try:
+                        cursor.execute("ALTER TABLE races ADD COLUMN race_days INTEGER DEFAULT 1")
+                        print(f"[bTeam] Colonna 'race_days' aggiunta alla tabella races")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'race_days': {e}")
             
             # Get existing columns in race_athletes table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_athletes'")
@@ -1119,12 +1130,14 @@ class BTeamStorage:
         predicted_kj: Optional[float] = None,
         route_file: Optional[str] = None,
         notes: Optional[str] = None,
+        race_days: int = 1,
     ) -> int:
         """Add a new race (standalone, not linked to an athlete)."""
         now = datetime.utcnow().isoformat()
         race = Race(
             name=name.strip(),
             race_date=race_date,
+            race_days=race_days,
             gender=gender,
             category=category,
             distance_km=distance_km,
@@ -1154,6 +1167,7 @@ class BTeamStorage:
         predicted_kj: Optional[float] = None,
         route_file: Optional[str] = None,
         notes: Optional[str] = None,
+        race_days: Optional[int] = None,
     ) -> bool:
         """Update race details."""
         try:
@@ -1183,6 +1197,8 @@ class BTeamStorage:
                 race.route_file = route_file
             if notes is not None:
                 race.notes = notes
+            if race_days is not None:
+                race.race_days = race_days
             
             self.session.commit()
             return True

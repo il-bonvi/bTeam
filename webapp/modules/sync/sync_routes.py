@@ -419,7 +419,7 @@ async def push_race(request: PushRaceRequest):
 
                 # athlete-specific info no longer needed
 
-                # Check for duplicate in this specific athlete's calendar
+                # Check for duplicate in this specific athlete's calendar and delete if found
                 try:
                     existing_events = client.get_events(
                         athlete_id="0",
@@ -428,16 +428,18 @@ async def push_race(request: PushRaceRequest):
                         days_forward=1
                     )
                     
-                    event_exists = any(
-                        evt.get('name') == race_name 
-                        for evt in existing_events
-                    )
-                    
-                    if event_exists:
-                        logger.info(f"[PUSH-RACE] Race '{race_name}' already exists for athlete {athlete_id}")
-                        continue
+                    # Find and delete any existing event with the same name
+                    for evt in existing_events:
+                        if evt.get('name') == race_name:
+                            event_id = evt.get('id')
+                            if event_id:
+                                try:
+                                    client.delete_event(athlete_id="0", event_id=event_id)
+                                    logger.info(f"[PUSH-RACE] Deleted existing race '{race_name}' (ID: {event_id}) for athlete {athlete_id}")
+                                except Exception as delete_err:
+                                    logger.warning(f"Could not delete existing event {event_id}: {delete_err}")
                 except Exception as check_err:
-                    logger.warning(f"Could not check duplicate for athlete {athlete_id}: {check_err}")
+                    logger.warning(f"Could not check for existing events for athlete {athlete_id}: {check_err}")
 
                 event = client.create_event(
                     athlete_id="0",

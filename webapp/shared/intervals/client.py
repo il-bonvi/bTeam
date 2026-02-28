@@ -62,11 +62,11 @@ class IntervalsAPIClient:
                 'Authorization': f'Bearer {access_token}',
                 'Content-Type': 'application/json'
             }
-            self.auth = None
+            self.auth: Optional[tuple[str, str]] = None
         else:
             # API key uses Basic Auth
             self.headers = {'Content-Type': 'application/json'}
-            self.auth = ('API_KEY', api_key)
+            self.auth = ('API_KEY', api_key) if api_key else None
 
     @staticmethod
     def _coerce_date_value(value: Union[str, date, datetime]) -> Union[date, datetime]:
@@ -513,6 +513,30 @@ class IntervalsAPIClient:
         
         response = self._request('POST', f'/api/v1/athlete/{athlete_id}/events', json=data)
         return response.json()
+    
+    def delete_event(self, athlete_id: str = '0', event_id: Optional[int] = None) -> bool:
+        """
+        Elimina un evento dal calendario
+        
+        Args:
+            athlete_id: ID atleta ('0' = corrente)
+            event_id: ID evento da eliminare
+        
+        Returns:
+            True se eliminato con successo
+        
+        Raises:
+            ValueError: Se event_id non è fornito
+        """
+        if event_id is None:
+            raise ValueError("event_id è obbligatorio per eliminare un evento")
+        
+        try:
+            response = self._request('DELETE', f'/api/v1/athlete/{athlete_id}/events/{event_id}')
+            return response.status_code in [200, 204]
+        except Exception as e:
+            # Se l'evento non esiste, non è un vero errore
+            return False
     
     def get_athlete(self, athlete_id: str = '0') -> Dict:
         """Informazioni atleta"""

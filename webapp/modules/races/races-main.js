@@ -43,6 +43,7 @@ window.renderRacesPage = async function() {
                 { key: 'id', label: 'ID' },
                 { key: 'name', label: 'Nome Gara' },
                 { key: 'race_date', label: 'Data', format: formatDate },
+                { key: 'race_days', label: 'Giorni', format: v => v ? `${v}g` : '1g' },
                 { key: 'distance_km', label: 'Distanza (km)', format: v => formatNumber(v, 1) },
                 { key: 'category', label: 'Categoria' },
                 { key: 'gender', label: 'Genere' },

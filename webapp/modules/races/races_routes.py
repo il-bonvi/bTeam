@@ -13,6 +13,7 @@ class RaceCreate(BaseModel):
     name: str
     race_date: str
     distance_km: float
+    race_days: int = 1
     gender: Optional[str] = None
     category: Optional[str] = None
     elevation_m: Optional[float] = None
@@ -53,6 +54,7 @@ async def create_race(race: RaceCreate):
             name=race.name,
             race_date=race.race_date,
             distance_km=race.distance_km,
+            race_days=race.race_days,
             gender=race.gender,
             category=race.category,
             elevation_m=race.elevation_m,
@@ -80,6 +82,7 @@ async def update_race(race_id: int, race: RaceCreate):
             name=race.name,
             race_date=race.race_date,
             distance_km=race.distance_km,
+            race_days=race.race_days,
             gender=race.gender,
             category=race.category,
             elevation_m=race.elevation_m,

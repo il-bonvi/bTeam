@@ -195,6 +195,10 @@ function buildDetailsTab(race) {
                 <label class="form-label">Data *</label>
                 <input type="date" id="detail-date" class="form-input" value="${race.race_date}" required>
             </div>
+            <div class="form-group">
+                <label class="form-label">Giorni Gara *</label>
+                <input type="number" id="detail-race-days" class="form-input" min="1" value="${race.race_days || 1}" required>
+            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
                     <label class="form-label">Genere</label>
@@ -382,6 +386,39 @@ window.updateDetailPredictions = function() {
 };
 
 /**
+ * Refresh race details from server without navigating away
+ */
+window.refreshRaceDetails = async function(raceId) {
+    try {
+        // Reload race data from API
+        const race = await api.getRace(raceId);
+        window.currentRaceData = race;
+        
+        // Update form fields with latest data
+        document.getElementById('detail-name').value = race.name || '';
+        document.getElementById('detail-date').value = race.race_date || '';
+        document.getElementById('detail-race-days').value = race.race_days || 1;
+        document.getElementById('detail-distance').value = race.distance_km || '';
+        document.getElementById('detail-speed').value = race.avg_speed_kmh || '';
+        document.getElementById('detail-category').value = race.category || 'C';
+        document.getElementById('detail-gender').value = race.gender || '';
+        document.getElementById('detail-elevation').value = race.elevation_m || '';
+        document.getElementById('detail-notes').value = race.notes || '';
+        
+        // Refresh riders table
+        const ridersTableBody = document.querySelector('#riders-table tbody');
+        if (ridersTableBody && race.athletes && race.athletes.length > 0) {
+            ridersTableBody.innerHTML = race.athletes.map(ra => buildRiderRow(ra)).join('');
+        }
+        
+        // Refresh KJ totals
+        refreshRidersKJ();
+    } catch (error) {
+        console.error('Error refreshing race details:', error);
+    }
+};
+
+/**
  * Save race changes
  */
 window.saveRaceChanges = async function() {
@@ -414,6 +451,7 @@ window.saveRaceChanges = async function() {
     const data = {
         name: name,
         race_date: raceDate,
+        race_days: parseInt(document.getElementById('detail-race-days')?.value) || 1,
         distance_km: distance,
         category: document.getElementById('detail-category')?.value,
         gender: document.getElementById('detail-gender')?.value,
@@ -430,7 +468,8 @@ window.saveRaceChanges = async function() {
         showLoading();
         await api.updateRace(currentRaceId, data);
         showToast('✅ Gara aggiornata con successo', 'success');
-        setTimeout(() => loadRaces(), 500);
+        // Reload current race data without navigating away
+        await refreshRaceDetails(currentRaceId);
     } catch (error) {
         showToast('Errore nell\'aggiornamento: ' + error.message, 'error');
     } finally {
