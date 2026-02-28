@@ -219,6 +219,13 @@ class APIClient {
         });
     }
 
+    async updateAthleteInRace(raceId, athleteId, data) {
+        return this.request(`/races/${raceId}/athletes/${athleteId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    }
+
     async removeAthleteFromRace(raceId, athleteId) {
         return this.request(`/races/${raceId}/athletes/${athleteId}`, {
             method: 'DELETE',

@@ -355,7 +355,7 @@ async def push_race(request: PushRaceRequest):
         distance_km = race.get('distance_km') or 0
         elevation_m = race.get('elevation_m') or 0
         predicted_kj = race.get('predicted_kj') or 0
-        category = race.get('category') or 'C'
+        race_default_category = race.get('category') or 'C'
         notes = race.get('notes') or ''
 
         predicted_duration = race.get('predicted_duration_minutes')
@@ -368,9 +368,6 @@ async def push_race(request: PushRaceRequest):
         start_dt = datetime.fromisoformat(start_date_local)
         end_dt = start_dt + timedelta(seconds=duration_seconds)
         end_date_local = end_dt.isoformat()
-
-        category_upper = str(category).upper()
-        intervals_category = f"RACE_{category_upper}" if category_upper in ['A', 'B', 'C'] else "RACE_C"
 
         def format_duration(minutes: float) -> str:
             hours = int(minutes // 60)
@@ -390,6 +387,11 @@ async def push_race(request: PushRaceRequest):
                 api_key = athlete_info['api_key']
                 
                 client = IntervalsAPIClient(api_key=api_key)
+
+                # Use athlete's specific objective if set, otherwise use race default category
+                athlete_objective = athlete_info['data'].get('objective') or race_default_category
+                category_upper = str(athlete_objective).upper()
+                intervals_category = f"RACE_{category_upper}" if category_upper in ['A', 'B', 'C'] else "RACE_C"
 
                 # Build description only with core metrics (remove race title, notes, athlete info)
                 race_description = (

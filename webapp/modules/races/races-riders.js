@@ -7,7 +7,14 @@
  * Build riders tab content
  */
 function buildRidersTab(race, allAthletes) {
-    const raceAthletes = race.athletes || [];
+    const raceAthletes = (race.athletes || []).sort((a, b) => {
+        const lastNameA = (a.last_name || '').toLowerCase();
+        const lastNameB = (b.last_name || '').toLowerCase();
+        if (lastNameA !== lastNameB) {
+            return lastNameA.localeCompare(lastNameB);
+        }
+        return (a.first_name || '').toLowerCase().localeCompare((b.first_name || '').toLowerCase());
+    });
     
     return `
         <div style="padding: 15px;">
@@ -69,7 +76,7 @@ function buildRiderRow(rider) {
     
     return `
         <tr>
-            <td>${rider.first_name} ${rider.last_name}</td>
+            <td>${rider.last_name} ${rider.first_name}</td>
             <td>${rider.team_name || '-'}</td>
             <td>${weight}</td>
             <td>
@@ -168,6 +175,16 @@ window.showAddRidersDialog = async function() {
             return;
         }
 
+        // Sort available athletes by last name, then first name
+        const sortedAthletes = availableAthletes.sort((a, b) => {
+            const lastNameA = (a.last_name || '').toLowerCase();
+            const lastNameB = (b.last_name || '').toLowerCase();
+            if (lastNameA !== lastNameB) {
+                return lastNameA.localeCompare(lastNameB);
+            }
+            return (a.first_name || '').toLowerCase().localeCompare((b.first_name || '').toLowerCase());
+        });
+
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <strong>Aggiungi Atleti alla Gara</strong>
@@ -185,10 +202,10 @@ window.showAddRidersDialog = async function() {
                         </tr>
                     </thead>
                     <tbody>
-                        ${availableAthletes.map(athlete => `
+                        ${sortedAthletes.map(athlete => `
                             <tr>
                                 <td><input type="checkbox" class="rider-checkbox" value="${athlete.id}"></td>
-                                <td>${athlete.first_name} ${athlete.last_name}</td>
+                                <td>${athlete.last_name} ${athlete.first_name}</td>
                                 <td>${athlete.team_name || '-'}</td>
                                 <td>${athlete.weight_kg || '-'} kg</td>
                                 <td>${athlete.kj_per_hour_per_kg || '10.0'}</td>
@@ -290,19 +307,31 @@ window.updateRiderKj = function(athleteId, newKj) {
 /**
  * Update rider objective (A/B/C)
  */
-window.updateRiderObjective = function(athleteId, newObjective) {
+window.updateRiderObjective = async function(athleteId, newObjective) {
+    const selectElement = event.target;
     const athlete = window.currentRaceData.athletes.find(a => a.id === athleteId);
     if (athlete) {
-        athlete.objective = newObjective;
-        
-        // Update the select background color
-        const selectElement = event.target;
-        const objectiveColors = {
-            'A': '#4ade80', // green
-            'B': '#60a5fa', // blue  
-            'C': '#fbbf24'  // yellow
-        };
-        selectElement.style.backgroundColor = objectiveColors[newObjective] || '#f3f4f6';
+        try {
+            // Save to backend
+            await api.updateAthleteInRace(window.currentRaceId, athleteId, {
+                athlete_id: athleteId,
+                kj_per_hour_per_kg: athlete.kj_per_hour_per_kg,
+                objective: newObjective
+            });
+            
+            // Update local data
+            athlete.objective = newObjective;
+            
+            // Update the select background color
+            const objectiveColors = {
+                'A': '#4ade80', // green
+                'B': '#60a5fa', // blue  
+                'C': '#fbbf24'  // yellow
+            };
+            selectElement.style.backgroundColor = objectiveColors[newObjective] || '#f3f4f6';
+        } catch (error) {
+            showToast('Errore nel salvataggio dell\'obiettivo: ' + error.message, 'error');
+        }
     }
 };
 

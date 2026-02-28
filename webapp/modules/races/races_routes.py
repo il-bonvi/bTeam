@@ -129,6 +129,31 @@ async def add_athlete_to_race(race_id: int, athlete_data: RaceAthleteAdd):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.put("/{race_id}/athletes/{athlete_id}")
+async def update_athlete_in_race(race_id: int, athlete_id: int, athlete_data: RaceAthleteAdd):
+    """Update athlete's objective and kJ value in a race"""
+    storage = get_storage()
+    race = storage.get_race(race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    
+    try:
+        # Update the athlete's objective and kJ value using the proper storage method
+        success = storage.update_race_athlete(
+            race_id=race_id,
+            athlete_id=athlete_id,
+            objective=athlete_data.objective,
+            kj_per_hour_per_kg=athlete_data.kj_per_hour_per_kg
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Athlete not found in this race")
+        
+        return {"message": "Athlete updated in race successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/{race_id}/athletes/{athlete_id}")
 async def remove_athlete_from_race(race_id: int, athlete_id: int):
     """Remove an athlete from a race"""
