@@ -122,9 +122,106 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function displayGpxMap(coordinates) {
+/**
+ * Parse GPX file and return coordinates and points
+ * Global version for use in other modules
+ */
+window.parseGPXFile = function(content) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(content, 'text/xml');
+        if (xmlDoc.querySelector('parsererror')) { 
+            throw new Error('Errore nel parsing del file GPX');
+        }
+
+        const trackpoints = xmlDoc.querySelectorAll('trkpt');
+        if (trackpoints.length === 0) { 
+            throw new Error('Nessun trackpoint trovato nel file');
+        }
+
+        const coordinates = [];
+        const points = [];
+        let totalDistance = 0, elevationGain = 0;
+        let prevElevation = null, prevLat = null, prevLon = null;
+
+        trackpoints.forEach(point => {
+            const lat = parseFloat(point.getAttribute('lat'));
+            const lon = parseFloat(point.getAttribute('lon'));
+            const elevation = parseFloat(point.querySelector('ele')?.textContent || 0);
+
+            coordinates.push([lat, lon]);
+            points.push([lat, lon, elevation]);
+
+            if (prevLat !== null) totalDistance += calculateDistance(prevLat, prevLon, lat, lon);
+            if (prevElevation !== null && elevation - prevElevation > 0) elevationGain += elevation - prevElevation;
+
+            prevElevation = elevation; prevLat = lat; prevLon = lon;
+        });
+
+        return { coordinates, points, totalDistance, elevationGain };
+    } catch (error) {
+        console.error('Error parsing GPX:', error);
+        throw error;
+    }
+};
+
+/**
+ * Parse TCX file and return coordinates and points
+ * Global version for use in other modules
+ */
+window.parseTCXFile = function(content) {
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(content, 'text/xml');
+        if (xmlDoc.querySelector('parsererror')) { 
+            throw new Error('Errore nel parsing del file TCX');
+        }
+
+        // TCX uses Trackpoint elements
+        const trackpoints = xmlDoc.querySelectorAll('Trackpoint');
+        if (trackpoints.length === 0) { 
+            throw new Error('Nessun trackpoint trovato nel file TCX');
+        }
+
+        const coordinates = [];
+        const points = [];
+        let totalDistance = 0, elevationGain = 0;
+        let prevElevation = null, prevLat = null, prevLon = null;
+
+        trackpoints.forEach(point => {
+            const position = point.querySelector('Position');
+            if (!position) return;
+            
+            const latEl = position.querySelector('LatitudeDegrees');
+            const lonEl = position.querySelector('LongitudeDegrees');
+            const altEl = point.querySelector('AltitudeMeters');
+
+            if (!latEl || !lonEl) return;
+
+            const lat = parseFloat(latEl.textContent);
+            const lon = parseFloat(lonEl.textContent);
+            const elevation = parseFloat(altEl?.textContent || 0);
+
+            coordinates.push([lat, lon]);
+            points.push([lat, lon, elevation]);
+
+            if (prevLat !== null) totalDistance += calculateDistance(prevLat, prevLon, lat, lon);
+            if (prevElevation !== null && elevation - prevElevation > 0) elevationGain += elevation - prevElevation;
+
+            prevElevation = elevation; prevLat = lat; prevLon = lon;
+        });
+
+        return { coordinates, points, totalDistance, elevationGain };
+    } catch (error) {
+        console.error('Error parsing TCX:', error);
+        throw error;
+    }
+};
+
+
+function displayGpxMap(coordinates, containerId = 'map-container') {
     if (coordinates.length === 0) return;
-    let mapContainer = document.getElementById('map-container') || document.getElementById('gpx-map');
+    let mapContainer = document.getElementById(containerId) || document.getElementById('gpx-map');
     if (!mapContainer) return;
     mapContainer.innerHTML = '<div id="leaflet-map" style="width: 100%; height: 100%;"></div>';
     setTimeout(() => {

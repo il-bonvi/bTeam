@@ -381,6 +381,8 @@ class RaceStage(Base):
     elevation_m = Column(Float, nullable=True)  # Dislivello tappa
     route_file = Column(String(500), nullable=True)  # GPX/FIT/TCX for this stage
     notes = Column(Text, nullable=True)
+    stage_date = Column(String(255), nullable=True)  # Stage start date (YYYY-MM-DD)
+    avg_speed_kmh = Column(Float, nullable=True)  # Average expected speed (km/h)
     created_at = Column(String(255), nullable=False)
 
     race = relationship("Race", backref="stages")
@@ -394,6 +396,8 @@ class RaceStage(Base):
             "elevation_m": self.elevation_m,
             "route_file": self.route_file,
             "notes": self.notes,
+            "stage_date": self.stage_date,
+            "avg_speed_kmh": self.avg_speed_kmh,
             "created_at": self.created_at,
         }
 
@@ -637,6 +641,8 @@ class BTeamStorage:
                             elevation_m REAL,
                             route_file VARCHAR(500),
                             notes TEXT,
+                            stage_date VARCHAR(255),
+                            avg_speed_kmh REAL,
                             created_at VARCHAR(255),
                             FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE
                         )
@@ -644,6 +650,22 @@ class BTeamStorage:
                     print(f"[bTeam] Tabella 'race_stages' creata")
                 except sqlite3.Error as e:
                     print(f"[bTeam] Errore creazione tabella 'race_stages': {e}")
+            
+            # Add missing columns to race_stages table if they don't exist
+            if race_stages_exists:
+                try:
+                    # Add stage_date column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN stage_date VARCHAR(255)")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'stage_date': {e}")
+                
+                try:
+                    # Add avg_speed_kmh column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN avg_speed_kmh REAL")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'avg_speed_kmh': {e}")
             
             # Check if race_stages table is empty and needs to be populated
             if race_stages_exists or True:  # Always try to populate if none exist
@@ -1379,6 +1401,8 @@ class BTeamStorage:
         elevation_m: Optional[float] = None,
         route_file: Optional[str] = None,
         notes: Optional[str] = None,
+        stage_date: Optional[str] = None,
+        avg_speed_kmh: Optional[float] = None,
     ) -> bool:
         """Update a stage."""
         try:
@@ -1394,6 +1418,10 @@ class BTeamStorage:
                 stage.route_file = route_file
             if notes is not None:
                 stage.notes = notes
+            if stage_date is not None:
+                stage.stage_date = stage_date
+            if avg_speed_kmh is not None:
+                stage.avg_speed_kmh = avg_speed_kmh
             
             self.session.commit()
             return True

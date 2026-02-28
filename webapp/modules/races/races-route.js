@@ -2415,6 +2415,18 @@ let map;
 </html>`;
 
 function buildRouteTab(race) {
+    // Determine if multi-stage race
+    const numStages = race?.num_stages || 1;
+    const hasStages = numStages > 1;
+    
+    // Build stage options HTML
+    let stageOptionsHtml = '<option value="race">📍 Percorso Gara Completo</option>';
+    if (hasStages) {
+        for (let i = 1; i <= numStages; i++) {
+            stageOptionsHtml += `<option value="${i}">Tappa ${i} di ${numStages}</option>`;
+        }
+    }
+    
     return `
         <div id="route-tab-container" style="
             margin: -20px;
@@ -2422,6 +2434,30 @@ function buildRouteTab(race) {
             display: flex;
             flex-direction: column;
         ">
+            ${hasStages ? `
+            <div style="
+                background: white;
+                padding: 12px 16px;
+                border-bottom: 1px solid #e5e7eb;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.95rem;
+            ">
+                <label style="font-weight: 500; color: #4b5563;">Visualizza:</label>
+                <select id="route-stage-selector" class="form-input" onchange="loadRouteStageGpx(this.value)" style="
+                    flex: 0 0 220px;
+                    padding: 6px 10px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    font-size: 0.9rem;
+                    background-color: white;
+                    cursor: pointer;
+                ">
+                    ${stageOptionsHtml}
+                </select>
+            </div>
+            ` : ''}
             <iframe
                 id="route-visualizer-iframe"
                 style="flex: 1; width: 100%; border: none; display: block;"
@@ -2453,16 +2489,110 @@ window.initRouteTab = function() {
             URL.revokeObjectURL(iframe._blobUrl);
             iframe._blobUrl = null;
         }
-        const gpx = window.gpxTraceData;
-        if (gpx && gpx.points) {
-            setTimeout(() => {
-                iframe.contentWindow.postMessage({
-                    type: 'loadGpxPoints',
-                    points: gpx.points
-                }, '*');
-            }, 300);
+        
+        // For multi-stage races, load first stage by default
+        const race = window.currentRaceData;
+        if (race?.num_stages > 1) {
+            loadRouteStageGpx('1'); // Load first stage
+        } else {
+            // For single-stage races, load race route
+            const gpx = window.gpxTraceData;
+            if (gpx && gpx.points) {
+                setTimeout(() => {
+                    iframe.contentWindow.postMessage({
+                        type: 'loadGpxPoints',
+                        points: gpx.points
+                    }, '*');
+                }, 300);
+            }
         }
     };
+};
+
+/**
+ * Load GPX data for a specific stage or entire race route
+ * Called when user selects a different stage in the route tab selector
+ */
+window.loadRouteStageGpx = async function(stageNumber) {
+    try {
+        const race = window.currentRaceData;
+        const raceId = window.currentRaceId;
+        
+        if (!race || !raceId) {
+            console.error('Race data not found');
+            return;
+        }
+
+        // Update selector value to reflect current selection
+        const selector = document.getElementById('route-stage-selector');
+        if (selector) {
+            selector.value = stageNumber;
+        }
+
+        let gpxData = null;
+
+        if (stageNumber === 'race') {
+            // Load entire race route
+            if (race.route_file) {
+                try {
+                    gpxData = JSON.parse(race.route_file);
+                } catch (e) {
+                    console.warn('Could not parse race route_file:', e);
+                }
+            }
+        } else {
+            // Load specific stage route
+            const stageNum = parseInt(stageNumber);
+            try {
+                const stages = await api.getStages(raceId);
+                const stage = stages.find(s => s.stage_number === stageNum);
+                
+                if (stage && stage.route_file) {
+                    try {
+                        gpxData = JSON.parse(stage.route_file);
+                    } catch (e) {
+                        console.warn(`Could not parse stage ${stageNum} route_file:`, e);
+                    }
+                } else {
+                    console.warn(`Stage ${stageNum} not found or has no route_file`);
+                }
+            } catch (error) {
+                console.error('Error loading stage data:', error);
+                showToast(`Errore nel caricamento della tappa: ${error.message}`, 'error');
+                return;
+            }
+        }
+
+        // Update global GPX data and reload iframe
+        if (gpxData && gpxData.points) {
+            window.gpxTraceData = gpxData;
+            
+            // Reload the iframe with new data
+            const iframe = document.getElementById('route-visualizer-iframe');
+            if (iframe && iframe.contentWindow) {
+                setTimeout(() => {
+                    iframe.contentWindow.postMessage({
+                        type: 'loadGpxPoints',
+                        points: gpxData.points
+                    }, '*');
+                }, 100);
+            }
+        } else if (stageNumber !== 'race' || !race.route_file) {
+            // No GPX data available
+            window.gpxTraceData = null;
+            const iframe = document.getElementById('route-visualizer-iframe');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                    type: 'loadGpxPoints',
+                    points: []
+                }, '*');
+            }
+            showToast('Traccia non disponibile per questa selezione', 'warning');
+        }
+    } catch (error) {
+        console.error('Error in loadRouteStageGpx:', error);
+        showToast('Errore nel caricamento del percorso: ' + error.message, 'error');
+    }
 };
 
 window.buildRouteTab = buildRouteTab;

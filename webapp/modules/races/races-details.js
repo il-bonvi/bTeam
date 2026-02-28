@@ -107,6 +107,9 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="btn btn-primary" onclick="saveRaceChanges()">
                             💾 Salva
                         </button>
+                        <button class="btn btn-success" onclick="pushRaceToIntervals()">
+                            🚀 Push Intervals
+                        </button>
                         <button id="export-route-btn" class="btn btn-secondary" onclick="exportRouteHTML(window.currentRaceData?.name || 'Route', window.gpxTraceData)" title="Esporta percorso come HTML standalone" ${window.gpxTraceData ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"'}>
                             <i class="bi bi-download"></i> Export Route
                         </button>
@@ -120,6 +123,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="tab-btn active" onclick="switchRaceTab(event, 'details')">📋 Dettagli</button>
                         <button class="tab-btn" onclick="switchRaceTab(event, 'riders')">🚴 Riders (${raceAthletes.length})</button>
                         <button class="tab-btn" onclick="switchRaceTab(event, 'metrics')">📊 Metrics</button>
+                        ${race.num_stages > 1 ? `<button class="tab-btn" onclick="switchRaceTab(event, 'stages'); initStagesTab();">🎯 Tappe (${race.num_stages})</button>` : ''}
                         <button class="tab-btn" onclick="switchRaceTab(event, 'route'); initRouteTab();">🗺️ Route</button>
                     </div>
                     <div class="tabs-content">
@@ -132,6 +136,9 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <div id="tab-metrics" class="tab-pane">
                             ${buildMetricsTab(race)}
                         </div>
+                        ${race.num_stages > 1 ? `<div id="tab-stages" class="tab-pane">
+                            ${buildStagesTab(race)}
+                        </div>` : ''}
                         <div id="tab-route" class="tab-pane">
                             ${buildRouteTab(race)}
                         </div>
@@ -207,57 +214,6 @@ function buildDetailsTab(race) {
                 <input type="number" id="detail-num-stages" class="form-input" min="1" value="${race.num_stages || 1}" required>
             </div>
             
-            <!-- STAGES SECTION -->
-            ${race.num_stages > 1 ? `
-            <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
-                <h4>🎯 Gestione Tappe (${race.num_stages})</h4>
-                <div class="form-group">
-                    <label class="form-label">Seleziona Tappa</label>
-                    <select id="detail-stage-selector" class="form-input" onchange="loadStageSelectorData()">
-                        ${(() => {
-                            let options = '';
-                            for (let i = 1; i <= race.num_stages; i++) {
-                                options += `<option value="${i}">Tappa ${i}</option>`;
-                            }
-                            return options;
-                        })()}
-                    </select>
-                </div>
-                
-                <div id="stage-details-container" style="background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #e0e0e0;">
-                    <div class="form-group">
-                        <label class="form-label">Distanza Tappa (km)</label>
-                        <input type="number" id="detail-stage-distance" class="form-input" step="0.1" placeholder="km">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Dislivello Tappa (m)</label>
-                        <input type="number" id="detail-stage-elevation" class="form-input" step="1" placeholder="m">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Note Tappa</label>
-                        <textarea id="detail-stage-notes" class="form-input" rows="2" placeholder="Note specifiche per questa tappa"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Traccia Tappa (GPX/FIT/TCX)</label>
-                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-                            <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">
-                                📁 Importa Traccia Tappa
-                                <input type="file" id="stage-gpx-file-input" accept=".gpx,.fit,.tcx" 
-                                       style="display: none;" onchange="handleStageGpxImport(event)">
-                            </label>
-                            <span id="stage-gpx-filename" style="color: #666;">Nessun file</span>
-                            <button type="button" class="btn btn-danger btn-sm" id="stage-gpx-delete-btn" style="display: none;" onclick="deleteStageGpx()">
-                                🗑️
-                            </button>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-primary" onclick="saveStageData()" style="margin-top: 10px;">
-                        💾 Salva Tappa
-                    </button>
-                </div>
-            </div>
-            ` : ''}
-            <!-- END STAGES SECTION -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
                     <label class="form-label">Genere</label>
@@ -273,6 +229,7 @@ function buildDetailsTab(race) {
                     </select>
                 </div>
             </div>
+            ${race.num_stages <= 1 ? `
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
                     <label class="form-label">Distanza (km) *</label>
@@ -290,7 +247,9 @@ function buildDetailsTab(race) {
                 <input type="number" id="detail-speed" class="form-input" step="0.1" 
                        value="${race.avg_speed_kmh || 25}" oninput="updateDetailPredictions()" required>
             </div>
+            ` : ''}
             
+            ${race.num_stages <= 1 ? `
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                 <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
                     <strong style="color: #4ade80;">⏱ Durata prevista:</strong>
@@ -301,7 +260,16 @@ function buildDetailsTab(race) {
                     <span id="detail-kj-preview">${race.predicted_kj ? Math.round(race.predicted_kj) : '--'}</span>
                 </div>
             </div>
+            ` : `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
+                    <strong style="color: #666;">📌 Statistiche per tappa:</strong>
+                    <span style="color: #666;">Visualizzabili nella tab Tappe</span>
+                </div>
+            </div>
+            `}
             
+            ${race.num_stages <= 1 ? `
             <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
                 <h4>📊 Traccia Gara (GPX/FIT/TCX)</h4>
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
@@ -321,10 +289,101 @@ function buildDetailsTab(race) {
                     </div>
                 </div>
             </div>
+            ` : ''}
             
             <div class="form-group">
                 <label class="form-label">Note</label>
                 <textarea id="detail-notes" class="form-input" rows="3">${race.notes || ''}</textarea>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Build stages tab content - only shown for multi-stage races
+ */
+function buildStagesTab(race) {
+    let stageOptionsHtml = '';
+    for (let i = 1; i <= race.num_stages; i++) {
+        stageOptionsHtml += `<option value="${i}">Tappa ${i} di ${race.num_stages}</option>`;
+    }
+    
+    return `
+        <div style="padding: 15px;">
+            <div class="form-group">
+                <label class="form-label">Seleziona Tappa</label>
+                <select id="stages-stage-selector" class="form-input" onchange="loadStagesTabData()">
+                    ${stageOptionsHtml}
+                </select>
+            </div>
+            
+            <button type="button" class="btn btn-primary" onclick="saveStagesTabData()" style="margin-bottom: 20px; width: 100%;">
+                💾 Salva Tappa
+            </button>
+            
+            <div id="stages-details-container" style="background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #e0e0e0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div class="form-group">
+                        <label class="form-label">Distanza Tappa (km)</label>
+                        <input type="number" id="stages-stage-distance" class="form-input" step="0.1" placeholder="km" oninput="updateStagesPredictions()">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Dislivello Tappa (m)</label>
+                        <input type="number" id="stages-stage-elevation" class="form-input" step="1" placeholder="m" oninput="updateStagesPredictions()">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div class="form-group">
+                        <label class="form-label">Data Tappa</label>
+                        <input type="date" id="stages-stage-date" class="form-input">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Note Tappa</label>
+                    <textarea id="stages-stage-notes" class="form-input" rows="2" placeholder="Note specifiche per questa tappa"></textarea>
+                </div>
+            </div>
+            
+            <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
+                <h4>⚡ Statistiche Tappa</h4>
+                <div class="form-group">
+                    <label class="form-label">Velocità Media Prevista (km/h) *</label>
+                    <input type="number" id="stages-speed" class="form-input" step="0.1" 
+                           placeholder="25" oninput="updateStagesPredictions()" required>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                    <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
+                        <strong style="color: #4ade80;">⏱ Durata prevista:</strong>
+                        <span id="stages-duration-preview">--</span>
+                    </div>
+                    <div style="padding: 10px; background: #f0f0f0; border-radius: 5px;">
+                        <strong style="color: #60a5fa;">⚡ KJ previsti:</strong>
+                        <span id="stages-kj-preview">--</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
+                <h4>📊 Traccia Tappa (GPX/FIT/TCX)</h4>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                    <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">
+                        📁 Importa Traccia Tappa
+                        <input type="file" id="stages-gpx-file-input" accept=".gpx,.fit,.tcx" 
+                               style="display: none;" onchange="handleStagesGpxImport(event)">
+                    </label>
+                    <span id="stages-gpx-filename" style="color: #666;">Nessun file</span>
+                    <button type="button" class="btn btn-danger btn-sm" id="stages-gpx-delete-btn" style="display: none;" onclick="deleteStagesGpx()">
+                        🗑️ Elimina Traccia
+                    </button>
+                </div>
+                <div id="stages-map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                        Seleziona una tappa e importa il file GPX per visualizzare la mappa
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -496,11 +555,28 @@ window.saveRaceChanges = async function() {
     const name = document.getElementById('detail-name')?.value.trim();
     const raceDateStart = document.getElementById('detail-date-start')?.value;
     const raceDateEnd = document.getElementById('detail-date-end')?.value;
-    const distance = parseFloat(document.getElementById('detail-distance')?.value);
-    const speed = parseFloat(document.getElementById('detail-speed')?.value);
+    const numStages = parseInt(document.getElementById('detail-num-stages')?.value) || 1;
+    
+    // Distance and speed are only required for single-stage races
+    let distance = null;
+    let speed = null;
+    
+    if (numStages <= 1) {
+        distance = parseFloat(document.getElementById('detail-distance')?.value);
+        speed = parseFloat(document.getElementById('detail-speed')?.value);
+        
+        if (!distance || !speed) {
+            showToast('Compila i campi obbligatori: Distanza e Velocità Media', 'warning');
+            return;
+        }
+    } else {
+        // For multi-stage races, try to get distance from stages
+        distance = document.getElementById('detail-distance')?.value ? parseFloat(document.getElementById('detail-distance').value) : null;
+        speed = document.getElementById('detail-speed')?.value ? parseFloat(document.getElementById('detail-speed').value) : 25;
+    }
 
-    if (!name || !raceDateStart || !raceDateEnd || !distance || !speed) {
-        showToast('Compila i campi obbligatori', 'warning');
+    if (!name || !raceDateStart || !raceDateEnd) {
+        showToast('Compila i campi obbligatori: Nome, Date Inizio e Fine', 'warning');
         return;
     }
 
@@ -512,7 +588,7 @@ window.saveRaceChanges = async function() {
     // Calculate predicted KJ if there are athletes
     let predictedKj = null;
     const raceAthletes = window.currentRaceData?.athletes || [];
-    if (raceAthletes.length > 0) {
+    if (raceAthletes.length > 0 && distance && speed) {
         let totalKj = 0;
         const durationHours = (distance / speed);
 
@@ -529,13 +605,13 @@ window.saveRaceChanges = async function() {
         name: name,
         race_date_start: raceDateStart,
         race_date_end: raceDateEnd,
-        num_stages: parseInt(document.getElementById('detail-num-stages')?.value) || 1,
+        num_stages: numStages,
         distance_km: distance,
         category: document.getElementById('detail-category')?.value,
         gender: document.getElementById('detail-gender')?.value,
         elevation_m: document.getElementById('detail-elevation')?.value ? parseFloat(document.getElementById('detail-elevation').value) : null,
         avg_speed_kmh: speed,
-        predicted_duration_minutes: (distance / speed) * 60,
+        predicted_duration_minutes: (distance && speed) ? (distance / speed) * 60 : null,
         predicted_kj: predictedKj,
         notes: document.getElementById('detail-notes')?.value || null,
         // Save GPX trace data if available
@@ -706,6 +782,13 @@ window.handleStageGpxImport = async function(event) {
             document.getElementById('stage-gpx-filename').textContent = '✅ ' + file.name;
             document.getElementById('stage-gpx-filename').style.color = '#22C55E';
             document.getElementById('stage-gpx-delete-btn').style.display = 'inline-block';
+            // Auto-fill distance and elevation fields
+            if (gpxData.totalDistance > 0) {
+                document.getElementById('detail-stage-distance').value = gpxData.totalDistance.toFixed(1);
+            }
+            if (gpxData.elevationGain > 0) {
+                document.getElementById('detail-stage-elevation').value = Math.round(gpxData.elevationGain);
+            }
             showToast('📁 File ' + file.name + ' caricato con successo', 'success');
         } else {
             throw new Error('Non è stato possibile estrarre i dati di coordinate dal file');
@@ -734,6 +817,249 @@ window.deleteStageGpx = function() {
 };
 
 /**
+ * Initialize Stages tab - load first stage data when tab is opened
+ */
+window.initStagesTab = async function() {
+    try {
+        // Load first stage by default
+        const selector = document.getElementById('stages-stage-selector');
+        if (selector) {
+            selector.value = '1';
+            await loadStagesTabData();
+        }
+    } catch (error) {
+        console.error('Error initializing stages tab:', error);
+    }
+};
+
+/**
+ * Load stage data for the Stages tab
+ */
+window.loadStagesTabData = async function() {
+    try {
+        const stageNumber = parseInt(document.getElementById('stages-stage-selector').value);
+        const raceId = window.currentRaceId;
+        
+        // Get all stages for this race
+        const stages = await api.getStages(raceId);
+        
+        // Find the stage with matching stage_number
+        const stage = stages.find(s => s.stage_number === stageNumber);
+        
+        if (stage) {
+            // Populate form fields with stage data
+            document.getElementById('stages-stage-distance').value = stage.distance_km || '';
+            document.getElementById('stages-stage-elevation').value = stage.elevation_m || '';
+            document.getElementById('stages-stage-notes').value = stage.notes || '';
+            document.getElementById('stages-stage-date').value = stage.stage_date || '';
+            // Load speed from database if available, otherwise use default
+            document.getElementById('stages-speed').value = stage.avg_speed_kmh || '25';
+            
+            // Store current stage ID for saving
+            window.currentStagesTabStageId = stage.id;
+            
+            // Load GPX data if available
+            window.stagesGpxData = null;
+            if (stage.route_file) {
+                try {
+                    window.stagesGpxData = JSON.parse(stage.route_file);
+                    document.getElementById('stages-gpx-filename').textContent = '✅ Traccia caricata';
+                    document.getElementById('stages-gpx-filename').style.color = '#22C55E';
+                    document.getElementById('stages-gpx-delete-btn').style.display = 'inline-block';
+                    
+                    // Display the map for this stage
+                    if (window.stagesGpxData.coordinates) {
+                        displayGpxMap(window.stagesGpxData.coordinates, 'stages-map-container');
+                    }
+                } catch (e) {
+                    console.warn('Could not parse stage GPX data:', e);
+                    document.getElementById('stages-gpx-filename').textContent = 'File GPX non valido';
+                    document.getElementById('stages-gpx-filename').style.color = '#ef4444';
+                }
+            } else {
+                document.getElementById('stages-gpx-filename').textContent = 'Nessun file';
+                document.getElementById('stages-gpx-filename').style.color = '#666';
+                document.getElementById('stages-gpx-delete-btn').style.display = 'none';
+                // Clear map
+                const mapContainer = document.getElementById('stages-map-container');
+                if (mapContainer && mapContainer.style.height !== '0px') {
+                    mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">Nessun file GPX per questa tappa</div>';
+                }
+            }
+            
+            // Update predictions after loading stage data
+            updateStagesPredictions();
+        } else {
+            // Stage not found, reset form
+            document.getElementById('stages-stage-distance').value = '';
+            document.getElementById('stages-stage-elevation').value = '';
+            document.getElementById('stages-stage-notes').value = '';
+            window.stagesGpxData = null;
+            document.getElementById('stages-gpx-filename').textContent = 'Nessun file';
+            document.getElementById('stages-gpx-filename').style.color = '#666';
+            document.getElementById('stages-gpx-delete-btn').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading stage data:', error);
+        showToast('Errore nel caricamento della tappa: ' + error.message, 'error');
+    }
+};
+
+/**
+ * Save stage data from Stages tab
+ */
+window.saveStagesTabData = async function() {
+    try {
+        if (!window.currentStagesTabStageId) {
+            showToast('Nessuna tappa selezionata', 'warning');
+            return;
+        }
+        
+        const stageData = {
+            distance_km: document.getElementById('stages-stage-distance').value 
+                ? parseFloat(document.getElementById('stages-stage-distance').value) 
+                : null,
+            elevation_m: document.getElementById('stages-stage-elevation').value 
+                ? parseInt(document.getElementById('stages-stage-elevation').value)
+                : null,
+            notes: document.getElementById('stages-stage-notes').value || null,
+            stage_date: document.getElementById('stages-stage-date').value || null,
+            avg_speed_kmh: document.getElementById('stages-speed').value 
+                ? parseFloat(document.getElementById('stages-speed').value)
+                : null,
+            route_file: window.stagesGpxData ? JSON.stringify(window.stagesGpxData) : null
+        };
+        
+        // Remove null values to avoid overwriting existing data unnecessarily
+        Object.keys(stageData).forEach(key => 
+            stageData[key] === null && delete stageData[key]
+        );
+        
+        showLoading();
+        await api.updateStage(window.currentRaceId, window.currentStagesTabStageId, stageData);
+        showToast('✅ Tappa aggiornata con successo', 'success');
+        
+        // Reload race details to reflect changes
+        await refreshRaceDetails(window.currentRaceId);
+    } catch (error) {
+        showToast('Errore nel salvataggio della tappa: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+/**
+ * Handle GPX import for stage in Stages tab
+ */
+window.handleStagesGpxImport = async function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        showLoading();
+        const text = await file.text();
+        
+        // Parse based on file type using existing functions
+        let gpxData = null;
+        if (file.name.endsWith('.gpx')) {
+            gpxData = parseGPXFile(text);
+        } else if (file.name.endsWith('.fit')) {
+            showToast('FIT files non sono ancora supportati. Per favore usa GPX o TCX.', 'warning');
+            return;
+        } else if (file.name.endsWith('.tcx')) {
+            gpxData = parseTCXFile(text);
+        } else {
+            throw new Error('Formato file non supportato. Usa .gpx, .fit, o .tcx');
+        }
+
+        if (gpxData && gpxData.coordinates) {
+            window.stagesGpxData = gpxData;
+            document.getElementById('stages-gpx-filename').textContent = '✅ ' + file.name;
+            document.getElementById('stages-gpx-filename').style.color = '#22C55E';
+            document.getElementById('stages-gpx-delete-btn').style.display = 'inline-block';
+            // Auto-fill distance and elevation fields
+            if (gpxData.totalDistance > 0) {
+                document.getElementById('stages-stage-distance').value = gpxData.totalDistance.toFixed(1);
+            }
+            if (gpxData.elevationGain > 0) {
+                document.getElementById('stages-stage-elevation').value = Math.round(gpxData.elevationGain);
+            }
+            // Update predictions after loading GPX data
+            updateStagesPredictions();
+            // Update map
+            displayGpxMap(gpxData.coordinates, 'stages-map-container');
+            showToast('📁 File ' + file.name + ' caricato con successo', 'success');
+        } else {
+            throw new Error('Non è stato possibile estrarre i dati di coordinate dal file');
+        }
+    } catch (error) {
+        showToast('Errore nell\'importazione: ' + error.message, 'error');
+        window.stagesGpxData = null;
+        document.getElementById('stages-gpx-filename').textContent = 'Errore caricamento';
+        document.getElementById('stages-gpx-filename').style.color = '#ef4444';
+        document.getElementById('stages-gpx-delete-btn').style.display = 'none';
+    } finally {
+        hideLoading();
+        event.target.value = ''; // Reset file input
+    }
+};
+
+/**
+ * Update stage predictions (duration and KJ) based on distance, elevation, and speed
+ */
+window.updateStagesPredictions = function() {
+    const distanceEl = document.getElementById('stages-stage-distance');
+    const speedEl = document.getElementById('stages-speed');
+    const elevationEl = document.getElementById('stages-stage-elevation');
+    
+    if (!distanceEl || !speedEl || !elevationEl) return;
+
+    const distance = parseFloat(distanceEl.value) || 0;
+    const speed = parseFloat(speedEl.value) || 0;
+    const elevation = parseFloat(elevationEl.value) || 0;
+
+    const durationPreview = document.getElementById('stages-duration-preview');
+    const kjPreview = document.getElementById('stages-kj-preview');
+
+    if (!durationPreview || !kjPreview) return;
+
+    if (speed <= 0 || distance <= 0) {
+        durationPreview.textContent = '--';
+        kjPreview.textContent = '--';
+        return;
+    }
+
+    // Calculate duration
+    const durationMinutes = (distance / speed) * 60;
+    durationPreview.textContent = formatDuration(durationMinutes);
+
+    // Calculate KJ (same formula as races)
+    // KJ = distance * (35 + elevation/distance * 15)
+    let kj = distance * 35;
+    if (distance > 0) {
+        kj += (elevation / distance) * 15 * distance;
+    }
+    kjPreview.textContent = Math.round(kj);
+};
+
+/**
+ * Delete GPX trace from current stage in Stages tab
+ */
+window.deleteStagesGpx = function() {
+    window.stagesGpxData = null;
+    document.getElementById('stages-gpx-filename').textContent = 'Nessun file';
+    document.getElementById('stages-gpx-filename').style.color = '#666';
+    document.getElementById('stages-gpx-delete-btn').style.display = 'none';
+    // Clear map
+    const mapContainer = document.getElementById('stages-map-container');
+    if (mapContainer) {
+        mapContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">Nessun file GPX per questa tappa</div>';
+    }
+    showToast('Traccia tappa rimossa', 'info');
+};
+
+
+/**
  * Format duration helper (shared with main)
  */
 function formatDuration(minutes) {
@@ -742,3 +1068,18 @@ function formatDuration(minutes) {
     const mins = Math.round(minutes % 60);
     return `${hours}h ${mins}m`;
 }
+
+/**
+ * Push race to Intervals.icu
+ */
+window.pushRaceToIntervals = async function() {
+    try {
+        showLoading();
+        await api.pushRace(window.currentRaceId);
+        showToast('✅ Gara inviata a Intervals.icu', 'success');
+    } catch (err) {
+        showToast('Errore push Intervals: ' + (err.message || err), 'error');
+    } finally {
+        hideLoading();
+    }
+};

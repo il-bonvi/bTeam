@@ -13,7 +13,7 @@ class RaceCreate(BaseModel):
     name: str
     race_date_start: str
     race_date_end: str
-    distance_km: float
+    distance_km: Optional[float] = None
     num_stages: int = 1
     gender: Optional[str] = None
     category: Optional[str] = None
@@ -36,6 +36,8 @@ class StageUpdate(BaseModel):
     elevation_m: Optional[float] = None
     route_file: Optional[str] = None
     notes: Optional[str] = None
+    stage_date: Optional[str] = None
+    avg_speed_kmh: Optional[float] = None
 
 
 @router.get("/")
@@ -268,7 +270,9 @@ async def update_stage(race_id: int, stage_id: int, stage: StageUpdate):
             distance_km=stage.distance_km,
             elevation_m=stage.elevation_m,
             route_file=stage.route_file,
-            notes=stage.notes
+            notes=stage.notes,
+            stage_date=stage.stage_date,
+            avg_speed_kmh=stage.avg_speed_kmh
         )
         
         updated_stage = storage.get_stage(stage_id)
