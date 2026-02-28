@@ -478,6 +478,35 @@ window.saveRaceChanges = async function() {
 };
 
 /**
+<<<<<<< Updated upstream
+=======
+ * Sync end date when start date changes - only if end date becomes invalid
+ */
+window.syncDetailRaceDateEnd = function() {
+    const startDate = document.getElementById('detail-date-start').value;
+    const endDate = document.getElementById('detail-date-end').value;
+    
+    // Only sync if end date is before start date
+    if (new Date(endDate) < new Date(startDate)) {
+        document.getElementById('detail-date-end').value = startDate;
+    }
+};
+
+/**
+ * Validate that end date is not before start date
+ */
+window.validateDetailRaceDateEnd = function() {
+    const startDate = document.getElementById('detail-date-start').value;
+    const endDate = document.getElementById('detail-date-end').value;
+    
+    if (new Date(endDate) < new Date(startDate)) {
+        document.getElementById('detail-date-end').value = startDate;
+        showToast('La data fine non può essere prima della data inizio', 'warning');
+    }
+};
+
+/**
+>>>>>>> Stashed changes
  * Format duration helper (shared with main)
  */
 function formatDuration(minutes) {
