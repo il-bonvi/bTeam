@@ -674,35 +674,7 @@ const ROUTE_VISUALIZER_HTML = `<!DOCTYPE html>
                 </div>
                 <div id="climbs-list" class="climbs-list"></div>
                 <div class="difficulty-legend">
-                    <strong>Scala Difficoltà:</strong>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #9aca3c;"></div>
-                        <span>20-75 (Facile)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ffa500;"></div>
-                        <span>75-150 (Moderata)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ff8c00;"></div>
-                        <span>150-300 (Impegnativa)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ff4500;"></div>
-                        <span>300-600 (Difficile)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #b22222;"></div>
-                        <span>600-900 (Estrema)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #800000;"></div>
-                        <span>900-1200 (HC)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #000000;"></div>
-                        <span>1200+ (Leggendaria)</span>
-                    </div>
+                    <strong>Scala diff:</strong> <span id="difficulty-formula">(Pendenza Media)² × (Distanza in km)</span>
                 </div>
             </div>
         </div>
@@ -1878,7 +1850,7 @@ let map;
                 card.innerHTML = \`
                     <div class="climb-number">\${index + 1}</div>
                     <div class="climb-difficulty" style="background-color: \${color}">
-                        Difficoltà: \${climb.difficulty.toFixed(0)}
+                        Diff: \${climb.difficulty.toFixed(0)}
                     </div>
                     <div class="climb-stats">
                         <div class="climb-stat">
