@@ -22,6 +22,7 @@ class RaceCreate(BaseModel):
     predicted_duration_minutes: Optional[float] = None
     predicted_kj: Optional[float] = None
     route_file: Optional[str] = None
+    route_link: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -74,6 +75,7 @@ async def create_race(race: RaceCreate):
             predicted_duration_minutes=race.predicted_duration_minutes,
             predicted_kj=race.predicted_kj,
             route_file=race.route_file,
+            route_link=race.route_link,
             notes=race.notes
         )
         return storage.get_race(race_id)
@@ -103,6 +105,7 @@ async def update_race(race_id: int, race: RaceCreate):
             predicted_duration_minutes=race.predicted_duration_minutes,
             predicted_kj=race.predicted_kj,
             route_file=race.route_file,
+            route_link=race.route_link,
             notes=race.notes
         )
         return storage.get_race(race_id)

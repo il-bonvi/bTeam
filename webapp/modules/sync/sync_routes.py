@@ -404,7 +404,7 @@ async def push_race(request: PushRaceRequest):
                 'predicted_duration': duration_minutes,
                 'date': race['race_date_start'],
                 'speed': race.get('avg_speed_kmh') or 25,
-                'route_link': None
+                'route_link': race.get('route_link')
             })
 
         def format_duration(minutes: float) -> str:

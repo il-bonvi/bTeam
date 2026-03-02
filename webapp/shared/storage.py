@@ -319,6 +319,7 @@ class Race(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
+    race_date = Column(String(255), nullable=True)  # Legacy field for backward compatibility
     race_date_start = Column(String(255), nullable=False)  # YYYY-MM-DD format (first day)
     race_date_end = Column(String(255), nullable=False)  # YYYY-MM-DD format (last day)
     num_stages = Column(Integer, nullable=False, default=1)  # Number of stages (tappe)
@@ -330,6 +331,7 @@ class Race(Base):
     predicted_duration_minutes = Column(Float, nullable=True)  # Calcolata automaticamente
     predicted_kj = Column(Float, nullable=True)  # Calcolati automaticamente
     route_file = Column(String(500), nullable=True)  # Percorso GPX/FIT/TCX
+    route_link = Column(String(500), nullable=True)  # Link to external race database (BRD)
     notes = Column(Text, nullable=True)
     created_at = Column(String(255), nullable=False)
 
@@ -363,6 +365,7 @@ class Race(Base):
             "predicted_duration_minutes": self.predicted_duration_minutes,
             "predicted_kj": self.predicted_kj,
             "route_file": self.route_file,
+            "route_link": self.route_link,
             "notes": self.notes,
             "athletes": athletes,
             "stages": stages,
@@ -577,6 +580,13 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'race_date_start': {e}")
+                elif "race_date" in races_cols:
+                    # race_date_start already exists, but make sure race_date is populated from it for backward compat
+                    try:
+                        cursor.execute("UPDATE races SET race_date = race_date_start WHERE race_date IS NULL AND race_date_start IS NOT NULL")
+                        print(f"[bTeam] Dati da 'race_date_start' copiati a 'race_date' per compatibilità")
+                    except sqlite3.OperationalError as e:
+                        print(f"[bTeam] Avviso aggiornamento 'race_date': {e}")
                 
                 # Add race_date_end column if missing
                 if "race_date_end" not in races_cols:
@@ -602,6 +612,15 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'num_stages': {e}")
+                
+                # Add route_link column if missing
+                if "route_link" not in races_cols:
+                    try:
+                        cursor.execute("ALTER TABLE races ADD COLUMN route_link VARCHAR(500)")
+                        print(f"[bTeam] Colonna 'route_link' aggiunta alla tabella races")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'route_link': {e}")
             
             # Get existing columns in race_athletes table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_athletes'")
@@ -1280,6 +1299,7 @@ class BTeamStorage:
         predicted_duration_minutes: Optional[float] = None,
         predicted_kj: Optional[float] = None,
         route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
         notes: Optional[str] = None,
         num_stages: int = 1,
     ) -> int:
@@ -1287,6 +1307,7 @@ class BTeamStorage:
         now = datetime.utcnow().isoformat()
         race = Race(
             name=name.strip(),
+            race_date=race_date_start,  # Legacy field for backward compat
             race_date_start=race_date_start,
             race_date_end=race_date_end,
             num_stages=num_stages,
@@ -1298,6 +1319,7 @@ class BTeamStorage:
             predicted_duration_minutes=predicted_duration_minutes,
             predicted_kj=predicted_kj,
             route_file=route_file,
+            route_link=route_link,
             notes=notes,
             created_at=now,
         )
@@ -1333,6 +1355,7 @@ class BTeamStorage:
         predicted_duration_minutes: Optional[float] = None,
         predicted_kj: Optional[float] = None,
         route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
         notes: Optional[str] = None,
         num_stages: Optional[int] = None,
     ) -> bool:
@@ -1364,6 +1387,8 @@ class BTeamStorage:
                 race.predicted_kj = predicted_kj
             if route_file is not None:
                 race.route_file = route_file
+            if route_link is not None:
+                race.route_link = route_link
             if notes is not None:
                 race.notes = notes
             if num_stages is not None:

@@ -270,6 +270,12 @@ function buildDetailsTab(race) {
             `}
             
             ${race.num_stages <= 1 ? `
+            <div class="form-group">
+                <label class="form-label">Link BRD</label>
+                <input type="url" id="detail-route-link" class="form-input" placeholder="https://il-bonvi.github.io/bonvi-race-database/gare/..."
+                       value="${race.route_link || ''}">
+            </div>
+            
             <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
                 <h4>📊 Traccia Gara (GPX/FIT/TCX)</h4>
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
@@ -618,6 +624,7 @@ window.saveRaceChanges = async function() {
         predicted_duration_minutes: (distance && speed) ? (distance / speed) * 60 : null,
         predicted_kj: predictedKj,
         notes: document.getElementById('detail-notes')?.value || null,
+        route_link: document.getElementById('detail-route-link')?.value?.trim() || null,
         // Save GPX trace data if available
         route_file: window.gpxTraceData ? JSON.stringify(window.gpxTraceData) : null
     };
