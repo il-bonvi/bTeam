@@ -35,6 +35,7 @@ class StageUpdate(BaseModel):
     distance_km: Optional[float] = None
     elevation_m: Optional[float] = None
     route_file: Optional[str] = None
+    route_link: Optional[str] = None
     notes: Optional[str] = None
     stage_date: Optional[str] = None
     avg_speed_kmh: Optional[float] = None
@@ -242,6 +243,7 @@ async def create_stage(race_id: int, stage: StageUpdate):
             distance_km=stage.distance_km,
             elevation_m=stage.elevation_m,
             route_file=stage.route_file,
+            route_link=stage.route_link,
             notes=stage.notes
         )
         
@@ -270,6 +272,7 @@ async def update_stage(race_id: int, stage_id: int, stage: StageUpdate):
             distance_km=stage.distance_km,
             elevation_m=stage.elevation_m,
             route_file=stage.route_file,
+            route_link=stage.route_link,
             notes=stage.notes,
             stage_date=stage.stage_date,
             avg_speed_kmh=stage.avg_speed_kmh

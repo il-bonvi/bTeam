@@ -369,6 +369,7 @@ async def push_race(request: PushRaceRequest):
                 distance_km = stage.get('distance_km') or 0
                 elevation_m = stage.get('elevation_m') or 0
                 avg_speed_kmh = stage.get('avg_speed_kmh') or 25
+                route_link = stage.get('route_link')
                 
                 # Calculate duration from distance and speed
                 predicted_duration = (distance_km / avg_speed_kmh * 60) if distance_km > 0 else 240
@@ -381,7 +382,8 @@ async def push_race(request: PushRaceRequest):
                     'elevation_m': elevation_m,
                     'predicted_duration': predicted_duration,
                     'date': stage_date,
-                    'speed': avg_speed_kmh
+                    'speed': avg_speed_kmh,
+                    'route_link': route_link
                 })
         else:
             # Single-stage race: use race-level data
@@ -401,7 +403,8 @@ async def push_race(request: PushRaceRequest):
                 'predicted_kj': predicted_kj,
                 'predicted_duration': duration_minutes,
                 'date': race['race_date_start'],
-                'speed': race.get('avg_speed_kmh') or 25
+                'speed': race.get('avg_speed_kmh') or 25,
+                'route_link': None
             })
 
         def format_duration(minutes: float) -> str:
@@ -437,6 +440,7 @@ async def push_race(request: PushRaceRequest):
                     elevation_m = stage_data['elevation_m']
                     duration_minutes = stage_data['predicted_duration']
                     duration_hours = duration_minutes / 60
+                    route_link = stage_data.get('route_link')
                     
                     # Calculate KJ based on athlete's kj_per_hour_per_kg and weight
                     predicted_kj = duration_hours * kj_per_hour_per_kg * athlete_weight if duration_hours > 0 else 0
@@ -466,8 +470,14 @@ async def push_race(request: PushRaceRequest):
                         duration_36_str = format_duration((distance_km / 36.0) * 60)
                         duration_41_str = format_duration((distance_km / 41.0) * 60)
                         stage_description += (
-                            f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>'
-                            f'<br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+                            f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>  |  <b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+                        )
+
+                    # Add route link if available
+                    if route_link:
+                        stage_description += (
+                            f'<br><div><b><span class="text-orange">Percorso</span>: '
+                            f'<a href="{route_link}" target="_blank">Visualizza in BRD</a></b></div>'
                         )
 
                     # Check for duplicate in this specific athlete's calendar and delete if found

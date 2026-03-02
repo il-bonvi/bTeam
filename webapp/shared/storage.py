@@ -380,6 +380,7 @@ class RaceStage(Base):
     distance_km = Column(Float, nullable=False)
     elevation_m = Column(Float, nullable=True)  # Dislivello tappa
     route_file = Column(String(500), nullable=True)  # GPX/FIT/TCX for this stage
+    route_link = Column(String(500), nullable=True)  # Link to route database (e.g. percorsi-gara repo)
     notes = Column(Text, nullable=True)
     stage_date = Column(String(255), nullable=True)  # Stage start date (YYYY-MM-DD)
     avg_speed_kmh = Column(Float, nullable=True)  # Average expected speed (km/h)
@@ -395,6 +396,7 @@ class RaceStage(Base):
             "distance_km": self.distance_km,
             "elevation_m": self.elevation_m,
             "route_file": self.route_file,
+            "route_link": self.route_link,
             "notes": self.notes,
             "stage_date": self.stage_date,
             "avg_speed_kmh": self.avg_speed_kmh,
@@ -666,6 +668,13 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'avg_speed_kmh': {e}")
+                
+                try:
+                    # Add route_link column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN route_link VARCHAR(500)")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'route_link': {e}")
             
             # Check if race_stages table is empty and needs to be populated
             if race_stages_exists or True:  # Always try to populate if none exist
@@ -1373,6 +1382,7 @@ class BTeamStorage:
         distance_km: float,
         elevation_m: Optional[float] = None,
         route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> Optional[int]:
         """Add a stage to a race."""
@@ -1384,6 +1394,7 @@ class BTeamStorage:
                 distance_km=distance_km,
                 elevation_m=elevation_m,
                 route_file=route_file,
+                route_link=route_link,
                 notes=notes,
                 created_at=now,
             )
@@ -1400,6 +1411,7 @@ class BTeamStorage:
         distance_km: Optional[float] = None,
         elevation_m: Optional[float] = None,
         route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
         notes: Optional[str] = None,
         stage_date: Optional[str] = None,
         avg_speed_kmh: Optional[float] = None,
@@ -1416,6 +1428,8 @@ class BTeamStorage:
                 stage.elevation_m = elevation_m
             if route_file is not None:
                 stage.route_file = route_file
+            if route_link is not None:
+                stage.route_link = route_link
             if notes is not None:
                 stage.notes = notes
             if stage_date is not None:

@@ -107,7 +107,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="btn btn-primary" onclick="saveRaceChanges()">
                             💾 Salva
                         </button>
-                        <button class="btn btn-success" onclick="pushRaceToIntervals()">
+                        <button class="btn btn-success" onclick="pushRaceToIntervals(${race.id})">
                             🚀 Push Intervals
                         </button>
                         <button id="export-route-btn" class="btn btn-secondary" onclick="exportRouteHTML(window.currentRaceData?.name || 'Route', window.gpxTraceData)" title="Esporta percorso come HTML standalone" ${window.gpxTraceData ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"'}>
@@ -337,6 +337,10 @@ function buildStagesTab(race) {
                     <div class="form-group">
                         <label class="form-label">Data Tappa</label>
                         <input type="date" id="stages-stage-date" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Link BRD</label>
+                        <input type="url" id="stages-route-link" class="form-input" placeholder="https://il-bonvi.github.io/bonvi-race-database/gare/...">
                     </div>
                 </div>
                 
@@ -732,6 +736,7 @@ window.saveStageData = async function() {
                 ? parseInt(document.getElementById('detail-stage-elevation').value)
                 : null,
             notes: document.getElementById('detail-stage-notes').value || null,
+            route_link: document.getElementById('detail-stage-route-link')?.value || null,
             route_file: window.stageGpxData ? JSON.stringify(window.stageGpxData) : null
         };
         
@@ -852,6 +857,7 @@ window.loadStagesTabData = async function() {
             document.getElementById('stages-stage-elevation').value = stage.elevation_m || '';
             document.getElementById('stages-stage-notes').value = stage.notes || '';
             document.getElementById('stages-stage-date').value = stage.stage_date || '';
+            document.getElementById('stages-route-link').value = stage.route_link || '';
             // Load speed from database if available, otherwise use default
             document.getElementById('stages-speed').value = stage.avg_speed_kmh || '25';
             
@@ -924,6 +930,7 @@ window.saveStagesTabData = async function() {
                 : null,
             notes: document.getElementById('stages-stage-notes').value || null,
             stage_date: document.getElementById('stages-stage-date').value || null,
+            route_link: document.getElementById('stages-route-link').value || null,
             avg_speed_kmh: document.getElementById('stages-speed').value 
                 ? parseFloat(document.getElementById('stages-speed').value)
                 : null,
@@ -931,9 +938,12 @@ window.saveStagesTabData = async function() {
         };
         
         // Remove null values to avoid overwriting existing data unnecessarily
-        Object.keys(stageData).forEach(key => 
-            stageData[key] === null && delete stageData[key]
-        );
+        // BUT keep route_link to allow updating it (even if empty)
+        Object.keys(stageData).forEach(key => {
+            if (key !== 'route_link' && stageData[key] === null) {
+                delete stageData[key];
+            }
+        });
         
         showLoading();
         await api.updateStage(window.currentRaceId, window.currentStagesTabStageId, stageData);
@@ -1072,10 +1082,11 @@ function formatDuration(minutes) {
 /**
  * Push race to Intervals.icu
  */
-window.pushRaceToIntervals = async function() {
+window.pushRaceToIntervals = async function(raceId) {
     try {
         showLoading();
-        await api.pushRace(window.currentRaceId);
+        const idToPush = raceId || window.currentRaceId;
+        await api.pushRace(idToPush);
         showToast('✅ Gara inviata a Intervals.icu', 'success');
     } catch (err) {
         showToast('Errore push Intervals: ' + (err.message || err), 'error');
