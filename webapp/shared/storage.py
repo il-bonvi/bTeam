@@ -336,6 +336,7 @@ class Race(Base):
     created_at = Column(String(255), nullable=False)
 
     athletes_assoc = relationship("RaceAthlete", back_populates="race", cascade="all, delete-orphan")
+    stages = relationship("RaceStage", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict:
         athletes = [
@@ -378,7 +379,7 @@ class RaceStage(Base):
     __tablename__ = "race_stages"
 
     id = Column(Integer, primary_key=True)
-    race_id = Column(Integer, ForeignKey("races.id"), nullable=False)
+    race_id = Column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False)
     stage_number = Column(Integer, nullable=False)  # 1-based stage number
     distance_km = Column(Float, nullable=False)
     elevation_m = Column(Float, nullable=True)  # Dislivello tappa
@@ -388,8 +389,6 @@ class RaceStage(Base):
     stage_date = Column(String(255), nullable=True)  # Stage start date (YYYY-MM-DD)
     avg_speed_kmh = Column(Float, nullable=True)  # Average expected speed (km/h)
     created_at = Column(String(255), nullable=False)
-
-    race = relationship("Race", backref="stages")
 
     def to_dict(self) -> Dict:
         return {
@@ -1600,6 +1599,7 @@ class BTeamStorage:
                 return True
             return False
         except Exception as e:
+            self.session.rollback()
             print(f"[bTeam] Errore eliminazione gara: {e}")
             return False
 
