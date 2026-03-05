@@ -874,7 +874,7 @@ function renderStatisticsTable(statistics, weight) {
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">2-6min</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">10min+</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">10-30min</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -1106,7 +1106,7 @@ async function renderCPTab(athleteId, athlete, tabContent) {
                             <label><input type="checkbox" id="cp-use-medium-point-fallback" checked onchange="recalculateCP()"> Punto 2-6 min (sì/no)</label>
                         </div>
                         <div class="input-field">
-                            <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto > 10 min (sì/no)</label>
+                            <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto 10-30 min (sì/no)</label>
                         </div>
                     </div>
                 </div>

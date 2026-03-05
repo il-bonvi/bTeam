@@ -93,7 +93,7 @@ function calculatePercentileThreshold(residuals, percentile) {
  * @param {Number} valuesPerWindow - Points to select per window
  * @param {Number} sprintSeconds - Sprint duration for sprint point
  * @param {Boolean} useMediumPointFallback - Add forced point from 2-6min if missing
- * @param {Boolean} useLongPointFallback - Add forced point from 10+min if missing
+ * @param {Boolean} useLongPointFallback - Add forced point from 10-30min if missing
  * @returns {Object} {times, powers, forcedMediumPoint, forcedLongPoint}
  */
 function selectPointsForPercentile(durations, watts, percentile, valuesPerWindow, sprintSeconds, useMediumPointFallback = true, useLongPointFallback = true) {
@@ -189,9 +189,9 @@ function selectPointsForPercentile(durations, watts, percentile, valuesPerWindow
         }
     }
     
-    // Fallback for 10+ min range if enabled and no points found
+    // Fallback for 10-30 min range if enabled and no points found
     if (useLongPointFallback) {
-        const hasLongPoint = selectedTimes.some(t => t > 600);
+        const hasLongPoint = selectedTimes.some(t => t >= 600 && t <= 1800);
         if (!hasLongPoint) {
             let bestIdx = -1;
             let bestResidual = -Infinity;
