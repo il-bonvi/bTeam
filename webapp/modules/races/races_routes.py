@@ -1,5 +1,8 @@
 """Races API Routes"""
 
+import re
+import requests
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -7,6 +10,11 @@ from typing import Optional
 from shared.storage import get_storage
 
 router = APIRouter()
+
+
+class BonviRaceLink(BaseModel):
+    """Model for bonvi race database link"""
+    link: str
 
 
 class RaceCreate(BaseModel):
@@ -40,6 +48,136 @@ class StageUpdate(BaseModel):
     notes: Optional[str] = None
     stage_date: Optional[str] = None
     avg_speed_kmh: Optional[float] = None
+
+
+@router.post("/load-from-bonvi")
+async def load_from_bonvi(data: BonviRaceLink):
+    """Load race data from bonvi-race-database"""
+    try:
+        link = data.link.strip()
+        
+        # Validate URL format
+        if "il-bonvi.github.io/bonvi-race-database/gare/" not in link:
+            raise ValueError("Link non valido. Deve essere una gara da bonvi-race-database")
+        
+        # Fetch the page
+        response = requests.get(link, timeout=10)
+        response.raise_for_status()
+        
+        # Parse HTML to extract race data
+        html = response.text
+        
+        # Extract race name (e.g., "Nonantola")
+        race_name = None
+        name_match = re.search(r'<span class="bar-title"[^>]*>([^<]+)</span>', html)
+        if name_match:
+            race_name = name_match.group(1).strip()
+        
+        # Extract distance (e.g., "74.0 km")
+        distance_match = re.search(r'(\d+(?:\.\d+)?)\s*km', html, re.IGNORECASE)
+        distance = float(distance_match.group(1)) if distance_match else None
+        
+        # Extract elevation (e.g., "+72 m" or "+1002 m")
+        elevation_match = re.search(r'\+(\d+)\s*m\b', html, re.IGNORECASE)
+        elevation = float(elevation_match.group(1)) if elevation_match else None
+        
+        # Extract race date (e.g., "08 mar 2026")
+        # Italian month names
+        month_map = {
+            'gen': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+            'mag': '05', 'giu': '06', 'lug': '07', 'ago': '08',
+            'set': '09', 'ott': '10', 'nov': '11', 'dic': '12'
+        }
+        
+        race_date = None
+        date_match = re.search(r'(\d{1,2})\s+(' + '|'.join(month_map.keys()) + r')\s+(\d{4})', html, re.IGNORECASE)
+        if date_match:
+            day = date_match.group(1).zfill(2)
+            month = month_map[date_match.group(2).lower()]
+            year = date_match.group(3)
+            race_date = f"{year}-{month}-{day}"
+        
+        return {
+            "name": race_name,
+            "distance_km": distance,
+            "elevation_m": elevation,
+            "race_date_start": race_date,
+            "avg_speed_kmh": None,
+            "route_link": link,
+            "note": "Velocità media non estratta automaticamente. Consulta il visualizzatore su bonvi-race-database"
+        }
+    except requests.RequestException as e:
+        raise HTTPException(status_code=400, detail=f"Errore nel caricamento della pagina: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore nel parsing dei dati: {str(e)}")
+        link = data.link.strip()
+        
+        # Validate URL format
+        if "il-bonvi.github.io/bonvi-race-database/gare/" not in link:
+            raise ValueError("Link non valido. Deve essere una gara da bonvi-race-database")
+        
+        # Fetch the page
+        response = requests.get(link, timeout=10)
+        response.raise_for_status()
+        
+        # Parse HTML to extract race data
+        html = response.text
+        
+        # Extract race name (e.g., "Nonantola")
+        race_name = None
+        name_match = re.search(r'<span class="bar-title"[^>]*>([^<]+)</span>', html)
+        if name_match:
+            race_name = name_match.group(1).strip()
+        
+        # Extract distance (e.g., "74.0 km")
+        distance_match = re.search(r'(\d+(?:\.\d+)?)\s*km', html, re.IGNORECASE)
+        distance = float(distance_match.group(1)) if distance_match else None
+        
+        # Extract elevation (e.g., "+72 m" or "+1002 m")
+        elevation_match = re.search(r'\+(\d+)\s*m\b', html, re.IGNORECASE)
+        elevation = float(elevation_match.group(1)) if elevation_match else None
+        
+        # Extract race date (e.g., "08 mar 2026")
+        # Italian month names
+        month_map = {
+            'gen': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+            'mag': '05', 'giu': '06', 'lug': '07', 'ago': '08',
+            'set': '09', 'ott': '10', 'nov': '11', 'dic': '12'
+        }
+        
+        race_date = None
+        date_match = re.search(r'(\d{1,2})\s+(' + '|'.join(month_map.keys()) + r')\s+(\d{4})', html, re.IGNORECASE)
+        if date_match:
+            day = date_match.group(1).zfill(2)
+            month = month_map[date_match.group(2).lower()]
+            year = date_match.group(3)
+            race_date = f"{year}-{month}-{day}"
+        
+        print(f"[DEBUG] name={race_name}, date={race_date}, distance={distance}, elevation={elevation}")
+        
+        result = {
+            "name": race_name,
+            "distance_km": distance,
+            "elevation_m": elevation,
+            "race_date_start": race_date,
+            "avg_speed_kmh": None,
+            "route_link": link,
+            "note": "Velocità media non estratta automaticamente. Consulta il visualizzatore su bonvi-race-database"
+        }
+        
+        print(f"[DEBUG] returning: {result}")
+        return result
+        
+    except requests.RequestException as e:
+        raise HTTPException(status_code=400, detail=f"Errore nel caricamento della pagina: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore nel parsing dei dati: {str(e)}")
+
+
 
 
 @router.get("/")

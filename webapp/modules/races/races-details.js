@@ -278,22 +278,54 @@ function buildDetailsTab(race) {
             
             <div style="border-top: 2px solid #e0e0e0; margin: 20px 0; padding-top: 20px;">
                 <h4>📊 Traccia Gara (GPX/FIT/TCX)</h4>
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-                    <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">
-                        📁 Importa Traccia
-                        <input type="file" id="gpx-file-input" accept=".gpx,.fit,.tcx" 
-                               style="display: none;" onchange="handleGpxImport(event)">
-                    </label>
-                    <span id="gpx-filename" style="color: #666;">Nessun file importato</span>
-                    <button type="button" class="btn btn-danger btn-sm" id="gpx-delete-btn" style="display: none;" onclick="deleteRaceGpx()">
-                        🗑️ Elimina Traccia
-                    </button>
-                </div>
-                <div id="map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
-                        Importa un file GPX per visualizzare la mappa
+                ${race.route_file ? `
+                    <!-- GPX imported -->
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <span id="gpx-filename" style="color: #22C55E; font-weight: bold;">✅ Traccia caricata</span>
+                        <button type="button" class="btn btn-danger btn-sm" id="gpx-delete-btn" onclick="deleteRaceGpx()">
+                            🗑️ Elimina Traccia
+                        </button>
                     </div>
-                </div>
+                    <div id="map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                            Mappa GPX
+                        </div>
+                    </div>
+                ` : race.route_link ? `
+                    <!-- Bonvi link available but no GPX -->
+                    <div style="padding: 15px; background: #e0f2fe; border: 2px dashed #0284c7; border-radius: 8px; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <span style="font-size: 20px;">🗺️</span>
+                            <span style="color: #0369a1; font-weight: 500;">Percorso disponibile su Bonvi Race Database</span>
+                        </div>
+                        <a href="${race.route_link}" target="_blank" class="btn btn-primary" style="display: inline-block;">
+                            🔗 Apri Percorso su Bonvi
+                        </a>
+                        <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #0369a1;">Puoi comunque importare un file GPX per visualizzare la mappa qui.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">
+                            📁 Importa GPX (opzionale)
+                            <input type="file" id="gpx-file-input" accept=".gpx,.fit,.tcx" 
+                                   style="display: none;" onchange="handleGpxImport(event)">
+                        </label>
+                    </div>
+                ` : `
+                    <!-- No GPX, no bonvi link -->
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                        <label class="btn btn-secondary" style="margin: 0; cursor: pointer;">
+                            📁 Importa Traccia
+                            <input type="file" id="gpx-file-input" accept=".gpx,.fit,.tcx" 
+                                   style="display: none;" onchange="handleGpxImport(event)">
+                        </label>
+                        <span id="gpx-filename" style="color: #666;">Nessun file importato</span>
+                    </div>
+                    <div id="map-container" style="width: 100%; height: 400px; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                            Importa un file GPX per visualizzare la mappa
+                        </div>
+                    </div>
+                `}
             </div>
             ` : ''}
             

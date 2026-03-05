@@ -2440,6 +2440,56 @@ function buildRouteTab(race) {
 }
 
 window.initRouteTab = function() {
+    const race = window.currentRaceData;
+    
+    // Check if we have GPX data (route_file) or bonvi link (route_link)
+    const hasGpxData = race?.route_file;
+    const hasBonviLink = race?.route_link;
+    
+    // If no GPX data but has bonvi link, embed bonvi page in iframe
+    if (!hasGpxData && hasBonviLink) {
+        const container = document.getElementById('route-tab-container');
+        if (container) {
+            container.innerHTML = `
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                ">
+                    <div style="
+                        padding: 12px 16px;
+                        background: #e0f2fe;
+                        border-bottom: 2px solid #0284c7;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    ">
+                        <span style="color: #0284c7; font-weight: 500;">🗺️ Visualizzazione Bonvi Race Database</span>
+                        <a href="${hasBonviLink}" target="_blank" style="
+                            margin-left: auto;
+                            padding: 6px 12px;
+                            background: #0284c7;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 4px;
+                            font-size: 0.85rem;
+                            font-weight: 500;
+                        ">
+                            ↗️ Apri in nuova finestra
+                        </a>
+                    </div>
+                    <iframe
+                        id="bonvi-route-iframe"
+                        src="${hasBonviLink}"
+                        style="flex: 1; width: 100%; border: none; display: block;"
+                        title="Bonvi Race Database Route"
+                    ></iframe>
+                </div>
+            `;
+        }
+        return;
+    }
+    
     const iframe = document.getElementById('route-visualizer-iframe');
     if (!iframe) return;
 
