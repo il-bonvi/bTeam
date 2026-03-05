@@ -2570,10 +2570,10 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
     }
     window.cpChart1 = echarts.init(chartDom);
 
-    // Generate fitted curve (log distributed points)
+    // Generate fitted curve (log distributed points for better granularity)
     const minTime = 1;
     const maxTime = 7200;
-    const numPoints = 300;
+    const numPoints = 2000; // Increased from 300 for much finer granularity
     const logMin = Math.log10(minTime);
     const logMax = Math.log10(maxTime);
     const fittedData = [];
@@ -2590,7 +2590,7 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
 
     const option = {
         title: {
-            text: 'OmniPD Power-Duration Curve',
+            text: 'OmniPD Power-Duration Curve (Scroll to zoom)',
             left: 'center',
             textStyle: {
                 color: '#667eea',
@@ -2617,6 +2617,19 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
             formatter: function(params) {
                 // Find hovered time (x value)
                 let hoveredTime = params[0].value[0];
+                
+                // Snap to the closest point in the fitted curve for precision
+                let closestIdx = 0;
+                let minDist = Infinity;
+                for (let i = 0; i < fittedData.length; i++) {
+                    const dist = Math.abs(fittedData[i][0] - hoveredTime);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIdx = i;
+                    }
+                }
+                hoveredTime = fittedData[closestIdx][0];
+                
                 // Find fitted curve value at this time
                 let fitted = null;
                 let real = null;
@@ -2698,6 +2711,28 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
                     return '';
                 },
                 color: '#666'
+            },
+            markLine: {
+                silent: true,
+                data: [
+                    { xAxis: 60, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 120, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 180, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 240, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 300, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 360, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 420, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 480, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 540, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 600, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 720, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 900, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 1200, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 1800, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 3600, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 5400, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 7200, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } }
+                ]
             }
         },
         yAxis: {
@@ -2724,6 +2759,14 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
                 color: '#666'
             }
         },
+        dataZoom: [
+            {
+                type: 'inside',
+                xAxisIndex: 0,
+                start: 0,
+                end: 100
+            }
+        ],
         series: [
             {
                 name: 'Real Power Curve',
