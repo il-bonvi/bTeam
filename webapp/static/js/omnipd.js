@@ -402,8 +402,8 @@ function filterPowerCurveData(allTimes, allPowers, valuesPerWindow, minPercentil
  * Calculate omniPD parameters and statistics
  */
 function calculateOmniPD(timeValues, powerValues) {
-    if (timeValues.length < 4) {
-        throw new Error('Insufficienti dati: servono almeno 4 punti');
+    if (timeValues.length < 3) {
+        throw new Error('Insufficienti dati: servono almeno 3 punti');
     }
 
     // Fit model
@@ -528,4 +528,96 @@ function calculateCPModel(durations, watts, weight = 1) {
         mmp_6m: mmps[360],
         mmp_12m: mmps[720]
     };
+}
+
+/**
+ * Calculate CP model using custom selected timepoints instead of percentile filtering
+ * Allows manual selection of specific durations for CP calculation
+ * @param {Array} durations - Time values in seconds
+ * @param {Array} watts - Power values in watts
+ * @param {Array} customDurations - Selected custom durations (seconds)
+ * @param {Number} weight - Athlete weight in kg
+ * @returns {Object} CP model result
+ */
+function calculateCPModelWithCustomPoints(durations, watts, customDurations, weight = 1) {
+    if (!durations || !watts || !customDurations || customDurations.length < 3) {
+        return null;
+    }
+
+    let selectedTimes = [];
+    let selectedPowers = [];
+
+    // Find the closest actual duration to each custom duration requested
+    for (const customDur of customDurations) {
+        let minDist = Infinity;
+        let bestIdx = -1;
+        
+        for (let i = 0; i < durations.length; i++) {
+            const dist = Math.abs(durations[i] - customDur);
+            if (dist < minDist) {
+                minDist = dist;
+                bestIdx = i;
+            }
+        }
+        
+        // Only add if we found a point within 10% tolerance
+        if (bestIdx >= 0 && minDist <= customDur * 0.1) {
+            selectedTimes.push(durations[bestIdx]);
+            selectedPowers.push(watts[bestIdx]);
+        }
+    }
+
+    // Need at least 3 points
+    if (selectedTimes.length < 3) {
+        return null;
+    }
+
+    // Sort selected data by time
+    const sortedIndices = selectedTimes.map((_, i) => i).sort((a, b) => selectedTimes[a] - selectedTimes[b]);
+    selectedTimes = sortedIndices.map(i => selectedTimes[i]);
+    selectedPowers = sortedIndices.map(i => selectedPowers[i]);
+
+    // Calculate final CP model with selected points
+    try {
+        const cpResult = calculateOmniPD(selectedTimes, selectedPowers);
+        
+        if (!cpResult) {
+            console.error('[CustomCP] calculateOmniPD returned null with', selectedTimes.length, 'points');
+            return null;
+        }
+
+        // Extract MMP for specific durations
+        const targetDurations = [1, 5, 180, 360, 720];
+        const mmps = {};
+        for (const duration of targetDurations) {
+            const index = durations.findIndex(d => d >= duration);
+            mmps[duration] = (index !== -1) ? watts[index] : null;
+        }
+
+        return {
+            cp: Math.round(cpResult.CP),
+            w_prime: Math.round(cpResult.W_prime),
+            pmax: Math.round(cpResult.Pmax),
+            rmse: cpResult.RMSE.toFixed(2),
+            cp_kg: (cpResult.CP / weight).toFixed(2),
+            w_prime_kg: (cpResult.W_prime / weight / 1000).toFixed(3),
+            pmax_kg: (cpResult.Pmax / weight).toFixed(2),
+            a_param: cpResult.A,
+            t_99: cpResult.t_99,
+            usedPercentile: null,  // Not using percentile
+            pointsUsed: selectedTimes.length,
+            customPointsUsed: true,
+            selectedDurations: selectedTimes,
+            forcedMediumPoint: false,
+            forcedLongPoint: false,
+            mmp_1s: mmps[1],
+            mmp_5s: mmps[5],
+            mmp_3m: mmps[180],
+            mmp_6m: mmps[360],
+            mmp_12m: mmps[720]
+        };
+    } catch (error) {
+        console.error('[CustomCP] Error in calculateOmniPD:', error, 'with points:', selectedTimes.length, selectedTimes);
+        return null;
+    }
 }

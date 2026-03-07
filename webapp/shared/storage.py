@@ -313,6 +313,46 @@ class Season(Base):
         }
 
 
+class CustomCPHistory(Base):
+    """Storico configurazioni Custom CP per ogni atleta"""
+    __tablename__ = "custom_cp_history"
+
+    id = Column(Integer, primary_key=True)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    period = Column(String(100), nullable=False)  # '90d', 'allTime', 'season-X', 'custom'
+    period_label = Column(String(255), nullable=True)  # Human-readable label (e.g., "7 mar 2026 - 8 set 2025")
+    selected_durations = Column(Text, nullable=False)  # JSON array of selected durations in seconds
+    cp = Column(Float, nullable=False)  # Critical Power
+    w_prime = Column(Float, nullable=False)  # W Prime
+    pmax = Column(Float, nullable=False)  # Pmax
+    rmse = Column(Float, nullable=True)  # Root Mean Square Error
+    saved_at = Column(String(255), nullable=False)  # ISO timestamp of when it was saved
+
+    athlete = relationship("Athlete")
+
+    def to_dict(self) -> Dict:
+        # Parse selected_durations from JSON string to list
+        durations = []
+        if self.selected_durations:
+            try:
+                durations = json.loads(self.selected_durations)
+            except (json.JSONDecodeError, TypeError):
+                durations = []
+        
+        return {
+            "id": self.id,
+            "athlete_id": self.athlete_id,
+            "period": self.period,
+            "period_label": self.period_label,
+            "selected_durations": durations,
+            "cp": self.cp,
+            "w_prime": self.w_prime,
+            "pmax": self.pmax,
+            "rmse": self.rmse,
+            "saved_at": self.saved_at,
+        }
+
+
 class Race(Base):
     """SQLAlchemy ORM model for planned races."""
     __tablename__ = "races"
@@ -1837,6 +1877,96 @@ class BTeamStorage:
         self.session.delete(season)
         self.session.commit()
         return True
+
+    # ========== CUSTOM CP HISTORY ==========
+
+    def save_custom_cp(
+        self,
+        athlete_id: int,
+        period: str,
+        period_label: Optional[str],
+        selected_durations: List[int],
+        cp: float,
+        w_prime: float,
+        pmax: float,
+        rmse: Optional[float] = None
+    ) -> Dict:
+        """
+        Save a new Custom CP configuration to history (does NOT overwrite).
+        Each save creates a new record with a timestamp.
+        """
+        now = datetime.now().isoformat()
+        
+        # Convert list to JSON string for database storage
+        durations_json = json.dumps(selected_durations)
+        
+        cp_config = CustomCPHistory(
+            athlete_id=athlete_id,
+            period=period,
+            period_label=period_label,
+            selected_durations=durations_json,
+            cp=cp,
+            w_prime=w_prime,
+            pmax=pmax,
+            rmse=rmse,
+            saved_at=now
+        )
+        
+        self.session.add(cp_config)
+        self.session.commit()
+        return cp_config.to_dict()
+
+    def get_custom_cp_history(
+        self,
+        athlete_id: int,
+        period: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict]:
+        """
+        Get Custom CP history for an athlete.
+        If period is specified, filter by that period.
+        Returns most recent first.
+        """
+        query = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id
+        )
+        
+        if period:
+            query = query.filter(CustomCPHistory.period == period)
+        
+        configs = query.order_by(CustomCPHistory.saved_at.desc()).limit(limit).all()
+        return [c.to_dict() for c in configs]
+
+    def get_custom_cp_by_id(self, config_id: int) -> Optional[Dict]:
+        """Get a specific Custom CP configuration by ID."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.id == config_id
+        ).first()
+        return config.to_dict() if config else None
+
+    def get_latest_custom_cp(self, athlete_id: int, period: str) -> Optional[Dict]:
+        """Get the most recent Custom CP configuration for a specific period."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id,
+            CustomCPHistory.period == period
+        ).order_by(CustomCPHistory.saved_at.desc()).first()
+        return config.to_dict() if config else None
+
+    def delete_custom_cp(self, config_id: int) -> bool:
+        """Delete a Custom CP configuration from history."""
+        try:
+            config = self.session.query(CustomCPHistory).filter(
+                CustomCPHistory.id == config_id
+            ).first()
+            if not config:
+                return False
+            self.session.delete(config)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"[bTeam] Errore eliminazione custom CP config: {e}")
+            return False
     
     def close(self) -> None:
         """
