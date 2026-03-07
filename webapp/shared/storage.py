@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, Boolean, create_engine
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, Boolean, JSON, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session as SQLAlchemySession, joinedload
 
@@ -77,6 +77,7 @@ class Athlete(Base):
     kj_per_hour_per_kg = Column(Float, default=10.0)  # KJ/h/kg per calcoli gare
     api_key = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
+    custom_cp_configs = Column(JSON, default={}, nullable=True)  # Custom CP configurations per period
     created_at = Column(String(255), nullable=False)
 
     team = relationship("Team", back_populates="athletes")
@@ -104,6 +105,7 @@ class Athlete(Base):
             "kj_per_hour_per_kg": self.kj_per_hour_per_kg,
             "api_key": self.api_key,
             "notes": self.notes,
+            "custom_cp_configs": self.custom_cp_configs or {},
             "created_at": self.created_at,
         }
         if with_team_name:
@@ -314,28 +316,29 @@ class Season(Base):
 
 
 class CustomCPHistory(Base):
-    """Storico configurazioni Custom CP per ogni atleta"""
+    """Historical Custom CP configurations per athlete and period."""
     __tablename__ = "custom_cp_history"
 
     id = Column(Integer, primary_key=True)
     athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
-    period = Column(String(100), nullable=False)  # '90d', 'allTime', 'season-X', 'custom'
-    period_label = Column(String(255), nullable=True)  # Human-readable label (e.g., "7 mar 2026 - 8 set 2025")
-    selected_durations = Column(Text, nullable=False)  # JSON array of selected durations in seconds
-    cp = Column(Float, nullable=False)  # Critical Power
-    w_prime = Column(Float, nullable=False)  # W Prime
-    pmax = Column(Float, nullable=False)  # Pmax
-    rmse = Column(Float, nullable=True)  # Root Mean Square Error
-    saved_at = Column(String(255), nullable=False)  # ISO timestamp of when it was saved
-
-    athlete = relationship("Athlete")
+    period = Column(String(100), nullable=False)  # '90d', 'allTime', 'season_2026', 'season-{id}', 'custom'
+    period_label = Column(String(255), nullable=False)  # Display label: "2025-09-10 - 2026-03-07"
+    date_start = Column(String(10), nullable=True)  # YYYY-MM-DD
+    date_end = Column(String(10), nullable=True)  # YYYY-MM-DD
+    selected_durations = Column(JSON, nullable=False, default=list)  # List of selected duration seconds
+    cp = Column(Float, nullable=False)
+    w_prime = Column(Float, nullable=False)
+    pmax = Column(Float, nullable=False)
+    rmse = Column(Float, nullable=True)
+    saved_at = Column(String(255), nullable=False)  # ISO timestamp
 
     def to_dict(self) -> Dict:
-        # Parse selected_durations from JSON string to list
-        durations = []
-        if self.selected_durations:
+        # Parse selected_durations if it's a string
+        durations = self.selected_durations
+        if isinstance(durations, str):
             try:
-                durations = json.loads(self.selected_durations)
+                import json
+                durations = json.loads(durations)
             except (json.JSONDecodeError, TypeError):
                 durations = []
         
@@ -344,7 +347,9 @@ class CustomCPHistory(Base):
             "athlete_id": self.athlete_id,
             "period": self.period,
             "period_label": self.period_label,
-            "selected_durations": durations,
+            "date_start": self.date_start,
+            "date_end": self.date_end,
+            "selected_durations": durations or [],
             "cp": self.cp,
             "w_prime": self.w_prime,
             "pmax": self.pmax,
@@ -578,6 +583,33 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'max_hr': {e}")
+
+            # Add custom_cp_configs column to athletes if missing
+            if "custom_cp_configs" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN custom_cp_configs TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'custom_cp_configs' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'custom_cp_configs': {e}")
+
+            # Add api_key column to athletes if missing
+            if "api_key" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN api_key TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'api_key' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'api_key': {e}")
+
+            # Add notes column to athletes if missing
+            if "notes" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN notes TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'notes' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'notes': {e}")
             
             # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
@@ -820,6 +852,52 @@ class BTeamStorage:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
             
+            # Create custom_cp_history table if it doesn't exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='custom_cp_history'")
+            custom_cp_history_exists = cursor.fetchone() is not None
+            
+            if not custom_cp_history_exists:
+                try:
+                    cursor.execute("""
+                        CREATE TABLE custom_cp_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            athlete_id INTEGER NOT NULL,
+                            period VARCHAR(100) NOT NULL,
+                            period_label VARCHAR(255) NOT NULL,
+                            date_start VARCHAR(10),
+                            date_end VARCHAR(10),
+                            selected_durations TEXT DEFAULT '[]',
+                            cp REAL NOT NULL,
+                            w_prime REAL NOT NULL,
+                            pmax REAL NOT NULL,
+                            rmse REAL,
+                            saved_at VARCHAR(255) NOT NULL,
+                            FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+                        )
+                    """)
+                    print(f"[bTeam] Tabella 'custom_cp_history' creata")
+                except sqlite3.Error as e:
+                    print(f"[bTeam] Errore creazione tabella 'custom_cp_history': {e}")
+            else:
+                # Table exists - add any missing columns
+                cursor.execute("PRAGMA table_info(custom_cp_history)")
+                ccp_cols = {row[1] for row in cursor.fetchall()}
+                
+                for col_name, col_def in [
+                    ("date_start", "VARCHAR(10) DEFAULT NULL"),
+                    ("date_end", "VARCHAR(10) DEFAULT NULL"),
+                    ("selected_durations", "TEXT DEFAULT '[]'"),
+                    ("rmse", "REAL DEFAULT NULL"),
+                    ("period_label", "VARCHAR(255) DEFAULT ''"),
+                ]:
+                    if col_name not in ccp_cols:
+                        try:
+                            cursor.execute(f"ALTER TABLE custom_cp_history ADD COLUMN {col_name} {col_def}")
+                            print(f"[bTeam] Colonna '{col_name}' aggiunta alla tabella custom_cp_history")
+                        except sqlite3.OperationalError as e:
+                            if "duplicate column name" not in str(e).lower():
+                                print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
+            
             conn.commit()
             conn.close()
         except Exception as e:
@@ -995,6 +1073,7 @@ class BTeamStorage:
         kj_per_hour_per_kg: Optional[float] = None,
         api_key: Optional[str] = None,
         notes: Optional[str] = None,
+        custom_cp_configs: Optional[Dict] = None,
     ) -> None:
         """Update athlete details."""
         athlete = self.session.query(Athlete).filter_by(id=athlete_id).first()
@@ -1031,6 +1110,8 @@ class BTeamStorage:
                 athlete.api_key = api_key.strip() or None
             if notes is not None:
                 athlete.notes = notes.strip() or None
+            if custom_cp_configs is not None:
+                athlete.custom_cp_configs = custom_cp_configs
             self.session.commit()
 
     def import_power_data_from_intervals(
@@ -1801,8 +1882,74 @@ class BTeamStorage:
             self.session.commit()
             return True
         except Exception as e:
-            self.session.rollback()
             print(f"[bTeam] Errore eliminazione wellness: {e}")
+            return False
+
+    # ===== Custom CP History Methods =====
+
+    def save_custom_cp(self, athlete_id: int, period: str, period_label: str, date_start: Optional[str],
+                       date_end: Optional[str], selected_durations: List[int], cp: float, w_prime: float,
+                       pmax: float, rmse: Optional[float] = None) -> Dict:
+        """Save a Custom CP configuration to history."""
+        now = datetime.now().isoformat()
+        # Serialize selected_durations to JSON string
+        durations_json = json.dumps(selected_durations)
+        
+        config = CustomCPHistory(
+            athlete_id=athlete_id,
+            period=period,
+            period_label=period_label,
+            date_start=date_start,
+            date_end=date_end,
+            selected_durations=durations_json,
+            cp=cp,
+            w_prime=w_prime,
+            pmax=pmax,
+            rmse=rmse,
+            saved_at=now
+        )
+        self.session.add(config)
+        self.session.commit()
+        return config.to_dict()
+
+    def get_custom_cp_history(self, athlete_id: int, period: Optional[str] = None, limit: int = 50) -> List[Dict]:
+        """Get Custom CP history, optionally filtered by period. Returns recent configs first."""
+        query = self.session.query(CustomCPHistory).filter(CustomCPHistory.athlete_id == athlete_id)
+        if period:
+            query = query.filter(CustomCPHistory.period == period)
+        configs = query.order_by(CustomCPHistory.saved_at.desc()).limit(limit).all()
+        return [c.to_dict() for c in configs]
+
+    def get_latest_custom_cp(self, athlete_id: int, period: str) -> Optional[Dict]:
+        """Get the most recent Custom CP configuration for a specific period."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id,
+            CustomCPHistory.period == period
+        ).order_by(CustomCPHistory.saved_at.desc()).first()
+        return config.to_dict() if config else None
+
+    def get_custom_cp_by_id(self, athlete_id: int, config_id: int) -> Optional[Dict]:
+        """Get a specific Custom CP configuration by ID."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id,
+            CustomCPHistory.id == config_id
+        ).first()
+        return config.to_dict() if config else None
+
+    def delete_custom_cp(self, athlete_id: int, config_id: int) -> bool:
+        """Delete a Custom CP configuration from history."""
+        try:
+            config = self.session.query(CustomCPHistory).filter(
+                CustomCPHistory.athlete_id == athlete_id,
+                CustomCPHistory.id == config_id
+            ).first()
+            if not config:
+                return False
+            self.session.delete(config)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione Custom CP config: {e}")
             return False
 
     # ========== SEASONS ==========
@@ -1877,96 +2024,6 @@ class BTeamStorage:
         self.session.delete(season)
         self.session.commit()
         return True
-
-    # ========== CUSTOM CP HISTORY ==========
-
-    def save_custom_cp(
-        self,
-        athlete_id: int,
-        period: str,
-        period_label: Optional[str],
-        selected_durations: List[int],
-        cp: float,
-        w_prime: float,
-        pmax: float,
-        rmse: Optional[float] = None
-    ) -> Dict:
-        """
-        Save a new Custom CP configuration to history (does NOT overwrite).
-        Each save creates a new record with a timestamp.
-        """
-        now = datetime.now().isoformat()
-        
-        # Convert list to JSON string for database storage
-        durations_json = json.dumps(selected_durations)
-        
-        cp_config = CustomCPHistory(
-            athlete_id=athlete_id,
-            period=period,
-            period_label=period_label,
-            selected_durations=durations_json,
-            cp=cp,
-            w_prime=w_prime,
-            pmax=pmax,
-            rmse=rmse,
-            saved_at=now
-        )
-        
-        self.session.add(cp_config)
-        self.session.commit()
-        return cp_config.to_dict()
-
-    def get_custom_cp_history(
-        self,
-        athlete_id: int,
-        period: Optional[str] = None,
-        limit: int = 50
-    ) -> List[Dict]:
-        """
-        Get Custom CP history for an athlete.
-        If period is specified, filter by that period.
-        Returns most recent first.
-        """
-        query = self.session.query(CustomCPHistory).filter(
-            CustomCPHistory.athlete_id == athlete_id
-        )
-        
-        if period:
-            query = query.filter(CustomCPHistory.period == period)
-        
-        configs = query.order_by(CustomCPHistory.saved_at.desc()).limit(limit).all()
-        return [c.to_dict() for c in configs]
-
-    def get_custom_cp_by_id(self, config_id: int) -> Optional[Dict]:
-        """Get a specific Custom CP configuration by ID."""
-        config = self.session.query(CustomCPHistory).filter(
-            CustomCPHistory.id == config_id
-        ).first()
-        return config.to_dict() if config else None
-
-    def get_latest_custom_cp(self, athlete_id: int, period: str) -> Optional[Dict]:
-        """Get the most recent Custom CP configuration for a specific period."""
-        config = self.session.query(CustomCPHistory).filter(
-            CustomCPHistory.athlete_id == athlete_id,
-            CustomCPHistory.period == period
-        ).order_by(CustomCPHistory.saved_at.desc()).first()
-        return config.to_dict() if config else None
-
-    def delete_custom_cp(self, config_id: int) -> bool:
-        """Delete a Custom CP configuration from history."""
-        try:
-            config = self.session.query(CustomCPHistory).filter(
-                CustomCPHistory.id == config_id
-            ).first()
-            if not config:
-                return False
-            self.session.delete(config)
-            self.session.commit()
-            return True
-        except Exception as e:
-            self.session.rollback()
-            print(f"[bTeam] Errore eliminazione custom CP config: {e}")
-            return False
     
     def close(self) -> None:
         """

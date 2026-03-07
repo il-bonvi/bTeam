@@ -943,8 +943,15 @@ async function renderCustomCPTab(athleteId, athlete, tabContent) {
                             <div id="custom-cp-point-selector"></div>
                         </div>
                         
+                        <!-- History Button (Always Visible) -->
+                        <div style="padding-bottom: 1rem; border-bottom: 1px solid #e0e0e0;">
+                            <button class="btn btn-info btn-sm" onclick="showCustomCPHistory(${athleteId})" style="width: 100%; padding: 0.35rem; font-size: 0.75rem; background: #667eea; border-color: #667eea;">
+                                <i class="bi bi-clock-history"></i> 📊 Storico Custom CP
+                            </button>
+                        </div>
+                        
                         <!-- Results Summary (BOTTOM of right panel) -->
-                        <div id="custom-cp-results-box" style="display: none; padding-top: 1rem; border-top: 1px solid #e0e0e0;">
+                        <div id="custom-cp-results-box" style="display: none; padding-top: 1rem;">
                             <h6 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #059669; font-weight: 600;">✓ CP Calcolato</h6>
                             <div style="font-size: 0.75rem; line-height: 1.6; color: #333; margin-bottom: 0.75rem;">
                                 <div><strong>CP:</strong> <span id="custom-cp-value">-</span> W</div>
@@ -956,9 +963,6 @@ async function renderCustomCPTab(athleteId, athlete, tabContent) {
                                 <button class="btn btn-success btn-sm" onclick="saveCustomCPSelection(${athleteId})" style="width: 100%; padding: 0.35rem; font-size: 0.75rem;">
                                     <i class="bi bi-cloud-upload"></i> Salva
                                 </button>
-                                <button class="btn btn-info btn-sm" onclick="showCustomCPHistory(${athleteId})" style="width: 100%; padding: 0.35rem; font-size: 0.75rem; background: #667eea; border-color: #667eea;">
-                                    <i class="bi bi-clock-history"></i> Storico
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -968,6 +972,9 @@ async function renderCustomCPTab(athleteId, athlete, tabContent) {
 
         // Render point selector table
         renderCustomCPPointSelector(durations, watts);
+        
+        // Auto-load the latest Custom CP configuration if it exists
+        autoLoadLatestCustomCP(athleteId);
 
     } catch (error) {
         console.error('Error loading custom CP tab:', error);
@@ -980,6 +987,80 @@ async function renderCustomCPTab(athleteId, athlete, tabContent) {
                 </div>
             </div>
         `;
+    }
+}
+
+// Auto-load the latest Custom CP configuration (by furthest end date)
+async function autoLoadLatestCustomCP(athleteId) {
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp-history?limit=100`);
+        if (!response.ok || response.status === 404) {
+            return; // No history, that's fine
+        }
+        
+        const history = await response.json();
+        if (!history || history.length === 0) {
+            return; // No configs to load
+        }
+        
+        // Group by period and keep only the most recent for each period
+        const groupedHistory = {};
+        history.forEach(config => {
+            if (!groupedHistory[config.period]) {
+                groupedHistory[config.period] = config;
+            }
+        });
+        
+        // Find the config with the furthest end date
+        let selectedConfig = null;
+        let maxEndDate = null;
+        
+        Object.values(groupedHistory).forEach(config => {
+            let endDateStr = config.date_end;
+            
+            // If date_end is empty, try to extract from period_label (format: "YYYY-MM-DD - YYYY-MM-DD")
+            if (!endDateStr && config.period_label) {
+                const match = config.period_label.match(/(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})/);
+                if (match) {
+                    endDateStr = match[2]; // Second date is the end date
+                }
+            }
+            
+            if (endDateStr) {
+                const endDate = new Date(endDateStr);
+                if (!maxEndDate || endDate > maxEndDate) {
+                    maxEndDate = endDate;
+                    selectedConfig = config;
+                }
+            }
+        });
+        
+        if (!selectedConfig) {
+            // No config with valid date found - use the most recently saved one as fallback
+            selectedConfig = Object.values(groupedHistory).sort((a, b) => 
+                new Date(b.saved_at) - new Date(a.saved_at)
+            )[0];
+            
+            if (!selectedConfig) {
+                return; // No configs at all
+            }
+        }
+        
+        // Switch to the correct period if needed
+        if (selectedConfig.period !== window.customCPCurrentPeriod) {
+            await switchCustomCPPeriod(selectedConfig.period);
+        }
+        
+        // Set the selected points
+        window.customCPSelectedPoints = selectedConfig.selected_durations;
+        
+        // Re-render selector and recalculate
+        renderCustomCPPointSelector(window.customCPData.secs || [], window.customCPData.watts || []);
+        calculateAndRenderCustomCP();
+        
+    } catch (error) {
+        console.warn('Could not auto-load latest Custom CP config:', error);
+        // This is not critical, so we don't show an error message
     }
 }
 
@@ -2047,13 +2128,30 @@ window.showCustomCPHistory = async function(athleteId) {
         
         const history = await response.json();
         
-        // Group by period
+        // Group by period and keep only the most recent for each period
         const groupedHistory = {};
         history.forEach(config => {
             if (!groupedHistory[config.period]) {
-                groupedHistory[config.period] = [];
+                groupedHistory[config.period] = config;
             }
-            groupedHistory[config.period].push(config);
+            // Keep only the most recent (first one from API since it's sorted by saved_at DESC)
+        });
+        
+        // Define period order for chronological display
+        const periodOrder = ['90d', 'allTime', 'season_2026', 'season_2025', 'season_2024'];
+        const sortedPeriods = Object.keys(groupedHistory).sort((a, b) => {
+            // Fixed periods in order
+            const aIndex = periodOrder.indexOf(a);
+            const bIndex = periodOrder.indexOf(b);
+            
+            if (aIndex !== -1 && bIndex !== -1) {
+                return aIndex - bIndex;
+            }
+            if (aIndex !== -1) return -1; // Fixed periods come first
+            if (bIndex !== -1) return 1;
+            
+            // Dynamic seasons and custom periods at the end, sorted alphabetically
+            return a.localeCompare(b);
         });
         
         // Build HTML
@@ -2062,26 +2160,16 @@ window.showCustomCPHistory = async function(athleteId) {
         if (history.length === 0) {
             historyHtml = '<p style="text-align: center; padding: 2rem; color: #666;">Nessuno storico salvato</p>';
         } else {
-            for (const [period, configs] of Object.entries(groupedHistory)) {
-                const periodLabel = configs[0].period_label || period;
+            sortedPeriods.forEach(period => {
+                const config = groupedHistory[period];
+                const periodLabel = config.period_label || period;
                 historyHtml += `
-                    <div style="margin-bottom: 2rem;">
-                        <h5 style="margin: 0 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 2px solid #667eea; color: #667eea;">
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="margin: 0 0 0.75rem 0; padding-bottom: 0.5rem; border-bottom: 2px solid #667eea; color: #667eea; font-size: 1rem;">
                             ${periodLabel}
                         </h5>
-                        <div style="display: grid; gap: 0.75rem;">
-                `;
-                
-                configs.forEach(config => {
-                    // Show the period range (date_start - date_end) instead of when it was saved
-                    const rangeLabel = config.period_label || period;
-                    
-                    historyHtml += `
                         <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
                             <div style="flex: 1;">
-                                <div style="font-weight: 600; color: #333; margin-bottom: 0.25rem;">
-                                    📅 ${rangeLabel}
-                                </div>
                                 <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: #666;">
                                     <span><strong>CP:</strong> ${config.cp} W</span>
                                     <span><strong>W':</strong> ${config.w_prime} J</span>
@@ -2099,14 +2187,9 @@ window.showCustomCPHistory = async function(athleteId) {
                                 </button>
                             </div>
                         </div>
-                    `;
-                });
-                
-                historyHtml += `
-                        </div>
                     </div>
                 `;
-            }
+            });
         }
         
         // Create or update modal

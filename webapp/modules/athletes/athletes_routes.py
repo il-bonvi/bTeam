@@ -177,7 +177,7 @@ async def save_custom_cp_config(athlete_id: int, config: CustomCPConfig):
     
     try:
         # Use provided dates or period_label as the identifier
-        display_label = config.period_label
+        display_label = config.period_label or config.period  # Fallback to period name if no label
         if config.date_start and config.date_end and config.date_start != config.date_end:
             # Format as "YYYY-MM-DD - YYYY-MM-DD"
             display_label = f"{config.date_start} - {config.date_end}"
@@ -187,6 +187,8 @@ async def save_custom_cp_config(athlete_id: int, config: CustomCPConfig):
             athlete_id=athlete_id,
             period=config.period,
             period_label=display_label,
+            date_start=config.date_start,
+            date_end=config.date_end,
             selected_durations=config.selected_durations,
             cp=config.cp,
             w_prime=config.w_prime,
@@ -238,8 +240,8 @@ async def get_latest_custom_cp(athlete_id: int, period: str):
 async def get_custom_cp_by_id(athlete_id: int, config_id: int):
     """Get a specific Custom CP configuration by ID"""
     storage = get_storage()
-    config = storage.get_custom_cp_by_id(config_id)
-    if not config or config["athlete_id"] != athlete_id:
+    config = storage.get_custom_cp_by_id(athlete_id, config_id)
+    if not config:
         raise HTTPException(status_code=404, detail="Custom CP config not found")
     
     return config
@@ -249,12 +251,9 @@ async def get_custom_cp_by_id(athlete_id: int, config_id: int):
 async def delete_custom_cp_config(athlete_id: int, config_id: int):
     """Delete a Custom CP configuration from history"""
     storage = get_storage()
-    config = storage.get_custom_cp_by_id(config_id)
-    if not config or config["athlete_id"] != athlete_id:
-        raise HTTPException(status_code=404, detail="Custom CP config not found")
     
     try:
-        if storage.delete_custom_cp(config_id):
+        if storage.delete_custom_cp(athlete_id, config_id):
             return {"message": "Custom CP configuration deleted"}
         else:
             raise HTTPException(status_code=404, detail="Config not found")
@@ -302,7 +301,7 @@ async def delete_custom_cp_config_legacy(athlete_id: int, period: str):
     history = storage.get_custom_cp_history(athlete_id, period=period)
     deleted_count = 0
     for config in history:
-        if storage.delete_custom_cp(config["id"]):
+        if storage.delete_custom_cp(athlete_id, config["id"]):
             deleted_count += 1
     
     return {"message": f"Deleted {deleted_count} custom CP configuration(s)"}
