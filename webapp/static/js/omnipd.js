@@ -546,6 +546,7 @@ function calculateCPModelWithCustomPoints(durations, watts, customDurations, wei
 
     let selectedTimes = [];
     let selectedPowers = [];
+    const usedIndices = new Set();
 
     // Find the closest actual duration to each custom duration requested
     for (const customDur of customDurations) {
@@ -560,8 +561,9 @@ function calculateCPModelWithCustomPoints(durations, watts, customDurations, wei
             }
         }
         
-        // Only add if we found a point within 10% tolerance
-        if (bestIdx >= 0 && minDist <= customDur * 0.1) {
+        // Only add if we found a point within 10% tolerance and the index hasn't been used yet
+        if (bestIdx >= 0 && minDist <= customDur * 0.1 && !usedIndices.has(bestIdx)) {
+            usedIndices.add(bestIdx);
             selectedTimes.push(durations[bestIdx]);
             selectedPowers.push(watts[bestIdx]);
         }

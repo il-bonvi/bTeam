@@ -77,7 +77,7 @@ class Athlete(Base):
     kj_per_hour_per_kg = Column(Float, default=10.0)  # KJ/h/kg per calcoli gare
     api_key = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
-    custom_cp_configs = Column(JSON, default={}, nullable=True)  # Custom CP configurations per period
+    custom_cp_configs = Column(JSON, default=dict, nullable=True)  # Custom CP configurations per period
     created_at = Column(String(255), nullable=False)
 
     team = relationship("Team", back_populates="athletes")
@@ -370,7 +370,7 @@ class Race(Base):
     num_stages = Column(Integer, nullable=False, default=1)  # Number of stages (tappe)
     gender = Column(String(50), nullable=True)  # "Femminile" o "Maschile"
     category = Column(String(100), nullable=True)  # Es: "Allieve", "U23", ecc.
-    distance_km = Column(Float, nullable=False)
+    distance_km = Column(Float, nullable=True)
     elevation_m = Column(Float, nullable=True)  # Dislivello gara
     avg_speed_kmh = Column(Float, nullable=True)  # Media prevista velocità
     predicted_duration_minutes = Column(Float, nullable=True)  # Calcolata automaticamente
@@ -733,6 +733,7 @@ class BTeamStorage:
                             distance_km REAL NOT NULL,
                             elevation_m REAL,
                             route_file VARCHAR(500),
+                            route_link VARCHAR(500),
                             notes TEXT,
                             stage_date VARCHAR(255),
                             avg_speed_kmh REAL,
@@ -1412,7 +1413,7 @@ class BTeamStorage:
         name: str,
         race_date_start: str,
         race_date_end: str,
-        distance_km: float,
+        distance_km: Optional[float] = None,
         gender: Optional[str] = None,
         category: Optional[str] = None,
         elevation_m: Optional[float] = None,
@@ -1448,16 +1449,19 @@ class BTeamStorage:
         self.session.commit()
         
         # Create initial stage(s) for the race
-        for stage_num in range(1, num_stages + 1):
-            stage = RaceStage(
-                race_id=race.id,
-                stage_number=stage_num,
-                distance_km=distance_km / num_stages,  # Divide distance equally among stages
-                elevation_m=elevation_m / num_stages if elevation_m else None,
-                route_file=route_file if stage_num == 1 else None,  # Only first stage gets the file initially
-                created_at=now,
-            )
-            self.session.add(stage)
+        if num_stages >= 1:
+            per_stage_distance = (distance_km / num_stages) if distance_km else 0.0
+            per_stage_elevation = (elevation_m / num_stages) if elevation_m else None
+            for stage_num in range(1, num_stages + 1):
+                stage = RaceStage(
+                    race_id=race.id,
+                    stage_number=stage_num,
+                    distance_km=per_stage_distance,
+                    elevation_m=per_stage_elevation,
+                    route_file=route_file if stage_num == 1 else None,  # Only first stage gets the file initially
+                    created_at=now,
+                )
+                self.session.add(stage)
         self.session.commit()
         
         return race.id
@@ -1512,8 +1516,11 @@ class BTeamStorage:
                 race.route_link = route_link
             if notes is not None:
                 race.notes = notes
-            if num_stages is not None:
-                race.num_stages = num_stages
+            # NOTE: Do not update race.num_stages here.
+            # The number of stages must remain consistent with the race_stages
+            # records, which are managed by dedicated stage APIs (e.g., add_stage).
+            # Allowing arbitrary edits here could desynchronize num_stages from
+            # the actual stages and break stage selection/push logic.
             
             self.session.commit()
             return True
@@ -1883,6 +1890,7 @@ class BTeamStorage:
             self.session.commit()
             return True
         except Exception as e:
+            self.session.rollback()
             print(f"[bTeam] Errore eliminazione wellness: {e}")
             return False
 
@@ -1893,16 +1901,13 @@ class BTeamStorage:
                        pmax: float, rmse: Optional[float] = None) -> Dict:
         """Save a Custom CP configuration to history."""
         now = datetime.now().isoformat()
-        # Serialize selected_durations to JSON string
-        durations_json = json.dumps(selected_durations)
-        
         config = CustomCPHistory(
             athlete_id=athlete_id,
             period=period,
             period_label=period_label,
             date_start=date_start,
             date_end=date_end,
-            selected_durations=durations_json,
+            selected_durations=selected_durations,
             cp=cp,
             w_prime=w_prime,
             pmax=pmax,

@@ -5,6 +5,7 @@ import requests
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
 from shared.storage import get_storage
@@ -42,6 +43,16 @@ class RaceAthleteAdd(BaseModel):
 
 class StageUpdate(BaseModel):
     distance_km: Optional[float] = None
+    elevation_m: Optional[float] = None
+    route_file: Optional[str] = None
+    route_link: Optional[str] = None
+    notes: Optional[str] = None
+    stage_date: Optional[str] = None
+    avg_speed_kmh: Optional[float] = None
+
+
+class StageCreate(BaseModel):
+    distance_km: float
     elevation_m: Optional[float] = None
     route_file: Optional[str] = None
     route_link: Optional[str] = None
@@ -117,7 +128,7 @@ async def load_from_bonvi(data: BonviRaceLink):
 
         url_slug = link.rstrip('/').split('/')[-1]
 
-        response = requests.get(link, timeout=10)
+        response = await run_in_threadpool(requests.get, link, timeout=10)
         response.raise_for_status()
         html = response.text
 
@@ -379,7 +390,7 @@ async def get_stage(race_id: int, stage_id: int):
 
 
 @router.post("/{race_id}/stages")
-async def create_stage(race_id: int, stage: StageUpdate):
+async def create_stage(race_id: int, stage: StageCreate):
     """Create a new stage for a race"""
     storage = get_storage()
     race = storage.get_race(race_id)
