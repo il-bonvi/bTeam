@@ -674,35 +674,7 @@ const ROUTE_VISUALIZER_HTML = `<!DOCTYPE html>
                 </div>
                 <div id="climbs-list" class="climbs-list"></div>
                 <div class="difficulty-legend">
-                    <strong>Scala Difficoltà:</strong>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #9aca3c;"></div>
-                        <span>20-75 (Facile)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ffa500;"></div>
-                        <span>75-150 (Moderata)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ff8c00;"></div>
-                        <span>150-300 (Impegnativa)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #ff4500;"></div>
-                        <span>300-600 (Difficile)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #b22222;"></div>
-                        <span>600-900 (Estrema)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #800000;"></div>
-                        <span>900-1200 (HC)</span>
-                    </div>
-                    <div class="difficulty-legend-item">
-                        <div class="difficulty-legend-color" style="background: #000000;"></div>
-                        <span>1200+ (Leggendaria)</span>
-                    </div>
+                    <strong>Scala diff:</strong> <span id="difficulty-formula">(Pendenza Media)² × (Distanza in km)</span>
                 </div>
             </div>
         </div>
@@ -1878,7 +1850,7 @@ let map;
                 card.innerHTML = \`
                     <div class="climb-number">\${index + 1}</div>
                     <div class="climb-difficulty" style="background-color: \${color}">
-                        Difficoltà: \${climb.difficulty.toFixed(0)}
+                        Diff: \${climb.difficulty.toFixed(0)}
                     </div>
                     <div class="climb-stats">
                         <div class="climb-stat">
@@ -2415,6 +2387,18 @@ let map;
 </html>`;
 
 function buildRouteTab(race) {
+    // Determine if multi-stage race
+    const numStages = race?.num_stages || 1;
+    const hasStages = numStages > 1;
+    
+    // Build stage options HTML
+    let stageOptionsHtml = '<option value="race">📍 Percorso Gara Completo</option>';
+    if (hasStages) {
+        for (let i = 1; i <= numStages; i++) {
+            stageOptionsHtml += `<option value="${i}">Tappa ${i} di ${numStages}</option>`;
+        }
+    }
+    
     return `
         <div id="route-tab-container" style="
             margin: -20px;
@@ -2422,6 +2406,30 @@ function buildRouteTab(race) {
             display: flex;
             flex-direction: column;
         ">
+            ${hasStages ? `
+            <div style="
+                background: white;
+                padding: 12px 16px;
+                border-bottom: 1px solid #e5e7eb;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.95rem;
+            ">
+                <label style="font-weight: 500; color: #4b5563;">Visualizza:</label>
+                <select id="route-stage-selector" class="form-input" onchange="loadRouteStageGpx(this.value)" style="
+                    flex: 0 0 220px;
+                    padding: 6px 10px;
+                    border: 1px solid #d1d5db;
+                    border-radius: 4px;
+                    font-size: 0.9rem;
+                    background-color: white;
+                    cursor: pointer;
+                ">
+                    ${stageOptionsHtml}
+                </select>
+            </div>
+            ` : ''}
             <iframe
                 id="route-visualizer-iframe"
                 style="flex: 1; width: 100%; border: none; display: block;"
@@ -2431,7 +2439,73 @@ function buildRouteTab(race) {
     `;
 }
 
+/**
+ * Validates that a route_link is a safe https:// URL from an allowed origin.
+ * Returns the sanitized URL string, or null if invalid/unsafe.
+ */
+function sanitizeRouteLink(link) {
+    if (!link || typeof link !== 'string') return null;
+    try {
+        const url = new URL(link);
+        // Only allow https:// URLs from known trusted origins
+        const allowedOrigins = ['https://il-bonvi.github.io'];
+        if (url.protocol !== 'https:' || !allowedOrigins.some(o => url.origin === o || url.href.startsWith(o + '/'))) {
+            return null;
+        }
+        return url.href;
+    } catch {
+        return null;
+    }
+}
+
 window.initRouteTab = function() {
+    const race = window.currentRaceData;
+    
+    // Check if we have GPX data (route_file) or bonvi link (route_link)
+    const hasGpxData = race?.route_file;
+    const rawBonviLink = race?.route_link;
+    const hasBonviLink = sanitizeRouteLink(rawBonviLink);
+    
+    // If no GPX data but has bonvi link, embed bonvi page in iframe
+    if (!hasGpxData && hasBonviLink) {
+        const container = document.getElementById('route-tab-container');
+        if (container) {
+            // Build DOM safely to avoid innerHTML XSS
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'display: flex; flex-direction: column; height: 100%;';
+
+            const header = document.createElement('div');
+            header.style.cssText = 'padding: 12px 16px; background: #e0f2fe; border-bottom: 2px solid #0284c7; display: flex; align-items: center; gap: 10px;';
+
+            const label = document.createElement('span');
+            label.style.cssText = 'color: #0284c7; font-weight: 500;';
+            label.textContent = '🗺️ Visualizzazione Bonvi Race Database';
+
+            const anchor = document.createElement('a');
+            anchor.href = hasBonviLink;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.style.cssText = 'margin-left: auto; padding: 6px 12px; background: #0284c7; color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem; font-weight: 500;';
+            anchor.textContent = '↗️ Apri in nuova finestra';
+
+            header.appendChild(label);
+            header.appendChild(anchor);
+
+            const iframe = document.createElement('iframe');
+            iframe.id = 'bonvi-route-iframe';
+            iframe.src = hasBonviLink;
+            iframe.style.cssText = 'flex: 1; width: 100%; border: none; display: block;';
+            iframe.title = 'Bonvi Race Database Route';
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(iframe);
+
+            container.innerHTML = '';
+            container.appendChild(wrapper);
+        }
+        return;
+    }
+    
     const iframe = document.getElementById('route-visualizer-iframe');
     if (!iframe) return;
 
@@ -2453,16 +2527,110 @@ window.initRouteTab = function() {
             URL.revokeObjectURL(iframe._blobUrl);
             iframe._blobUrl = null;
         }
-        const gpx = window.gpxTraceData;
-        if (gpx && gpx.points) {
-            setTimeout(() => {
-                iframe.contentWindow.postMessage({
-                    type: 'loadGpxPoints',
-                    points: gpx.points
-                }, '*');
-            }, 300);
+        
+        // For multi-stage races, load first stage by default
+        const race = window.currentRaceData;
+        if (race?.num_stages > 1) {
+            loadRouteStageGpx('1'); // Load first stage
+        } else {
+            // For single-stage races, load race route
+            const gpx = window.gpxTraceData;
+            if (gpx && gpx.points) {
+                setTimeout(() => {
+                    iframe.contentWindow.postMessage({
+                        type: 'loadGpxPoints',
+                        points: gpx.points
+                    }, '*');
+                }, 300);
+            }
         }
     };
+};
+
+/**
+ * Load GPX data for a specific stage or entire race route
+ * Called when user selects a different stage in the route tab selector
+ */
+window.loadRouteStageGpx = async function(stageNumber) {
+    try {
+        const race = window.currentRaceData;
+        const raceId = window.currentRaceId;
+        
+        if (!race || !raceId) {
+            console.error('Race data not found');
+            return;
+        }
+
+        // Update selector value to reflect current selection
+        const selector = document.getElementById('route-stage-selector');
+        if (selector) {
+            selector.value = stageNumber;
+        }
+
+        let gpxData = null;
+
+        if (stageNumber === 'race') {
+            // Load entire race route
+            if (race.route_file) {
+                try {
+                    gpxData = JSON.parse(race.route_file);
+                } catch (e) {
+                    console.warn('Could not parse race route_file:', e);
+                }
+            }
+        } else {
+            // Load specific stage route
+            const stageNum = parseInt(stageNumber);
+            try {
+                const stages = await api.getStages(raceId);
+                const stage = stages.find(s => s.stage_number === stageNum);
+                
+                if (stage && stage.route_file) {
+                    try {
+                        gpxData = JSON.parse(stage.route_file);
+                    } catch (e) {
+                        console.warn(`Could not parse stage ${stageNum} route_file:`, e);
+                    }
+                } else {
+                    console.warn(`Stage ${stageNum} not found or has no route_file`);
+                }
+            } catch (error) {
+                console.error('Error loading stage data:', error);
+                showToast(`Errore nel caricamento della tappa: ${error.message}`, 'error');
+                return;
+            }
+        }
+
+        // Update global GPX data and reload iframe
+        if (gpxData && gpxData.points) {
+            window.gpxTraceData = gpxData;
+            
+            // Reload the iframe with new data
+            const iframe = document.getElementById('route-visualizer-iframe');
+            if (iframe && iframe.contentWindow) {
+                setTimeout(() => {
+                    iframe.contentWindow.postMessage({
+                        type: 'loadGpxPoints',
+                        points: gpxData.points
+                    }, '*');
+                }, 100);
+            }
+        } else if (stageNumber !== 'race' || !race.route_file) {
+            // No GPX data available
+            window.gpxTraceData = null;
+            const iframe = document.getElementById('route-visualizer-iframe');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                    type: 'loadGpxPoints',
+                    points: []
+                }, '*');
+            }
+            showToast('Traccia non disponibile per questa selezione', 'warning');
+        }
+    } catch (error) {
+        console.error('Error in loadRouteStageGpx:', error);
+        showToast('Errore nel caricamento del percorso: ' + error.message, 'error');
+    }
 };
 
 window.buildRouteTab = buildRouteTab;

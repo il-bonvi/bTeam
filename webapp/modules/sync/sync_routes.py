@@ -3,8 +3,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
+from typing import Optional
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 from shared.intervals.sync import IntervalsSyncService
 from shared.intervals.client import IntervalsAPIClient
@@ -13,6 +15,20 @@ from shared.storage import get_storage
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_route_link(link: Optional[str]) -> Optional[str]:
+    """Return the link only if it is a safe https:// URL from an allowed origin."""
+    if not link:
+        return None
+    try:
+        parsed = urlparse(link)
+        allowed_origins = {'il-bonvi.github.io'}
+        if parsed.scheme != 'https' or parsed.netloc not in allowed_origins:
+            return None
+        return link
+    except Exception:
+        return None
 
 
 class APIKeyRequest(BaseModel):
@@ -34,6 +50,7 @@ class WellnessSyncRequest(BaseModel):
 
 class PushRaceRequest(BaseModel):
     race_id: int
+    athlete_ids: Optional[list[int]] = None  # if None → push to all enrolled athletes
 
 
 @router.post("/test-connection")
@@ -336,10 +353,13 @@ async def push_race(request: PushRaceRequest):
         if not race_athletes:
             raise HTTPException(status_code=400, detail="No athletes enrolled in this race")
 
-        # Filter athletes with API keys
+        # Filter athletes with API keys (and optional athlete_ids selection)
         athletes_with_keys = []
         for athlete_data in race_athletes:
             athlete_id = athlete_data.get('id')
+            # Skip if caller passed a selection and this athlete is not in it
+            if request.athlete_ids is not None and athlete_id not in request.athlete_ids:
+                continue
             athlete = storage.get_athlete(athlete_id)
             if athlete and athlete.get('api_key'):
                 athletes_with_keys.append({
@@ -351,32 +371,68 @@ async def push_race(request: PushRaceRequest):
         if not athletes_with_keys:
             raise HTTPException(status_code=400, detail="No athletes in this race have an API key configured")
 
-        # Prepare race data (common for all athletes)
-        distance_km = race.get('distance_km') or 0
-        elevation_m = race.get('elevation_m') or 0
-        predicted_kj = race.get('predicted_kj') or 0
         race_default_category = race.get('category') or 'C'
-        notes = race.get('notes') or ''
+        race_name = race['name']
+        
+        # Check if multi-stage race
+        num_stages = race.get('num_stages', 1)
+        stages_to_push = []
+        
+        if num_stages > 1:
+            # Multi-stage race: push each stage as a separate event
+            stages = storage.get_stages(request.race_id)
+            for stage in stages:
+                stage_number = stage.get('stage_number', 1)
+                stage_name = f"{race_name} - T{stage_number}"
+                
+                # Use stage-specific data
+                distance_km = stage.get('distance_km') or 0
+                elevation_m = stage.get('elevation_m') or 0
+                avg_speed_kmh = stage.get('avg_speed_kmh') or 25
+                route_link = stage.get('route_link')
+                
+                # Calculate duration from distance and speed
+                predicted_duration = (distance_km / avg_speed_kmh * 60) if distance_km > 0 else 240
+                
+                stage_date = stage.get('stage_date') or race['race_date_start']
+                
+                stages_to_push.append({
+                    'name': stage_name,
+                    'distance_km': distance_km,
+                    'elevation_m': elevation_m,
+                    'predicted_duration': predicted_duration,
+                    'date': stage_date,
+                    'speed': avg_speed_kmh,
+                    'route_link': route_link
+                })
+        else:
+            # Single-stage race: use race-level data
+            distance_km = race.get('distance_km') or 0
+            elevation_m = race.get('elevation_m') or 0
+            predicted_kj = race.get('predicted_kj') or 0
 
-        predicted_duration = race.get('predicted_duration_minutes')
-        duration_minutes = float(predicted_duration) if predicted_duration else (
-            (distance_km / 38.5) * 60 if distance_km > 0 else 240
-        )
-        duration_seconds = int(duration_minutes * 60)
-
-        start_date_local = f"{race['race_date']}T10:00:00"
-        start_dt = datetime.fromisoformat(start_date_local)
-        end_dt = start_dt + timedelta(seconds=duration_seconds)
-        end_date_local = end_dt.isoformat()
+            predicted_duration = race.get('predicted_duration_minutes')
+            duration_minutes = float(predicted_duration) if predicted_duration else (
+                (distance_km / 38.5) * 60 if distance_km > 0 else 240
+            )
+            
+            stages_to_push.append({
+                'name': race_name,
+                'distance_km': distance_km,
+                'elevation_m': elevation_m,
+                'predicted_kj': predicted_kj,
+                'predicted_duration': duration_minutes,
+                'date': race['race_date_start'],
+                'speed': race.get('avg_speed_kmh') or 25,
+                'route_link': race.get('route_link')
+            })
 
         def format_duration(minutes: float) -> str:
             hours = int(minutes // 60)
             mins = int(minutes % 60)
             return f"{hours}h {mins}m"
 
-        race_name = race['name']
-
-        # Push race to each athlete with API key
+        # Push all stages to each athlete with API key
         pushed_count = 0
         failed_athletes = []
         
@@ -393,78 +449,106 @@ async def push_race(request: PushRaceRequest):
                 category_upper = str(athlete_objective).upper()
                 intervals_category = f"RACE_{category_upper}" if category_upper in ['A', 'B', 'C'] else "RACE_C"
 
-                # Build description only with core metrics (remove race title, notes, athlete info)
-                race_description = (
-                    f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
-                    f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
-                    f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
-                )
+                # Get athlete-specific metrics
+                athlete_weight = athlete.get('weight_kg', 70)  # Default 70kg if not set
+                kj_per_hour_per_kg = athlete_info['data'].get('kj_per_hour_per_kg', 10.0)
 
-                athlete_weight = athlete.get('weight_kg')
-                if athlete_weight and predicted_kj > 0 and duration_minutes > 0:
-                    kj_per_hour = predicted_kj / (duration_minutes / 60)
-                    kj_per_h_kg = kj_per_hour / float(athlete_weight)
-                    race_description += f' ({kj_per_h_kg:.1f} kJ/h/kg)'
-                race_description += '</b></div>'
-
-                if distance_km > 0:
-                    duration_36_str = format_duration((distance_km / 36.0) * 60)
-                    duration_41_str = format_duration((distance_km / 41.0) * 60)
-                    race_description += (
-                        f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>'
-                        f'<br><b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
-                    )
-
-                # no extra notes included
-
-                # athlete-specific info no longer needed
-
-                # Check for duplicate in this specific athlete's calendar and delete if found
-                try:
-                    existing_events = client.get_events(
-                        athlete_id="0",
-                        oldest=start_date_local[:10],
-                        newest=start_date_local[:10],
-                        days_forward=1
-                    )
+                # Push each stage
+                for stage_data in stages_to_push:
+                    stage_name = stage_data['name']
+                    distance_km = stage_data['distance_km']
+                    elevation_m = stage_data['elevation_m']
+                    duration_minutes = stage_data['predicted_duration']
+                    duration_hours = duration_minutes / 60
+                    route_link = _sanitize_route_link(stage_data.get('route_link'))
                     
-                    # Find and delete any existing event with the same name
-                    for evt in existing_events:
-                        if evt.get('name') == race_name:
-                            event_id = evt.get('id')
-                            if event_id:
-                                try:
-                                    client.delete_event(athlete_id="0", event_id=event_id)
-                                    logger.info(f"[PUSH-RACE] Deleted existing race '{race_name}' (ID: {event_id}) for athlete {athlete_id}")
-                                except Exception as delete_err:
-                                    logger.warning(f"Could not delete existing event {event_id}: {delete_err}")
-                except Exception as check_err:
-                    logger.warning(f"Could not check for existing events for athlete {athlete_id}: {check_err}")
+                    # Calculate KJ based on athlete's kj_per_hour_per_kg and weight
+                    predicted_kj = duration_hours * kj_per_hour_per_kg * athlete_weight if duration_hours > 0 else 0
+                    
+                    duration_seconds = int(duration_minutes * 60)
+                    stage_date = stage_data['date']
+                    
+                    start_date_local = f"{stage_date}T10:00:00"
+                    start_dt = datetime.fromisoformat(start_date_local)
+                    end_dt = start_dt + timedelta(seconds=duration_seconds)
+                    end_date_local = end_dt.isoformat()
 
-                event = client.create_event(
-                    athlete_id="0",
-                    category=intervals_category,
-                    start_date_local=start_date_local,
-                    end_date_local=end_date_local,
-                    name=race_name,
-                    description=race_description,
-                    activity_type='Ride',
-                    distance=distance_km * 1000,  # km → meters
-                    moving_time=duration_seconds
-                )
+                    # Build description with stage metrics
+                    stage_description = (
+                        f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
+                        f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
+                        f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+                    )
+
+                    if predicted_kj > 0 and duration_minutes > 0:
+                        kj_per_hour = predicted_kj / duration_hours
+                        kj_per_h_kg = kj_per_hour / float(athlete_weight)
+                        stage_description += f' ({kj_per_h_kg:.1f} kJ/h/kg)'
+                    stage_description += '</b></div>'
+
+                    if distance_km > 0:
+                        duration_36_str = format_duration((distance_km / 36.0) * 60)
+                        duration_41_str = format_duration((distance_km / 41.0) * 60)
+                        stage_description += (
+                            f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>  |  <b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+                        )
+
+                    # Add route link if available
+                    if route_link:
+                        stage_description += (
+                            f'<br><div><b><span class="text-orange">Percorso</span>: '
+                            f'<a href="{route_link}" target="_blank">Visualizza in BRD</a></b></div>'
+                        )
+
+                    # Check for duplicate in this specific athlete's calendar and delete if found
+                    try:
+                        existing_events = client.get_events(
+                            athlete_id="0",
+                            oldest=stage_date,
+                            newest=stage_date,
+                            days_forward=1
+                        )
+                        
+                        # Find and delete any existing event with the same name
+                        for evt in existing_events:
+                            if evt.get('name') == stage_name:
+                                event_id = evt.get('id')
+                                if event_id:
+                                    try:
+                                        client.delete_event(athlete_id="0", event_id=event_id)
+                                        logger.info(f"[PUSH-RACE] Deleted existing race '{stage_name}' (ID: {event_id}) for athlete {athlete_id}")
+                                    except Exception as delete_err:
+                                        logger.warning(f"Could not delete existing event {event_id}: {delete_err}")
+                    except Exception as check_err:
+                        logger.warning(f"Could not check for existing events for athlete {athlete_id}: {check_err}")
+
+                    # Create event for this stage
+                    event = client.create_event(
+                        athlete_id="0",
+                        category=intervals_category,
+                        start_date_local=start_date_local,
+                        end_date_local=end_date_local,
+                        name=stage_name,
+                        description=stage_description,
+                        activity_type='Ride',
+                        distance=distance_km * 1000,  # km → meters
+                        moving_time=duration_seconds
+                    )
 
                 pushed_count += 1
-                logger.info(f"[PUSH-RACE] Pushed to athlete {athlete_id}: {athlete.get('first_name')} {athlete.get('last_name')}")
+                logger.info(f"[PUSH-RACE] Pushed {len(stages_to_push)} stage(s) to athlete {athlete_id}: {athlete.get('first_name')} {athlete.get('last_name')}")
 
             except Exception as e:
                 athlete_id = athlete_info['data'].get('id')
                 failed_athletes.append(f"Athlete {athlete_id}: {str(e)}")
                 logger.error(f"[PUSH-RACE] Failed to push to athlete {athlete_id}: {e}")
 
+        total_events = len(athletes_with_keys) * len(stages_to_push)
         return {
             "success": True,
-            "message": f"Race pushed to {pushed_count} athletes",
-            "athletes_processed": pushed_count,
+            "message": f"Race pushed to {len(athletes_with_keys)} athletes ({total_events} events total)",
+            "athletes_processed": len(athletes_with_keys),
+            "stages_per_event": len(stages_to_push),
             "total_athletes": len(athletes_with_keys),
             "failed_athletes": failed_athletes if failed_athletes else None
         }
@@ -480,10 +564,10 @@ async def debug_list_races():
     try:
         from shared.storage import Race
         storage = get_storage()
-        races = storage.session.query(Race.id, Race.name, Race.race_date).all()
+        races = storage.session.query(Race.id, Race.name, Race.race_date_start).all()
         return {
             "total": len(races),
-            "races": [{"id": r.id, "name": r.name, "date": r.race_date} for r in races]
+            "races": [{"id": r.id, "name": r.name, "date": r.race_date_start} for r in races]
         }
     except Exception as e:
         return {"error": str(e)}

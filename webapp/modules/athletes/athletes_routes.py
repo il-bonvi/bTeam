@@ -43,6 +43,7 @@ class AthleteUpdate(BaseModel):
     ew_prime: Optional[float] = None
     kj_per_hour_per_kg: Optional[float] = None
     api_key: Optional[str] = None
+    custom_cp_configs: Optional[dict] = None
 
 
 @router.get("/")
@@ -150,6 +151,160 @@ async def update_athlete(athlete_id: int, athlete: AthleteUpdate):
         return storage.get_athlete(athlete_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# Custom CP Configuration (MUST come before /{athlete_id} DELETE)
+
+class CustomCPConfig(BaseModel):
+    selected_durations: list  # List of seconds
+    cp: float
+    w_prime: float
+    pmax: float
+    period: str  # '90d', 'allTime', 'season-X', etc
+    period_label: Optional[str] = None  # Human-readable label
+    date_start: Optional[str] = None  # ISO date start (YYYY-MM-DD)
+    date_end: Optional[str] = None  # ISO date end (YYYY-MM-DD)
+    rmse: Optional[float] = None
+
+
+@router.post("/{athlete_id}/custom-cp")
+async def save_custom_cp_config(athlete_id: int, config: CustomCPConfig):
+    """Save custom CP configuration for an athlete (creates new historical record)"""
+    storage = get_storage()
+    athlete = storage.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    try:
+        # Use provided dates or period_label as the identifier
+        display_label = config.period_label or config.period  # Fallback to period name if no label
+        if config.date_start and config.date_end and config.date_start != config.date_end:
+            # Format as "YYYY-MM-DD - YYYY-MM-DD"
+            display_label = f"{config.date_start} - {config.date_end}"
+        
+        # Save to history (does NOT overwrite, creates new record)
+        saved_config = storage.save_custom_cp(
+            athlete_id=athlete_id,
+            period=config.period,
+            period_label=display_label,
+            date_start=config.date_start,
+            date_end=config.date_end,
+            selected_durations=config.selected_durations,
+            cp=config.cp,
+            w_prime=config.w_prime,
+            pmax=config.pmax,
+            rmse=config.rmse
+        )
+        return {
+            "message": "Custom CP configuration saved",
+            "id": saved_config["id"],
+            "saved_at": saved_config["saved_at"]
+        }
+    except Exception as e:
+        logger.error(f"Error saving custom CP config: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{athlete_id}/custom-cp-history")
+async def get_custom_cp_history(
+    athlete_id: int,
+    period: Optional[str] = None,
+    limit: int = 50
+):
+    """Get Custom CP configuration history for an athlete"""
+    storage = get_storage()
+    athlete = storage.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    history = storage.get_custom_cp_history(athlete_id, period=period, limit=limit)
+    return history
+
+
+@router.get("/{athlete_id}/custom-cp/latest/{period}")
+async def get_latest_custom_cp(athlete_id: int, period: str):
+    """Get the most recent Custom CP configuration for a specific period"""
+    storage = get_storage()
+    athlete = storage.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    config = storage.get_latest_custom_cp(athlete_id, period)
+    if not config:
+        raise HTTPException(status_code=404, detail="No custom CP config found for this period")
+    
+    return config
+
+
+@router.get("/{athlete_id}/custom-cp-detail/{config_id}")
+async def get_custom_cp_by_id(athlete_id: int, config_id: int):
+    """Get a specific Custom CP configuration by ID"""
+    storage = get_storage()
+    config = storage.get_custom_cp_by_id(athlete_id, config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Custom CP config not found")
+    
+    return config
+
+
+@router.delete("/{athlete_id}/custom-cp-history/{config_id}")
+async def delete_custom_cp_config(athlete_id: int, config_id: int):
+    """Delete a Custom CP configuration from history"""
+    storage = get_storage()
+    
+    try:
+        if storage.delete_custom_cp(athlete_id, config_id):
+            return {"message": "Custom CP configuration deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Config not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Legacy endpoints (kept for backwards compatibility - now deprecated)
+
+@router.get("/{athlete_id}/custom-cp/{period}")
+async def get_custom_cp_config_legacy(athlete_id: int, period: str):
+    """
+    DEPRECATED: Get custom CP configuration for an athlete and period.
+    Use /custom-cp/latest/{period} instead.
+    Returns the most recent configuration for backwards compatibility.
+    """
+    storage = get_storage()
+    athlete = storage.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    config = storage.get_latest_custom_cp(athlete_id, period)
+    if not config:
+        # Fall back to old custom_cp_configs field for backwards compatibility
+        custom_configs = athlete.get('custom_cp_configs', {})
+        if period not in custom_configs:
+            raise HTTPException(status_code=404, detail="No custom CP config for this period")
+        return custom_configs[period]
+    
+    return config
+
+
+@router.delete("/{athlete_id}/custom-cp/{period}")
+async def delete_custom_cp_config_legacy(athlete_id: int, period: str):
+    """
+    DEPRECATED: Delete custom CP configuration for an athlete and period.
+    This now deletes ALL history for this period.
+    """
+    storage = get_storage()
+    athlete = storage.get_athlete(athlete_id)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    
+    # Get all configs for this period and delete them
+    history = storage.get_custom_cp_history(athlete_id, period=period)
+    deleted_count = 0
+    for config in history:
+        if storage.delete_custom_cp(athlete_id, config["id"]):
+            deleted_count += 1
+    
+    return {"message": f"Deleted {deleted_count} custom CP configuration(s)"}
 
 
 @router.delete("/{athlete_id}")

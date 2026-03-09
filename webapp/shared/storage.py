@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, Boolean, create_engine
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, Float, Boolean, JSON, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker, Session as SQLAlchemySession, joinedload
 
@@ -77,6 +77,7 @@ class Athlete(Base):
     kj_per_hour_per_kg = Column(Float, default=10.0)  # KJ/h/kg per calcoli gare
     api_key = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
+    custom_cp_configs = Column(JSON, default=dict, nullable=True)  # Custom CP configurations per period
     created_at = Column(String(255), nullable=False)
 
     team = relationship("Team", back_populates="athletes")
@@ -104,6 +105,7 @@ class Athlete(Base):
             "kj_per_hour_per_kg": self.kj_per_hour_per_kg,
             "api_key": self.api_key,
             "notes": self.notes,
+            "custom_cp_configs": self.custom_cp_configs or {},
             "created_at": self.created_at,
         }
         if with_team_name:
@@ -313,26 +315,73 @@ class Season(Base):
         }
 
 
+class CustomCPHistory(Base):
+    """Historical Custom CP configurations per athlete and period."""
+    __tablename__ = "custom_cp_history"
+
+    id = Column(Integer, primary_key=True)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    period = Column(String(100), nullable=False)  # '90d', 'allTime', 'season_2026', 'season-{id}', 'custom'
+    period_label = Column(String(255), nullable=False)  # Display label: "2025-09-10 - 2026-03-07"
+    date_start = Column(String(10), nullable=True)  # YYYY-MM-DD
+    date_end = Column(String(10), nullable=True)  # YYYY-MM-DD
+    selected_durations = Column(JSON, nullable=False, default=list)  # List of selected duration seconds
+    cp = Column(Float, nullable=False)
+    w_prime = Column(Float, nullable=False)
+    pmax = Column(Float, nullable=False)
+    rmse = Column(Float, nullable=True)
+    saved_at = Column(String(255), nullable=False)  # ISO timestamp
+
+    def to_dict(self) -> Dict:
+        # Parse selected_durations if it's a string
+        durations = self.selected_durations
+        if isinstance(durations, str):
+            try:
+                import json
+                durations = json.loads(durations)
+            except (json.JSONDecodeError, TypeError):
+                durations = []
+        
+        return {
+            "id": self.id,
+            "athlete_id": self.athlete_id,
+            "period": self.period,
+            "period_label": self.period_label,
+            "date_start": self.date_start,
+            "date_end": self.date_end,
+            "selected_durations": durations or [],
+            "cp": self.cp,
+            "w_prime": self.w_prime,
+            "pmax": self.pmax,
+            "rmse": self.rmse,
+            "saved_at": self.saved_at,
+        }
+
+
 class Race(Base):
     """SQLAlchemy ORM model for planned races."""
     __tablename__ = "races"
 
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
-    race_date = Column(String(255), nullable=False)  # YYYY-MM-DD format
-    race_days = Column(Integer, nullable=False, default=1)  # Number of race days
+    race_date = Column(String(255), nullable=True)  # Legacy field for backward compatibility
+    race_date_start = Column(String(255), nullable=False)  # YYYY-MM-DD format (first day)
+    race_date_end = Column(String(255), nullable=False)  # YYYY-MM-DD format (last day)
+    num_stages = Column(Integer, nullable=False, default=1)  # Number of stages (tappe)
     gender = Column(String(50), nullable=True)  # "Femminile" o "Maschile"
     category = Column(String(100), nullable=True)  # Es: "Allieve", "U23", ecc.
-    distance_km = Column(Float, nullable=False)
+    distance_km = Column(Float, nullable=True)
     elevation_m = Column(Float, nullable=True)  # Dislivello gara
     avg_speed_kmh = Column(Float, nullable=True)  # Media prevista velocità
     predicted_duration_minutes = Column(Float, nullable=True)  # Calcolata automaticamente
     predicted_kj = Column(Float, nullable=True)  # Calcolati automaticamente
     route_file = Column(String(500), nullable=True)  # Percorso GPX/FIT/TCX
+    route_link = Column(String(500), nullable=True)  # Link to external race database (BRD)
     notes = Column(Text, nullable=True)
     created_at = Column(String(255), nullable=False)
 
     athletes_assoc = relationship("RaceAthlete", back_populates="race", cascade="all, delete-orphan")
+    stages = relationship("RaceStage", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict:
         athletes = [
@@ -344,14 +393,17 @@ class Race(Base):
                 "team_name": ra.athlete.team.name if ra.athlete and ra.athlete.team else None,
                 "kj_per_hour_per_kg": ra.kj_per_hour_per_kg,
                 "objective": ra.objective,
+                "has_api_key": bool(ra.athlete.api_key) if ra.athlete else False,
             }
             for ra in self.athletes_assoc
         ]
+        stages = [stage.to_dict() for stage in self.stages]
         return {
             "id": self.id,
             "name": self.name,
-            "race_date": self.race_date,
-            "race_days": self.race_days,
+            "race_date_start": self.race_date_start,
+            "race_date_end": self.race_date_end,
+            "num_stages": self.num_stages,
             "gender": self.gender,
             "category": self.category,
             "distance_km": self.distance_km,
@@ -360,8 +412,42 @@ class Race(Base):
             "predicted_duration_minutes": self.predicted_duration_minutes,
             "predicted_kj": self.predicted_kj,
             "route_file": self.route_file,
+            "route_link": self.route_link,
             "notes": self.notes,
             "athletes": athletes,
+            "stages": stages,
+            "created_at": self.created_at,
+        }
+
+
+class RaceStage(Base):
+    """SQLAlchemy ORM model for individual race stages (tappe)."""
+    __tablename__ = "race_stages"
+
+    id = Column(Integer, primary_key=True)
+    race_id = Column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False)
+    stage_number = Column(Integer, nullable=False)  # 1-based stage number
+    distance_km = Column(Float, nullable=False)
+    elevation_m = Column(Float, nullable=True)  # Dislivello tappa
+    route_file = Column(String(500), nullable=True)  # GPX/FIT/TCX for this stage
+    route_link = Column(String(500), nullable=True)  # Link to route database (e.g. percorsi-gara repo)
+    notes = Column(Text, nullable=True)
+    stage_date = Column(String(255), nullable=True)  # Stage start date (YYYY-MM-DD)
+    avg_speed_kmh = Column(Float, nullable=True)  # Average expected speed (km/h)
+    created_at = Column(String(255), nullable=False)
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "race_id": self.race_id,
+            "stage_number": self.stage_number,
+            "distance_km": self.distance_km,
+            "elevation_m": self.elevation_m,
+            "route_file": self.route_file,
+            "route_link": self.route_link,
+            "notes": self.notes,
+            "stage_date": self.stage_date,
+            "avg_speed_kmh": self.avg_speed_kmh,
             "created_at": self.created_at,
         }
 
@@ -498,6 +584,33 @@ class BTeamStorage:
                 except sqlite3.OperationalError as e:
                     if "duplicate column name" not in str(e).lower():
                         print(f"[bTeam] Errore aggiunta colonna 'max_hr': {e}")
+
+            # Add custom_cp_configs column to athletes if missing
+            if "custom_cp_configs" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN custom_cp_configs TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'custom_cp_configs' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'custom_cp_configs': {e}")
+
+            # Add api_key column to athletes if missing
+            if "api_key" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN api_key TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'api_key' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'api_key': {e}")
+
+            # Add notes column to athletes if missing
+            if "notes" not in athletes_cols:
+                try:
+                    cursor.execute("ALTER TABLE athletes ADD COLUMN notes TEXT DEFAULT NULL")
+                    print(f"[bTeam] Colonna 'notes' aggiunta alla tabella athletes")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'notes': {e}")
             
             # Get existing columns in races table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='races'")
@@ -527,14 +640,59 @@ class BTeamStorage:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'gender': {e}")
                 
-                # Add race_days column if missing
-                if "race_days" not in races_cols:
+                # Add race_date_start column if missing (migration from race_date)
+                if "race_date_start" not in races_cols:
                     try:
-                        cursor.execute("ALTER TABLE races ADD COLUMN race_days INTEGER DEFAULT 1")
-                        print(f"[bTeam] Colonna 'race_days' aggiunta alla tabella races")
+                        cursor.execute("ALTER TABLE races ADD COLUMN race_date_start TEXT DEFAULT NULL")
+                        print(f"[bTeam] Colonna 'race_date_start' aggiunta alla tabella races")
+                        # If old race_date column exists, copy its data
+                        if "race_date" in races_cols:
+                            cursor.execute("UPDATE races SET race_date_start = race_date WHERE race_date_start IS NULL")
+                            print(f"[bTeam] Dati da 'race_date' copiati a 'race_date_start'")
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
-                            print(f"[bTeam] Errore aggiunta colonna 'race_days': {e}")
+                            print(f"[bTeam] Errore aggiunta colonna 'race_date_start': {e}")
+                elif "race_date" in races_cols:
+                    # race_date_start already exists, but make sure race_date is populated from it for backward compat
+                    try:
+                        cursor.execute("UPDATE races SET race_date = race_date_start WHERE race_date IS NULL AND race_date_start IS NOT NULL")
+                        print(f"[bTeam] Dati da 'race_date_start' copiati a 'race_date' per compatibilità")
+                    except sqlite3.OperationalError as e:
+                        print(f"[bTeam] Avviso aggiornamento 'race_date': {e}")
+                
+                # Add race_date_end column if missing
+                if "race_date_end" not in races_cols:
+                    try:
+                        cursor.execute("ALTER TABLE races ADD COLUMN race_date_end TEXT DEFAULT NULL")
+                        print(f"[bTeam] Colonna 'race_date_end' aggiunta alla tabella races")
+                        # Copy race_date_start to race_date_end if not set
+                        cursor.execute("UPDATE races SET race_date_end = race_date_start WHERE race_date_end IS NULL AND race_date_start IS NOT NULL")
+                        print(f"[bTeam] Dati da 'race_date_start' copiati a 'race_date_end'")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'race_date_end': {e}")
+                
+                # Add num_stages column if missing (migration from race_days)
+                if "num_stages" not in races_cols:
+                    try:
+                        cursor.execute("ALTER TABLE races ADD COLUMN num_stages INTEGER DEFAULT 1")
+                        print(f"[bTeam] Colonna 'num_stages' aggiunta alla tabella races")
+                        # If old race_days column exists, copy its data
+                        if "race_days" in races_cols:
+                            cursor.execute("UPDATE races SET num_stages = race_days WHERE num_stages = 1 AND race_days > 1")
+                            print(f"[bTeam] Dati da 'race_days' copiati a 'num_stages'")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'num_stages': {e}")
+                
+                # Add route_link column if missing
+                if "route_link" not in races_cols:
+                    try:
+                        cursor.execute("ALTER TABLE races ADD COLUMN route_link VARCHAR(500)")
+                        print(f"[bTeam] Colonna 'route_link' aggiunta alla tabella races")
+                    except sqlite3.OperationalError as e:
+                        if "duplicate column name" not in str(e).lower():
+                            print(f"[bTeam] Errore aggiunta colonna 'route_link': {e}")
             
             # Get existing columns in race_athletes table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_athletes'")
@@ -560,6 +718,90 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna 'objective': {e}")
+            
+            # Create race_stages table if it doesn't exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_stages'")
+            race_stages_exists = cursor.fetchone() is not None
+            
+            if not race_stages_exists:
+                try:
+                    cursor.execute("""
+                        CREATE TABLE race_stages (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            race_id INTEGER NOT NULL,
+                            stage_number INTEGER NOT NULL,
+                            distance_km REAL NOT NULL,
+                            elevation_m REAL,
+                            route_file VARCHAR(500),
+                            route_link VARCHAR(500),
+                            notes TEXT,
+                            stage_date VARCHAR(255),
+                            avg_speed_kmh REAL,
+                            created_at VARCHAR(255),
+                            FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE
+                        )
+                    """)
+                    print(f"[bTeam] Tabella 'race_stages' creata")
+                except sqlite3.Error as e:
+                    print(f"[bTeam] Errore creazione tabella 'race_stages': {e}")
+            
+            # Add missing columns to race_stages table if they don't exist
+            if race_stages_exists:
+                try:
+                    # Add stage_date column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN stage_date VARCHAR(255)")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'stage_date': {e}")
+                
+                try:
+                    # Add avg_speed_kmh column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN avg_speed_kmh REAL")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'avg_speed_kmh': {e}")
+                
+                try:
+                    # Add route_link column
+                    cursor.execute("ALTER TABLE race_stages ADD COLUMN route_link VARCHAR(500)")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        print(f"[bTeam] Errore aggiunta colonna 'route_link': {e}")
+            
+            # Check if race_stages table is empty and needs to be populated
+            if race_stages_exists or True:  # Always try to populate if none exist
+                try:
+                    cursor.execute("SELECT COUNT(*) FROM race_stages")
+                    stages_count = cursor.fetchone()[0]
+                    
+                    if stages_count == 0:
+                        # Table is empty, populate from existing races
+                        print(f"[bTeam] Populating race_stages from existing races...")
+                        cursor.execute("SELECT id, distance_km, elevation_m, route_file FROM races")
+                        races = cursor.fetchall()
+                        for race_id, distance_km, elevation_m, route_file in races:
+                            cursor.execute("SELECT num_stages FROM races WHERE id = ?", (race_id,))
+                            result = cursor.fetchone()
+                            num_stages = result[0] if result else 1
+                            now = datetime.utcnow().isoformat()
+                            
+                            for stage_num in range(1, (num_stages or 1) + 1):
+                                cursor.execute("""
+                                    INSERT INTO race_stages 
+                                    (race_id, stage_number, distance_km, elevation_m, route_file, created_at)
+                                    VALUES (?, ?, ?, ?, ?, ?)
+                                """, (
+                                    race_id,
+                                    stage_num,
+                                    (distance_km / num_stages if distance_km and num_stages else 0),
+                                    (elevation_m / num_stages if elevation_m and num_stages else None),
+                                    (route_file if stage_num == 1 else None),
+                                    now
+                                ))
+                        conn.commit()
+                        print(f"[bTeam] Tappe populate da gare esistenti")
+                except sqlite3.Error as e:
+                    print(f"[bTeam] Errore popolazione race_stages: {e}")
             
             # Get existing columns in wellness table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='wellness'")
@@ -611,6 +853,52 @@ class BTeamStorage:
                     except sqlite3.OperationalError as e:
                         if "duplicate column name" not in str(e).lower():
                             print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
+            
+            # Create custom_cp_history table if it doesn't exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='custom_cp_history'")
+            custom_cp_history_exists = cursor.fetchone() is not None
+            
+            if not custom_cp_history_exists:
+                try:
+                    cursor.execute("""
+                        CREATE TABLE custom_cp_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            athlete_id INTEGER NOT NULL,
+                            period VARCHAR(100) NOT NULL,
+                            period_label VARCHAR(255) NOT NULL,
+                            date_start VARCHAR(10),
+                            date_end VARCHAR(10),
+                            selected_durations TEXT DEFAULT '[]',
+                            cp REAL NOT NULL,
+                            w_prime REAL NOT NULL,
+                            pmax REAL NOT NULL,
+                            rmse REAL,
+                            saved_at VARCHAR(255) NOT NULL,
+                            FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+                        )
+                    """)
+                    print(f"[bTeam] Tabella 'custom_cp_history' creata")
+                except sqlite3.Error as e:
+                    print(f"[bTeam] Errore creazione tabella 'custom_cp_history': {e}")
+            else:
+                # Table exists - add any missing columns
+                cursor.execute("PRAGMA table_info(custom_cp_history)")
+                ccp_cols = {row[1] for row in cursor.fetchall()}
+                
+                for col_name, col_def in [
+                    ("date_start", "VARCHAR(10) DEFAULT NULL"),
+                    ("date_end", "VARCHAR(10) DEFAULT NULL"),
+                    ("selected_durations", "TEXT DEFAULT '[]'"),
+                    ("rmse", "REAL DEFAULT NULL"),
+                    ("period_label", "VARCHAR(255) DEFAULT ''"),
+                ]:
+                    if col_name not in ccp_cols:
+                        try:
+                            cursor.execute(f"ALTER TABLE custom_cp_history ADD COLUMN {col_name} {col_def}")
+                            print(f"[bTeam] Colonna '{col_name}' aggiunta alla tabella custom_cp_history")
+                        except sqlite3.OperationalError as e:
+                            if "duplicate column name" not in str(e).lower():
+                                print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
             
             conn.commit()
             conn.close()
@@ -787,6 +1075,7 @@ class BTeamStorage:
         kj_per_hour_per_kg: Optional[float] = None,
         api_key: Optional[str] = None,
         notes: Optional[str] = None,
+        custom_cp_configs: Optional[Dict] = None,
     ) -> None:
         """Update athlete details."""
         athlete = self.session.query(Athlete).filter_by(id=athlete_id).first()
@@ -823,6 +1112,8 @@ class BTeamStorage:
                 athlete.api_key = api_key.strip() or None
             if notes is not None:
                 athlete.notes = notes.strip() or None
+            if custom_cp_configs is not None:
+                athlete.custom_cp_configs = custom_cp_configs
             self.session.commit()
 
     def import_power_data_from_intervals(
@@ -1120,44 +1411,8 @@ class BTeamStorage:
     def add_race(
         self,
         name: str,
-        race_date: str,
-        distance_km: float,
-        gender: Optional[str] = None,
-        category: Optional[str] = None,
-        elevation_m: Optional[float] = None,
-        avg_speed_kmh: Optional[float] = None,
-        predicted_duration_minutes: Optional[float] = None,
-        predicted_kj: Optional[float] = None,
-        route_file: Optional[str] = None,
-        notes: Optional[str] = None,
-        race_days: int = 1,
-    ) -> int:
-        """Add a new race (standalone, not linked to an athlete)."""
-        now = datetime.utcnow().isoformat()
-        race = Race(
-            name=name.strip(),
-            race_date=race_date,
-            race_days=race_days,
-            gender=gender,
-            category=category,
-            distance_km=distance_km,
-            elevation_m=elevation_m,
-            avg_speed_kmh=avg_speed_kmh,
-            predicted_duration_minutes=predicted_duration_minutes,
-            predicted_kj=predicted_kj,
-            route_file=route_file,
-            notes=notes,
-            created_at=now,
-        )
-        self.session.add(race)
-        self.session.commit()
-        return race.id
-
-    def update_race(
-        self,
-        race_id: int,
-        name: Optional[str] = None,
-        race_date: Optional[str] = None,
+        race_date_start: str,
+        race_date_end: str,
         distance_km: Optional[float] = None,
         gender: Optional[str] = None,
         category: Optional[str] = None,
@@ -1166,8 +1421,68 @@ class BTeamStorage:
         predicted_duration_minutes: Optional[float] = None,
         predicted_kj: Optional[float] = None,
         route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
         notes: Optional[str] = None,
-        race_days: Optional[int] = None,
+        num_stages: int = 1,
+    ) -> int:
+        """Add a new race (standalone, not linked to an athlete)."""
+        now = datetime.utcnow().isoformat()
+        race = Race(
+            name=name.strip(),
+            race_date=race_date_start,  # Legacy field for backward compat
+            race_date_start=race_date_start,
+            race_date_end=race_date_end,
+            num_stages=num_stages,
+            gender=gender,
+            category=category,
+            distance_km=distance_km,
+            elevation_m=elevation_m,
+            avg_speed_kmh=avg_speed_kmh,
+            predicted_duration_minutes=predicted_duration_minutes,
+            predicted_kj=predicted_kj,
+            route_file=route_file,
+            route_link=route_link,
+            notes=notes,
+            created_at=now,
+        )
+        self.session.add(race)
+        self.session.commit()
+        
+        # Create initial stage(s) for the race
+        if num_stages >= 1:
+            per_stage_distance = (distance_km / num_stages) if distance_km else 0.0
+            per_stage_elevation = (elevation_m / num_stages) if elevation_m else None
+            for stage_num in range(1, num_stages + 1):
+                stage = RaceStage(
+                    race_id=race.id,
+                    stage_number=stage_num,
+                    distance_km=per_stage_distance,
+                    elevation_m=per_stage_elevation,
+                    route_file=route_file if stage_num == 1 else None,  # Only first stage gets the file initially
+                    created_at=now,
+                )
+                self.session.add(stage)
+        self.session.commit()
+        
+        return race.id
+
+    def update_race(
+        self,
+        race_id: int,
+        name: Optional[str] = None,
+        race_date_start: Optional[str] = None,
+        race_date_end: Optional[str] = None,
+        distance_km: Optional[float] = None,
+        gender: Optional[str] = None,
+        category: Optional[str] = None,
+        elevation_m: Optional[float] = None,
+        avg_speed_kmh: Optional[float] = None,
+        predicted_duration_minutes: Optional[float] = None,
+        predicted_kj: Optional[float] = None,
+        route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
+        notes: Optional[str] = None,
+        num_stages: Optional[int] = None,
     ) -> bool:
         """Update race details."""
         try:
@@ -1177,8 +1492,10 @@ class BTeamStorage:
             
             if name is not None:
                 race.name = name.strip()
-            if race_date is not None:
-                race.race_date = race_date
+            if race_date_start is not None:
+                race.race_date_start = race_date_start
+            if race_date_end is not None:
+                race.race_date_end = race_date_end
             if distance_km is not None:
                 race.distance_km = distance_km
             if gender is not None:
@@ -1195,15 +1512,123 @@ class BTeamStorage:
                 race.predicted_kj = predicted_kj
             if route_file is not None:
                 race.route_file = route_file
+            if route_link is not None:
+                race.route_link = route_link
             if notes is not None:
                 race.notes = notes
-            if race_days is not None:
-                race.race_days = race_days
+            # NOTE: Do not update race.num_stages here.
+            # The number of stages must remain consistent with the race_stages
+            # records, which are managed by dedicated stage APIs (e.g., add_stage).
+            # Allowing arbitrary edits here could desynchronize num_stages from
+            # the actual stages and break stage selection/push logic.
             
             self.session.commit()
             return True
         except Exception as e:
             print(f"[bTeam] Errore aggiornamento gara: {e}")
+            return False
+
+    def add_stage(
+        self,
+        race_id: int,
+        stage_number: int,
+        distance_km: float,
+        elevation_m: Optional[float] = None,
+        route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Optional[int]:
+        """Add a stage to a race."""
+        try:
+            now = datetime.utcnow().isoformat()
+            stage = RaceStage(
+                race_id=race_id,
+                stage_number=stage_number,
+                distance_km=distance_km,
+                elevation_m=elevation_m,
+                route_file=route_file,
+                route_link=route_link,
+                notes=notes,
+                created_at=now,
+            )
+            self.session.add(stage)
+            self.session.commit()
+            return stage.id
+        except Exception as e:
+            print(f"[bTeam] Errore aggiunta tappa: {e}")
+            return None
+
+    def update_stage(
+        self,
+        stage_id: int,
+        distance_km: Optional[float] = None,
+        elevation_m: Optional[float] = None,
+        route_file: Optional[str] = None,
+        route_link: Optional[str] = None,
+        notes: Optional[str] = None,
+        stage_date: Optional[str] = None,
+        avg_speed_kmh: Optional[float] = None,
+    ) -> bool:
+        """Update a stage."""
+        try:
+            stage = self.session.query(RaceStage).filter(RaceStage.id == stage_id).first()
+            if not stage:
+                return False
+            
+            if distance_km is not None:
+                stage.distance_km = distance_km
+            if elevation_m is not None:
+                stage.elevation_m = elevation_m
+            if route_file is not None:
+                stage.route_file = route_file
+            if route_link is not None:
+                stage.route_link = route_link
+            if notes is not None:
+                stage.notes = notes
+            if stage_date is not None:
+                stage.stage_date = stage_date
+            if avg_speed_kmh is not None:
+                stage.avg_speed_kmh = avg_speed_kmh
+            
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore aggiornamento tappa: {e}")
+            return False
+
+    def get_stages(self, race_id: int) -> List[Dict]:
+        """Get all stages for a race."""
+        try:
+            stages = self.session.query(RaceStage).filter(
+                RaceStage.race_id == race_id
+            ).order_by(RaceStage.stage_number.asc()).all()
+            return [stage.to_dict() for stage in stages]
+        except Exception as e:
+            print(f"[bTeam] Errore caricamento tappe: {e}")
+            return []
+
+    def get_stage(self, stage_id: int) -> Optional[Dict]:
+        """Get a specific stage."""
+        try:
+            stage = self.session.query(RaceStage).filter(RaceStage.id == stage_id).first()
+            if stage:
+                return stage.to_dict()
+            return None
+        except Exception as e:
+            print(f"[bTeam] Errore caricamento tappa: {e}")
+            return None
+
+    def delete_stage(self, stage_id: int) -> bool:
+        """Delete a stage."""
+        try:
+            stage = self.session.query(RaceStage).filter(RaceStage.id == stage_id).first()
+            if not stage:
+                return False
+            self.session.delete(stage)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione tappa: {e}")
             return False
 
     def add_athlete_to_race(self, race_id: int, athlete_id: int, objective: str = "C", kj_per_hour_per_kg: float = 10.0) -> bool:
@@ -1303,6 +1728,7 @@ class BTeamStorage:
                 return True
             return False
         except Exception as e:
+            self.session.rollback()
             print(f"[bTeam] Errore eliminazione gara: {e}")
             return False
 
@@ -1310,7 +1736,7 @@ class BTeamStorage:
         """List all races (not filtered by athlete - races are standalone)."""
         query = self.session.query(Race).options(
             joinedload(Race.athletes_assoc).joinedload(RaceAthlete.athlete).joinedload(Athlete.team)
-        ).order_by(Race.race_date.asc())
+        ).order_by(Race.race_date_start.asc())
         races = query.all()
         return [race.to_dict() for race in races]
 
@@ -1466,6 +1892,70 @@ class BTeamStorage:
         except Exception as e:
             self.session.rollback()
             print(f"[bTeam] Errore eliminazione wellness: {e}")
+            return False
+
+    # ===== Custom CP History Methods =====
+
+    def save_custom_cp(self, athlete_id: int, period: str, period_label: str, date_start: Optional[str],
+                       date_end: Optional[str], selected_durations: List[int], cp: float, w_prime: float,
+                       pmax: float, rmse: Optional[float] = None) -> Dict:
+        """Save a Custom CP configuration to history."""
+        now = datetime.now().isoformat()
+        config = CustomCPHistory(
+            athlete_id=athlete_id,
+            period=period,
+            period_label=period_label,
+            date_start=date_start,
+            date_end=date_end,
+            selected_durations=selected_durations,
+            cp=cp,
+            w_prime=w_prime,
+            pmax=pmax,
+            rmse=rmse,
+            saved_at=now
+        )
+        self.session.add(config)
+        self.session.commit()
+        return config.to_dict()
+
+    def get_custom_cp_history(self, athlete_id: int, period: Optional[str] = None, limit: int = 50) -> List[Dict]:
+        """Get Custom CP history, optionally filtered by period. Returns recent configs first."""
+        query = self.session.query(CustomCPHistory).filter(CustomCPHistory.athlete_id == athlete_id)
+        if period:
+            query = query.filter(CustomCPHistory.period == period)
+        configs = query.order_by(CustomCPHistory.saved_at.desc()).limit(limit).all()
+        return [c.to_dict() for c in configs]
+
+    def get_latest_custom_cp(self, athlete_id: int, period: str) -> Optional[Dict]:
+        """Get the most recent Custom CP configuration for a specific period."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id,
+            CustomCPHistory.period == period
+        ).order_by(CustomCPHistory.saved_at.desc()).first()
+        return config.to_dict() if config else None
+
+    def get_custom_cp_by_id(self, athlete_id: int, config_id: int) -> Optional[Dict]:
+        """Get a specific Custom CP configuration by ID."""
+        config = self.session.query(CustomCPHistory).filter(
+            CustomCPHistory.athlete_id == athlete_id,
+            CustomCPHistory.id == config_id
+        ).first()
+        return config.to_dict() if config else None
+
+    def delete_custom_cp(self, athlete_id: int, config_id: int) -> bool:
+        """Delete a Custom CP configuration from history."""
+        try:
+            config = self.session.query(CustomCPHistory).filter(
+                CustomCPHistory.athlete_id == athlete_id,
+                CustomCPHistory.id == config_id
+            ).first()
+            if not config:
+                return False
+            self.session.delete(config)
+            self.session.commit()
+            return True
+        except Exception as e:
+            print(f"[bTeam] Errore eliminazione Custom CP config: {e}")
             return False
 
     # ========== SEASONS ==========

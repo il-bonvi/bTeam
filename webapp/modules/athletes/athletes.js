@@ -278,25 +278,28 @@ async function renderAthleteDetail(athleteId, athletes, contentArea) {
                 <div class="card-body">
                     <!-- Tabs -->
                     <div class="tabs">
-                        <button class="tab-button active" onclick="switchAthleteTab('activities')">
+                        <button class="tab-button active" data-tab="activities" onclick="switchAthleteTab('activities')">
                             Attività (${activities.length})
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('stats')">
+                        <button class="tab-button" data-tab="stats" onclick="switchAthleteTab('stats')">
                             Statistiche
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('power-curve')">
+                        <button class="tab-button" data-tab="power-curve" onclick="switchAthleteTab('power-curve')">
                             Power Curve
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('cp')">
+                        <button class="tab-button" data-tab="custom-cp" onclick="switchAthleteTab('custom-cp')">
+                            🔧 Custom CP
+                        </button>
+                        <button class="tab-button" data-tab="cp" onclick="switchAthleteTab('cp')">
                             CP Model
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('seasons')">
+                        <button class="tab-button" data-tab="seasons" onclick="switchAthleteTab('seasons')">
                             Stagioni
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('sync')">
+                        <button class="tab-button" data-tab="sync" onclick="switchAthleteTab('sync')">
                             Sincronizzazione
                         </button>
-                        <button class="tab-button" onclick="switchAthleteTab('details')">
+                        <button class="tab-button" data-tab="details" onclick="switchAthleteTab('details')">
                             Dettagli
                         </button>
                     </div>
@@ -352,20 +355,13 @@ window.switchAthleteTab = function(tabName, eventObj) {
     // Track which tab is active to prevent race conditions
     window.currentAthleteActiveTab = tabName;
     
-    // Update tab buttons
+    // Update tab buttons - remove active from all
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
     
-    // If event is available, use it. Otherwise find the button by tabName
-    if (eventObj && eventObj.target) {
-        eventObj.target.classList.add('active');
-    } else {
-        // Find and activate the button with matching onclick
-        const buttons = document.querySelectorAll('.tab-button');
-        buttons.forEach(btn => {
-            if (btn.textContent.toLowerCase().includes(tabName.toLowerCase())) {
-                btn.classList.add('active');
-            }
-        });
+    // Add active to the correct button using data-tab attribute for precise matching
+    const targetButton = document.querySelector(`.tab-button[data-tab="${tabName}"]`);
+    if (targetButton) {
+        targetButton.classList.add('active');
     }
     
     const athleteId = window.currentAthleteView;
@@ -387,6 +383,8 @@ window.switchAthleteTab = function(tabName, eventObj) {
         renderStatisticsTab(athleteId, athlete, tabContent);
     } else if (tabName === 'power-curve') {
         renderPowerCurveTab(athleteId, athlete, tabContent);
+    } else if (tabName === 'custom-cp') {
+        renderCustomCPTab(athleteId, athlete, tabContent);
     } else if (tabName === 'cp') {
         renderCPTab(athleteId, athlete, tabContent);
     } else if (tabName === 'seasons') {
@@ -653,6 +651,33 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
                     </div>
                 </div>
                 
+                <!-- Custom Points Mode Toggle -->
+                <div style="background: #f0f8ff; border: 1px solid #64b5f6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 500; color: #1565c0;">
+                        <input type="checkbox" id="toggle-custom-cp-mode" onchange="toggleCustomCPMode(${athleteId})" style="cursor: pointer; width: 18px; height: 18px;">
+                        <span>🔧 Modalità Custom - Seleziona minutaggi per il CP</span>
+                    </label>
+                    <p style="margin: 0.75rem 0 0 28px; font-size: 0.85rem; color: #555;">Seleziona i punti che vuoi usare per il calcolo di CP, W' e Pmax. Questa modalità ignora il filtraggio percentile.</p>
+                </div>
+                
+                <!-- Custom CP Result -->
+                <div id="custom-cp-result" style="display: none; background: #f0fdf4; border: 1px solid #10b981; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h5 style="margin: 0 0 0.5rem 0; color: #059669;">CP Calcolato</h5>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; font-size: 0.9rem;">
+                                <div><strong>CP:</strong> <span id="custom-cp-value">-</span> W</div>
+                                <div><strong>W':</strong> <span id="custom-wprime-value">-</span> J</div>
+                                <div><strong>Pmax:</strong> <span id="custom-pmax-value">-</span> W</div>
+                                <div><strong>Punti:</strong> <span id="custom-points-count">0</span></div>
+                            </div>
+                        </div>
+                        <button class="btn btn-success btn-sm" onclick="saveCustomCPSelection(${athleteId})" style="padding: 0.5rem 1rem;">
+                            <i class="bi bi-cloud-upload"></i> Salva Selezione
+                        </button>
+                    </div>
+                </div>
+                
                 <!-- Main Container: Chart and Table Side-by-Side -->
                 <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
                     <!-- Chart Container -->
@@ -666,6 +691,10 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
                 </div>
             </div>
         `;
+        
+        // Initialize custom CP mode state
+        window.customCPMode = false;
+        window.selectedCustomPoints = [];
 
         // Render the chart with 90-day data by default
         renderPowerCurveChart(data90d);
@@ -689,7 +718,1575 @@ async function renderPowerCurveTab(athleteId, athlete, tabContent) {
     }
 }
 
-// ========== STATISTICS TAB ==========
+// ========== CUSTOM CP TAB (Selezione punti + Grafici CP Model) ==========
+
+async function renderCustomCPTab(athleteId, athlete, tabContent) {
+    if (!athlete.api_key) {
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border: 1px solid #ffc107; margin-bottom: 1rem;">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 2rem; color: #ff9800;"></i>
+                    <h4 style="margin-top: 1rem; color: #856404;">API Key Non Configurata</h4>
+                    <p style="color: #856404; margin-top: 0.5rem;">
+                        Per usare Custom CP è necessario configurare l'API key di Intervals.icu per questo atleta.
+                    </p>
+                    <button class="btn btn-warning" onclick="editAthlete(${athleteId})" style="margin-top: 1rem;">
+                        <i class="bi bi-pencil"></i> Configura API Key
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Show loading state
+    tabContent.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <div class="spinner" style="margin: 2rem auto;"></div>
+            <p style="color: #666; margin-top: 1rem;">Caricamento power curve...</p>
+        </div>
+    `;
+
+    try {
+        const today = new Date();
+        const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        const dateStr90 = days90ago.toISOString().split('T')[0];
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Reuse cached power-curve datasets when available to keep tabs consistent and fast.
+        if (!window.athletePowerCurveCache) {
+            window.athletePowerCurveCache = {};
+        }
+
+        const cacheKey = `${athleteId}_powercurve`;
+        let cachedData;
+
+        if (window.athletePowerCurveCache[cacheKey]) {
+            cachedData = window.athletePowerCurveCache[cacheKey];
+        } else {
+            // Define fixed seasons (hardcoded like CP Model)
+            const fixedSeasons = [
+                { key: 'season_2026', startDate: '2025-11-01', endDate: '2026-10-31' },
+                { key: 'season_2025', startDate: '2024-11-01', endDate: '2025-10-31' },
+                { key: 'season_2024', startDate: '2023-11-01', endDate: '2024-10-31' }
+            ];
+
+            const [seasonsResponse, response90, responseAllTime, ...seasonResponses] = await Promise.all([
+                api.getAthleteSeasons(athleteId),
+                fetch(`/api/athletes/${athleteId}/power-curve?oldest=${dateStr90}&newest=${todayStr}`),
+                fetch(`/api/athletes/${athleteId}/power-curve`),
+                ...fixedSeasons.map(s =>
+                    fetch(`/api/athletes/${athleteId}/power-curve?oldest=${s.startDate}&newest=${s.endDate}`)
+                        .then(r => r.ok ? r.json() : null)
+                        .catch(() => null)
+                )
+            ]);
+
+            if (!response90.ok || !responseAllTime.ok) {
+                throw new Error(`HTTP error! status: ${response90.status || responseAllTime.status}`);
+            }
+
+            const seasons = seasonsResponse;
+            const data90d = await response90.json();
+            const dataAllTime = await responseAllTime.json();
+
+            // Map fixed seasons data
+            const fixedSeasonsData = {};
+            fixedSeasons.forEach((season, idx) => {
+                if (seasonResponses[idx]) {
+                    fixedSeasonsData[season.key] = seasonResponses[idx];
+                }
+            });
+
+            const seasonPowerCurves = {};
+            for (const season of seasons) {
+                const endDate = season.end_date || todayStr;
+                try {
+                    const seasonResponse = await fetch(
+                        `/api/athletes/${athleteId}/power-curve?oldest=${season.start_date}&newest=${endDate}`
+                    );
+                    if (seasonResponse.ok) {
+                        seasonPowerCurves[season.id] = await seasonResponse.json();
+                    }
+                } catch (err) {
+                    console.warn(`Failed to load power curve for season ${season.id}:`, err);
+                }
+            }
+
+            cachedData = {
+                seasons: seasons,
+                data90d: data90d,
+                dataAllTime: dataAllTime,
+                seasonPowerCurves: seasonPowerCurves,
+                fixedSeasonsData: fixedSeasonsData
+            };
+            window.athletePowerCurveCache[cacheKey] = cachedData;
+        }
+
+        const { seasons, data90d, dataAllTime, seasonPowerCurves, fixedSeasonsData } = cachedData;
+
+        // Check if this tab is still active - prevent race condition
+        if (window.currentAthleteActiveTab !== 'custom-cp') {
+            return;
+        }
+
+        // Store period datasets for custom CP tab
+        window.customCPPeriodData = {
+            '90d': data90d,
+            'allTime': dataAllTime,
+            ...fixedSeasonsData
+        };
+        Object.keys(seasonPowerCurves || {}).forEach(seasonId => {
+            window.customCPPeriodData[`season-${seasonId}`] = seasonPowerCurves[seasonId];
+        });
+
+        window.customCPCurrentPeriod = '90d';
+        window.customCPAthleteSeasons = seasons || [];
+        window.customCPData = data90d;
+        window.customCPSelectedPoints = [];
+        window.customCPLastResult = null;
+        window.customCPAthleteId = athleteId;
+        if (!window.customCPDurations) {
+            window.customCPDurations = [1, 2, 5, 8, 10, 15, 20, 30, 40, 50, 60, 120, 180, 240, 300, 360, 480, 570, 720, 900, 960, 1200, 1500, 1800, 2400, 2700, 3600, 5400, 7200];
+        }
+
+        const durations = data90d.secs || [];
+        const watts = data90d.watts || [];
+
+        if (!durations || durations.length === 0) {
+            tabContent.innerHTML = `<p style="padding: 2rem; text-align: center; color: #666;">Nessun dato disponibile</p>`;
+            return;
+        }
+
+        let periodSelectorHtml = `
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="90d" checked onchange="switchCustomCPPeriod('90d')">
+                90 giorni
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="allTime" onchange="switchCustomCPPeriod('allTime')">
+                Tutto il tempo
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="season_2026" onchange="switchCustomCPPeriod('season_2026')">
+                Stagione 2026 (Nov 2025 - Ott 2026)
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="season_2025" onchange="switchCustomCPPeriod('season_2025')">
+                Stagione 2025 (Nov 2024 - Ott 2025)
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="season_2024" onchange="switchCustomCPPeriod('season_2024')">
+                Stagione 2024 (Nov 2023 - Ott 2024)
+            </label>
+        `;
+
+        (seasons || []).forEach(season => {
+            periodSelectorHtml += `
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="custom-cp-period" value="season-${season.id}" onchange="switchCustomCPPeriod('season-${season.id}')">
+                ${season.name}
+            </label>
+            `;
+        });
+
+        // Render UI with Power Curve-style layout: durations on right, main charts on left
+        tabContent.innerHTML = `
+            <div style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <h4 style="margin: 0;">🔧 Custom CP - Seleziona Minutaggi</h4>
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <label style="font-weight: 500; white-space: nowrap;">Periodo:</label>
+                            ${periodSelectorHtml}
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="showCustomCPPeriodPicker(${athleteId})">
+                            📅 Custom
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="customCPRefresh()">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="custom-cp-period-info" style="margin: -0.5rem 0 1rem 0; font-size: 0.85rem; color: #666;">Periodo attivo: 90 giorni</div>
+
+                <!-- Main Container: Charts (LEFT) and Durations (RIGHT) Side-by-Side -->
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem;">
+                    
+                    <!-- LEFT PANEL: Charts and Stats -->
+                    <div>
+                        <!-- Results Stats Cards -->
+                        <div id="custom-cp-stats" style="margin-bottom: 1.5rem; display: none;">
+                            <!-- Cards will be populated by JS -->
+                        </div>
+
+                        <!-- Charts Grid (Power-Duration, Residuals, W'eff) -->
+                        <div class="charts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div id="cp-chart-1" style="grid-column: 1 / -1; width: 100%; height: 500px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                            <div id="cp-chart-2" style="width: 100%; height: 400px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                            <div id="cp-chart-3" style="width: 100%; height: 400px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT PANEL: Durations Selection and Results -->
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; height: fit-content; display: flex; flex-direction: column;">
+                        <h5 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">📍 Minutaggi Disponibili</h5>
+                        <p style="margin: 0 0 0.5rem 0; font-size: 0.8rem; color: #666;">Minimo 3 punti</p>
+                        <div style="margin-bottom: 0.75rem;">
+                            <input type="number" id="custom-cp-duration-input" placeholder="Aggiungi durata (sec)"
+                                   style="padding: 0.35rem 0.5rem; font-size: 0.8rem; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                            <button class="btn btn-primary btn-sm" onclick="addCustomCPDuration()" style="margin-left: 0.35rem; padding: 0.35rem 0.75rem; font-size: 0.75rem;">
+                                <i class="bi bi-plus"></i> Aggiungi
+                            </button>
+                        </div>
+                        <div style="flex-grow: 1; overflow-y: auto; margin-bottom: 1rem;">
+                            <div id="custom-cp-point-selector"></div>
+                        </div>
+                        
+                        <!-- History Button (Always Visible) -->
+                        <div style="padding-bottom: 1rem; border-bottom: 1px solid #e0e0e0;">
+                            <button class="btn btn-info btn-sm" onclick="showCustomCPHistory(${athleteId})" style="width: 100%; padding: 0.35rem; font-size: 0.75rem; background: #667eea; border-color: #667eea;">
+                                <i class="bi bi-clock-history"></i> 📊 Storico Custom CP
+                            </button>
+                        </div>
+                        
+                        <!-- Results Summary (BOTTOM of right panel) -->
+                        <div id="custom-cp-results-box" style="display: none; padding-top: 1rem;">
+                            <h6 style="margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #059669; font-weight: 600;">✓ CP Calcolato</h6>
+                            <div style="font-size: 0.75rem; line-height: 1.6; color: #333; margin-bottom: 0.75rem;">
+                                <div><strong>CP:</strong> <span id="custom-cp-value">-</span> W</div>
+                                <div><strong>W':</strong> <span id="custom-wprime-value">-</span> J</div>
+                                <div><strong>Pmax:</strong> <span id="custom-pmax-value">-</span> W</div>
+                                <div><strong>Punti:</strong> <span id="custom-points-count">0</span></div>
+                            </div>
+                            <div style="display: grid; gap: 0.35rem;">
+                                <button class="btn btn-success btn-sm" onclick="saveCustomCPSelection(${athleteId})" style="width: 100%; padding: 0.35rem; font-size: 0.75rem;">
+                                    <i class="bi bi-cloud-upload"></i> Salva
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Render point selector table
+        renderCustomCPPointSelector(durations, watts);
+        
+        // Auto-load the latest Custom CP configuration if it exists
+        autoLoadLatestCustomCP(athleteId);
+
+    } catch (error) {
+        console.error('Error loading custom CP tab:', error);
+        tabContent.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+                <div style="background: #fee; padding: 1.5rem; border-radius: 8px; border: 1px solid #fcc;">
+                    <i class="bi bi-x-circle" style="font-size: 2rem; color: #d32f2f;"></i>
+                    <h4 style="margin-top: 1rem; color: #c62828;">Errore nel caricamento</h4>
+                    <p style="color: #666; margin-top: 0.5rem;">${error.message}</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Auto-load the latest Custom CP configuration (by furthest end date)
+async function autoLoadLatestCustomCP(athleteId) {
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp-history?limit=100`);
+        if (!response.ok || response.status === 404) {
+            return; // No history, that's fine
+        }
+        
+        const history = await response.json();
+        if (!history || history.length === 0) {
+            return; // No configs to load
+        }
+        
+        // Group by period and keep only the most recent for each period
+        const groupedHistory = {};
+        history.forEach(config => {
+            if (!groupedHistory[config.period]) {
+                groupedHistory[config.period] = config;
+            }
+        });
+        
+        // Find the config with the furthest end date
+        let selectedConfig = null;
+        let maxEndDate = null;
+        
+        Object.values(groupedHistory).forEach(config => {
+            let endDateStr = config.date_end;
+            
+            // If date_end is empty, try to extract from period_label (format: "YYYY-MM-DD - YYYY-MM-DD")
+            if (!endDateStr && config.period_label) {
+                const match = config.period_label.match(/(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})/);
+                if (match) {
+                    endDateStr = match[2]; // Second date is the end date
+                }
+            }
+            
+            if (endDateStr) {
+                const endDate = new Date(endDateStr);
+                if (!maxEndDate || endDate > maxEndDate) {
+                    maxEndDate = endDate;
+                    selectedConfig = config;
+                }
+            }
+        });
+        
+        if (!selectedConfig) {
+            // No config with valid date found - use the most recently saved one as fallback
+            selectedConfig = Object.values(groupedHistory).sort((a, b) => 
+                new Date(b.saved_at) - new Date(a.saved_at)
+            )[0];
+            
+            if (!selectedConfig) {
+                return; // No configs at all
+            }
+        }
+        
+        // Switch to the correct period if needed
+        if (selectedConfig.period !== window.customCPCurrentPeriod) {
+            await switchCustomCPPeriod(selectedConfig.period);
+        }
+        
+        // Set the selected points
+        window.customCPSelectedPoints = selectedConfig.selected_durations;
+        
+        // Re-render selector and recalculate
+        renderCustomCPPointSelector(window.customCPData.secs || [], window.customCPData.watts || []);
+        calculateAndRenderCustomCP();
+        
+    } catch (error) {
+        console.warn('Could not auto-load latest Custom CP config:', error);
+        // This is not critical, so we don't show an error message
+    }
+}
+
+// Render point selector for Custom CP
+function renderCustomCPPointSelector(durations, watts) {
+    // Initialize custom durations list if doesn't exist
+    if (!window.customCPDurations) {
+        window.customCPDurations = [1, 2, 5, 8, 10, 15, 20, 30, 40, 50, 60, 120, 180, 240, 300, 360, 480, 570, 720, 900, 960, 1200, 1500, 1800, 2400, 2700, 3600, 5400, 7200];
+    }
+
+    const tableData = window.customCPDurations
+        .map(duration => {
+            const index = durations.findIndex(d => d >= duration);
+            if (index === -1) return null;
+            
+            return {
+                duration: duration,
+                watts: watts[index] || 0,
+                label: formatDurationLabel(duration)
+            };
+        })
+        .filter(item => item !== null);
+
+    if (tableData.length === 0) {
+        document.getElementById('custom-cp-point-selector').innerHTML = 
+            '<p style="color: #666; text-align: center; font-size: 0.85rem;">Nessun dato disponibile</p>';
+        return;
+    }
+
+    let html = `
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+            <thead>
+                <tr>
+                    <th style="padding: 0.35rem 0.25rem; width: 22px;"></th>
+                    <th style="text-align: left; padding: 0.35rem 0.25rem; color: #666; font-weight: 600;">Durata</th>
+                    <th style="text-align: right; padding: 0.35rem 0.25rem; color: #666; font-weight: 600;">Potenza</th>
+                    <th style="text-align: center; padding: 0.35rem 0.25rem; width: 28px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    tableData.forEach(item => {
+        const isSelected = window.customCPSelectedPoints && window.customCPSelectedPoints.includes(item.duration);
+        html += `
+            <tr style="border-bottom: 1px solid #f0f0f0; background: ${isSelected ? '#e8f5e9' : 'white'}; padding: 0;">
+                <td style="padding: 0.4rem 0.4rem; width: 20px;"><input type="checkbox" class="custom-cp-checkbox" value="${item.duration}" ${isSelected ? 'checked' : ''} onchange="customCPTogglePoint(${item.duration})" style="cursor: pointer;"></td>
+                <td style="padding: 0.4rem 0.4rem; flex-grow: 1;">
+                    <small style="font-weight: 500; display: block;">${item.label}</small>
+                </td>
+                <td style="padding: 0.4rem 0.4rem; text-align: right; color: #3b82f6; font-weight: 600;">
+                    <small>${Math.round(item.watts)}W</small>
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <button class="btn btn-danger btn-xs" onclick="removeCustomCPDuration(${item.duration})"
+                            style="padding: 2px 5px; font-size: 0.7rem; background: #f5101f; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        ×
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('custom-cp-point-selector').innerHTML = html;
+}
+
+window.addCustomCPDuration = function() {
+    const input = document.getElementById('custom-cp-duration-input');
+    if (!input) return;
+
+    const durationStr = input.value.trim();
+    if (!durationStr || isNaN(durationStr)) {
+        showToast('Inserisci un numero valido di secondi', 'warning');
+        return;
+    }
+
+    const duration = parseInt(durationStr, 10);
+    if (duration <= 0) {
+        showToast('La durata deve essere maggiore di 0', 'warning');
+        return;
+    }
+
+    if (!window.customCPDurations) {
+        window.customCPDurations = [];
+    }
+
+    if (!window.customCPDurations.includes(duration)) {
+        window.customCPDurations.push(duration);
+        window.customCPDurations.sort((a, b) => a - b);
+        renderCustomCPPointSelector(window.customCPData.secs || [], window.customCPData.watts || []);
+        input.value = '';
+    } else {
+        showToast('Questa durata e\' gia presente', 'warning');
+    }
+};
+
+window.removeCustomCPDuration = function(duration) {
+    if (!window.customCPDurations) {
+        window.customCPDurations = [];
+    }
+
+    const idx = window.customCPDurations.indexOf(duration);
+    if (idx > -1) {
+        window.customCPDurations.splice(idx, 1);
+    }
+
+    if (window.customCPSelectedPoints) {
+        window.customCPSelectedPoints = window.customCPSelectedPoints.filter(d => d !== duration);
+    }
+
+    renderCustomCPPointSelector(window.customCPData.secs || [], window.customCPData.watts || []);
+
+    if ((window.customCPSelectedPoints || []).length >= 3) {
+        calculateAndRenderCustomCP();
+    } else {
+        document.getElementById('custom-cp-stats').style.display = 'none';
+        document.getElementById('custom-cp-results-box').style.display = 'none';
+        if (window.cpChart1) { window.cpChart1.dispose(); window.cpChart1 = null; }
+        if (window.cpChart2) { window.cpChart2.dispose(); window.cpChart2 = null; }
+        if (window.cpChart3) { window.cpChart3.dispose(); window.cpChart3 = null; }
+    }
+};
+
+// Toggle a custom CP point and recalculate in real-time
+window.customCPTogglePoint = function(duration) {
+    if (!window.customCPSelectedPoints) {
+        window.customCPSelectedPoints = [];
+    }
+
+    const index = window.customCPSelectedPoints.indexOf(duration);
+    if (index > -1) {
+        window.customCPSelectedPoints.splice(index, 1);
+    } else {
+        window.customCPSelectedPoints.push(duration);
+    }
+
+    // Recalculate if we have at least 3 points
+    if (window.customCPSelectedPoints.length >= 3) {
+        calculateAndRenderCustomCP();
+    } else {
+        // Hide results if we don't have enough points
+        document.getElementById('custom-cp-results-box').style.display = 'none';
+        document.getElementById('custom-cp-stats').style.display = 'none';
+        if (window.cpChart1) { window.cpChart1.dispose(); window.cpChart1 = null; }
+        if (window.cpChart2) { window.cpChart2.dispose(); window.cpChart2 = null; }
+        if (window.cpChart3) { window.cpChart3.dispose(); window.cpChart3 = null; }
+    }
+};
+
+
+// Calculate and render custom CP with selected points
+function calculateAndRenderCustomCP() {
+    const durations = window.customCPData.secs || [];
+    const watts = window.customCPData.watts || [];
+    const weight = window.allAthletes.find(a => a.id === window.customCPAthleteId)?.weight_kg || 1;
+
+    if (window.customCPSelectedPoints.length < 3) {
+        document.getElementById('custom-cp-stats').style.display = 'none';
+        document.getElementById('custom-cp-results-box').style.display = 'none';
+        return;
+    }
+
+    try {
+        const result = calculateCPModelWithCustomPoints(durations, watts, window.customCPSelectedPoints, weight);
+
+        if (!result) {
+            console.error('[CustomCPTab] Calculation returned null with points:', window.customCPSelectedPoints);
+            return;
+        }
+
+        window.customCPLastResult = result;
+
+        // Show and update results box
+        document.getElementById('custom-cp-results-box').style.display = 'block';
+        document.getElementById('custom-cp-value').textContent = result.cp;
+        document.getElementById('custom-wprime-value').textContent = result.w_prime;
+        document.getElementById('custom-pmax-value').textContent = result.pmax;
+        document.getElementById('custom-points-count').textContent = result.pointsUsed;
+
+        // Show stats cards
+        displayCustomCPStats(result);
+
+        // Update all 3 charts using CP Model functions
+        createCustomCPCharts(durations, watts, window.customCPSelectedPoints, result);
+
+    } catch (error) {
+        console.error('[CustomCPTab] Error:', error);
+    }
+}
+
+// Display stats cards (identical to CP Model style)
+function displayCustomCPStats(result) {
+    const weight = window.allAthletes.find(a => a.id === window.customCPAthleteId)?.weight_kg || 1;
+    
+    // Calculate additional metrics - convert rmse to number since it comes as string from omnipd.js
+    const rmse = parseFloat(result.rmse) || 0;
+    const p5min = Math.round(ompd_power(300, result.cp, result.w_prime, result.pmax, result.a_param || 5));
+    const p20min = Math.round(ompd_power(1200, result.cp, result.w_prime, result.pmax, result.a_param || 5));
+    const p30min = Math.round(ompd_power(1800, result.cp, result.w_prime, result.pmax, result.a_param || 5));
+    
+    const statsHtml = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">CP (Critical Power)</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.cp} W</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(240, 147, 251, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">W' (Anaerobic Capacity)</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.w_prime} J</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">Pmax</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${result.pmax} W</div>
+            </div>
+            <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 112, 154, 0.3);">
+                <h6 style="margin: 0 0 0.5rem 0; opacity: 0.9; font-size: 0.875rem;">A</h6>
+                <div style="font-size: 2rem; font-weight: 700;">${(result.a_param || 5).toFixed(2)}</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">RMSE</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${rmse.toFixed(1)} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">CP/kg</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${(result.cp / weight).toFixed(2)} W/kg</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">Punti usati</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${result.pointsUsed} / ${window.customCPData.secs.length}</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 5min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${p5min} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 20min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${p20min} W</div>
+            </div>
+            <div style="background: white; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.5rem;">P @ 30min</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: #667eea;">${p30min} W</div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('custom-cp-stats').style.display = 'block';
+    document.getElementById('custom-cp-stats').innerHTML = statsHtml;
+}
+
+// Create all 3 charts for Custom CP - using direct implementation
+function createCustomCPCharts(allTimes, allPowers, selectedDurations, result) {
+    // Build selected times/powers from selected durations
+    let selectedTimes = [];
+    let selectedPowers = [];
+    for (const customDur of selectedDurations) {
+        let minDist = Infinity;
+        let bestIdx = -1;
+        for (let i = 0; i < allTimes.length; i++) {
+            const dist = Math.abs(allTimes[i] - customDur);
+            if (dist < minDist) {
+                minDist = dist;
+                bestIdx = i;
+            }
+        }
+        if (bestIdx >= 0) {
+            selectedTimes.push(allTimes[bestIdx]);
+            selectedPowers.push(allPowers[bestIdx]);
+        }
+    }
+
+    // Create Chart 1: Power-Duration Curve
+    createCustomCPPowerDurationChart(allTimes, allPowers, selectedTimes, selectedPowers, result);
+    
+    // Create Chart 2: Residuals
+    createCustomCPResidualsChart(selectedTimes, selectedPowers, result);
+    
+    // Create Chart 3: W'eff Curve
+    createCustomCPWeffChart(result);
+}
+
+// Chart 1: Power-Duration Curve
+// Chart 1: Power-Duration Curve (identical to CP Model)
+function createCustomCPPowerDurationChart(allTimes, allPowers, selectedTimes, selectedPowers, result) {
+    const chartDom = document.getElementById('cp-chart-1');
+    if (!chartDom) return;
+    
+    if (window.cpChart1) {
+        window.cpChart1.dispose();
+    }
+    window.cpChart1 = echarts.init(chartDom);
+
+    // Generate fitted curve (log distributed points for better granularity)
+    const minTime = 1;
+    const maxTime = 7200;
+    const numPoints = 2000;
+    const logMin = Math.log10(minTime);
+    const logMax = Math.log10(maxTime);
+    const fittedData = [];
+    
+    for (let i = 0; i <= numPoints; i++) {
+        const logT = logMin + (i / numPoints) * (logMax - logMin);
+        const t = Math.pow(10, logT);
+        const p = ompd_power(t, result.cp, result.w_prime, result.pmax, result.a_param || 5);
+        fittedData.push([t, p]);
+    }
+
+    const scatterData = selectedTimes.map((t, i) => [t, selectedPowers[i]]);
+    const realPowerCurveData = allTimes.map((t, i) => [t, allPowers[i]]);
+
+    const option = {
+        title: {
+            text: 'OmniPD Power-Duration Curve (Scroll to zoom)',
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 20,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#667eea',
+            borderWidth: 2,
+            axisPointer: {
+                type: 'line',
+                axis: 'x',
+                snap: false,
+                label: { show: false },
+                lineStyle: {
+                    type: 'dashed',
+                    color: '#aaa',
+                    width: 1
+                }
+            },
+            formatter: function(params) {
+                let hoveredTime = params[0].value[0];
+                let closestIdx = 0;
+                let minDist = Infinity;
+                for (let i = 0; i < fittedData.length; i++) {
+                    const dist = Math.abs(fittedData[i][0] - hoveredTime);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIdx = i;
+                    }
+                }
+                hoveredTime = fittedData[closestIdx][0];
+                
+                let fitted = null;
+                let real = null;
+                let selected = null;
+                params.forEach(param => {
+                    if (param.seriesName === 'Fitted Curve') fitted = param;
+                    if (param.seriesName === 'Real Power Curve') real = param;
+                    if (param.seriesName === 'Selected Data') selected = param;
+                });
+                
+                if (!fitted) {
+                    let fitVal = null;
+                    for (let i = 1; i < fittedData.length; ++i) {
+                        if (fittedData[i][0] >= hoveredTime) {
+                            let t0 = fittedData[i-1][0], t1 = fittedData[i][0];
+                            let p0 = fittedData[i-1][1], p1 = fittedData[i][1];
+                            fitVal = p0 + (p1-p0)*(hoveredTime-t0)/(t1-t0);
+                            break;
+                        }
+                    }
+                    fitted = { marker: '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background:#667eea;"></span>', seriesName: 'Fitted Curve', value: [hoveredTime, fitVal] };
+                }
+                if (!real) {
+                    let realVal = null;
+                    for (let i = 1; i < realPowerCurveData.length; ++i) {
+                        if (realPowerCurveData[i][0] >= hoveredTime) {
+                            let t0 = realPowerCurveData[i-1][0], t1 = realPowerCurveData[i][0];
+                            let p0 = realPowerCurveData[i-1][1], p1 = realPowerCurveData[i][1];
+                            realVal = p0 + (p1-p0)*(hoveredTime-t0)/(t1-t0);
+                            break;
+                        }
+                    }
+                    real = { marker: '<span style="display:inline-block;margin-right:4px;border-radius:10px;width:10px;height:10px;background:#505050;"></span>', seriesName: 'Real Power Curve', value: [hoveredTime, realVal] };
+                }
+                let resultStr = `<strong>Time: ${formatTimeLabel(hoveredTime)}</strong><br/>`;
+                if (fitted) resultStr += `${fitted.marker} ${fitted.seriesName}: ${Math.round(fitted.value[1])} W<br/>`;
+                if (real) resultStr += `${real.marker} ${real.seriesName}: ${Math.round(real.value[1])} W<br/>`;
+                if (selected) resultStr += `${selected.marker} ${selected.seriesName}: ${Math.round(selected.value[1])} W<br/>`;
+                return resultStr;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '12%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 40,
+            min: 1,
+            max: 7200,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 14,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    const logVal = Math.log10(value);
+                    if (Math.abs(logVal - Math.round(logVal)) < 0.1) {
+                        return formatTimeLabel(value);
+                    }
+                    return '';
+                },
+                color: '#666'
+            },
+            markLine: {
+                silent: true,
+                data: [
+                    { xAxis: 60, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 120, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 180, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 240, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 300, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 360, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 420, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 480, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 540, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 600, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 720, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 900, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 1200, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 1800, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 3600, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 5400, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 7200, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } }
+                ]
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: 'Power (W)',
+            nameLocation: 'middle',
+            nameGap: 50,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 14,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        dataZoom: [
+            {
+                type: 'inside',
+                xAxisIndex: 0,
+                start: 0,
+                end: 100
+            }
+        ],
+        series: [
+            {
+                name: 'Real Power Curve',
+                type: 'scatter',
+                data: realPowerCurveData,
+                symbolSize: 4,
+                itemStyle: {
+                    color: 'rgba(80, 80, 80, 0.45)',
+                    borderColor: 'rgba(60, 60, 60, 0.25)',
+                    borderWidth: 0
+                },
+                z: 0
+            },
+            {
+                name: 'Fitted Curve',
+                type: 'line',
+                data: fittedData,
+                smooth: false,
+                lineStyle: {
+                    color: '#667eea',
+                    width: 3
+                },
+                showSymbol: false,
+                z: 10
+            },
+            {
+                name: 'Selected Data',
+                type: 'scatter',
+                data: scatterData,
+                symbolSize: 10,
+                itemStyle: {
+                    color: '#f093fb',
+                    borderColor: '#764ba2',
+                    borderWidth: 2
+                },
+                z: 20
+            }
+        ],
+        animationDuration: 1200,
+        animationEasing: 'elasticOut'
+    };
+
+    window.cpChart1.setOption(option);
+    window.addEventListener('resize', () => window.cpChart1.resize());
+}
+
+// Chart 2: Residuals (identical to CP Model)
+function createCustomCPResidualsChart(selectedTimes, selectedPowers, result) {
+    const chartDom = document.getElementById('cp-chart-2');
+    if (!chartDom) return;
+    
+    if (window.cpChart2) {
+        window.cpChart2.dispose();
+    }
+    window.cpChart2 = echarts.init(chartDom);
+
+    // Calculate residuals
+    const residuals = selectedTimes.map((t, i) => {
+        const modelPower = ompd_power(t, result.cp, result.w_prime, result.pmax, result.a_param || 5);
+        return selectedPowers[i] - modelPower;
+    });
+
+    const residualData = selectedTimes.map((t, i) => [t, residuals[i]]);
+
+    const option = {
+        title: {
+            text: 'Residuals',
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 18,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#f06447',
+            borderWidth: 2,
+            formatter: function(params) {
+                return `<strong>Time: ${formatTimeLabel(params[0].value[0])}</strong><br/>Residual: ${params[0].value[1].toFixed(2)} W`;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '15%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 35,
+            min: 1,
+            max: Math.max(...selectedTimes) * 1.1,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    return formatTimeLabel(value);
+                },
+                color: '#666'
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: 'Residual (W)',
+            nameLocation: 'middle',
+            nameGap: 45,
+            nameTextStyle: {
+                color: '#f06447',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#f06447'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(240, 100, 71, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        series: [
+            {
+                name: 'Residual',
+                type: 'line',
+                data: residualData,
+                symbol: 'circle',
+                symbolSize: 8,
+                lineStyle: {
+                    color: '#f06447',
+                    width: 2
+                },
+                itemStyle: {
+                    color: '#f06447',
+                    borderWidth: 2
+                },
+                smooth: true
+            }
+        ],
+        animationDuration: 1000,
+        animationEasing: 'cubicOut'
+    };
+
+    window.cpChart2.setOption(option);
+    window.addEventListener('resize', () => window.cpChart2.resize());
+}
+
+// Chart 3: W'eff Curve (identical to CP Model)
+function createCustomCPWeffChart(result) {
+    const chartDom = document.getElementById('cp-chart-3');
+    if (!chartDom) return;
+    
+    if (window.cpChart3) {
+        window.cpChart3.dispose();
+    }
+    window.cpChart3 = echarts.init(chartDom);
+
+    // Calculate W'eff curve
+    const T_weff = Array.from({length: 500}, (_, i) => 1 + i * (300 - 1) / 499);
+    const Weff_plot = T_weff.map(t => w_eff(t, result.w_prime, result.cp, result.pmax));
+    const weffData = T_weff.map((t, i) => [t, Weff_plot[i]]);
+
+    // Find t_99
+    const W_99 = 0.99 * result.w_prime;
+    const t_99_idx = Weff_plot.reduce((minIdx, val, idx, arr) => 
+        Math.abs(val - W_99) < Math.abs(arr[minIdx] - W_99) ? idx : minIdx, 0);
+    const t_99 = T_weff[t_99_idx];
+
+    const option = {
+        title: {
+            text: "Effective W' Recovery",
+            left: 'center',
+            textStyle: {
+                color: '#667eea',
+                fontSize: 18,
+                fontWeight: 'bold'
+            }
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderColor: '#667eea',
+            borderWidth: 2,
+            formatter: function(params) {
+                return `<strong>Time: ${formatTimeLabel(params[0].value[0])}</strong><br/>W'eff: ${Math.round(params[0].value[1])} J`;
+            }
+        },
+        grid: {
+            left: '10%',
+            right: '10%',
+            bottom: '15%',
+            top: '15%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'log',
+            name: 'Time',
+            nameLocation: 'middle',
+            nameGap: 35,
+            min: 1,
+            max: 300,
+            nameTextStyle: {
+                color: '#667eea',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#667eea'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(102, 126, 234, 0.1)'
+                }
+            },
+            axisLabel: {
+                formatter: function(value) {
+                    return formatTimeLabel(value);
+                },
+                color: '#666'
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: "W'eff (J)",
+            nameLocation: 'middle',
+            nameGap: 45,
+            nameTextStyle: {
+                color: '#52c787',
+                fontSize: 12,
+                fontWeight: 'bold'
+            },
+            axisLine: {
+                lineStyle: {
+                    color: '#52c787'
+                }
+            },
+            splitLine: {
+                lineStyle: {
+                    color: 'rgba(82, 199, 135, 0.1)'
+                }
+            },
+            axisLabel: {
+                color: '#666'
+            }
+        },
+        series: [
+            {
+                name: "W'eff",
+                type: 'line',
+                data: weffData,
+                smooth: true,
+                lineStyle: {
+                    color: '#52c787',
+                    width: 3
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0,
+                        y: 0,
+                        x2: 0,
+                        y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(82, 199, 135, 0.5)' },
+                            { offset: 1, color: 'rgba(82, 199, 135, 0.05)' }
+                        ]
+                    }
+                },
+                showSymbol: false,
+                markLine: {
+                    silent: true,
+                    symbol: ['none', 'none'],
+                    label: {
+                        show: true,
+                        formatter: `99% at ${formatTimeLabel(t_99)}`,
+                        color: '#333',
+                        fontWeight: 'bold'
+                    },
+                    lineStyle: {
+                        color: '#ff6b6b',
+                        type: 'dashed',
+                        width: 2
+                    },
+                    data: [{yAxis: W_99}]
+                }
+            }
+        ],
+        animationDuration: 1200,
+        animationEasing: 'elasticOut'
+    };
+
+    window.cpChart3.setOption(option);
+    window.addEventListener('resize', () => window.cpChart3.resize());
+}
+
+// Helper function to get date range for a period
+function getCustomCPDateRange() {
+    const period = window.customCPCurrentPeriod || '90d';
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    if (period === '90d') {
+        const days90ago = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+        return {
+            start: days90ago.toISOString().split('T')[0],
+            end: todayStr
+        };
+    } else if (period === 'allTime') {
+        return {
+            start: '2000-01-01',  // Use a very old date to represent "all time"
+            end: todayStr
+        };
+    } else if (period === 'season_2026') {
+        return { start: '2025-11-01', end: '2026-10-31' };
+    } else if (period === 'season_2025') {
+        return { start: '2024-11-01', end: '2025-10-31' };
+    } else if (period === 'season_2024') {
+        return { start: '2023-11-01', end: '2024-10-31' };
+    } else if (period.startsWith('season-')) {
+        const seasonId = parseInt(period.replace('season-', ''), 10);
+        const season = (window.customCPAthleteSeasons || []).find(s => s.id === seasonId);
+        if (season) {
+            const endDate = season.end_date || todayStr;
+            return { start: season.start_date, end: endDate };
+        }
+        return { start: todayStr, end: todayStr };
+    } else if (period === 'custom') {
+        const customData = window.customCPPeriodData?.custom;
+        if (customData && customData._dateRange) {
+            return {
+                start: customData._dateRange.start,
+                end: customData._dateRange.end
+            };
+        }
+        return { start: todayStr, end: todayStr };
+    }
+    
+    return { start: todayStr, end: todayStr };
+}
+
+// Helper function to generate period label
+function getCustomCPPeriodLabel() {
+    const period = window.customCPCurrentPeriod || '90d';
+    
+    if (period === '90d') {
+        return 'Ultimi 90 giorni';
+    } else if (period === 'allTime') {
+        return 'Tutto il tempo';
+    } else if (period === 'season_2026') {
+        return 'Stagione 2026 (Nov 2025 - Ott 2026)';
+    } else if (period === 'season_2025') {
+        return 'Stagione 2025 (Nov 2024 - Ott 2025)';
+    } else if (period === 'season_2024') {
+        return 'Stagione 2024 (Nov 2023 - Ott 2024)';
+    } else if (period.startsWith('season-')) {
+        const seasonId = parseInt(period.replace('season-', ''), 10);
+        const season = (window.customCPAthleteSeasons || []).find(s => s.id === seasonId);
+        return season ? season.name : period;
+    } else if (period === 'custom') {
+        // Try to get the date range from the stored data
+        const customData = window.customCPPeriodData?.custom;
+        if (customData && customData._dateRange) {
+            return `${customData._dateRange.start} - ${customData._dateRange.end}`;
+        }
+        return 'Periodo personalizzato';
+    }
+    
+    return period;
+}
+
+// Save custom CP selection (persists to backend with history)
+window.saveCustomCPSelection = async function(athleteId) {
+    const useCustomCpTab = !!window.customCPLastResult && (window.customCPSelectedPoints || []).length >= 3;
+
+    if (!useCustomCpTab) {
+        showToast('Seleziona almeno 3 punti e calcola il CP prima di salvare', 'warning');
+        return;
+    }
+
+    const periodKey = window.customCPCurrentPeriod || '90d';
+    const periodLabel = getCustomCPPeriodLabel();
+    const dateRange = getCustomCPDateRange();
+    const rmse = parseFloat(window.customCPLastResult.rmse) || null;
+    
+    const payload = {
+        period: periodKey,
+        period_label: periodLabel,
+        date_start: dateRange.start,
+        date_end: dateRange.end,
+        selected_durations: window.customCPSelectedPoints || [],
+        cp: window.customCPLastResult.cp,
+        w_prime: window.customCPLastResult.w_prime,
+        pmax: window.customCPLastResult.pmax,
+        rmse: rmse
+    };
+
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showToast(`✓ Configurazione CP salvata (${dateRange.start} - ${dateRange.end})`, 'success');
+            
+            // Refresh history display if it's open
+            if (document.getElementById('custom-cp-history-modal')) {
+                showCustomCPHistory(athleteId);
+            }
+        } else {
+            const error = await response.json();
+            showToast(`Errore nel salvataggio: ${error.detail || response.status}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving custom CP:', error);
+        showToast('Errore: ' + error.message, 'error');
+    }
+};
+
+// Show Custom CP History Modal
+window.showCustomCPHistory = async function(athleteId) {
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp-history?limit=100`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const history = await response.json();
+        
+        // Group by period and keep only the most recent for each period
+        const groupedHistory = {};
+        history.forEach(config => {
+            if (!groupedHistory[config.period]) {
+                groupedHistory[config.period] = config;
+            }
+            // Keep only the most recent (first one from API since it's sorted by saved_at DESC)
+        });
+        
+        // Define period order for chronological display
+        const periodOrder = ['90d', 'allTime', 'season_2026', 'season_2025', 'season_2024'];
+        const sortedPeriods = Object.keys(groupedHistory).sort((a, b) => {
+            // Fixed periods in order
+            const aIndex = periodOrder.indexOf(a);
+            const bIndex = periodOrder.indexOf(b);
+            
+            if (aIndex !== -1 && bIndex !== -1) {
+                return aIndex - bIndex;
+            }
+            if (aIndex !== -1) return -1; // Fixed periods come first
+            if (bIndex !== -1) return 1;
+            
+            // Dynamic seasons and custom periods at the end, sorted alphabetically
+            return a.localeCompare(b);
+        });
+        
+        // Build HTML
+        let historyHtml = '';
+        
+        if (history.length === 0) {
+            historyHtml = '<p style="text-align: center; padding: 2rem; color: #666;">Nessuno storico salvato</p>';
+        } else {
+            sortedPeriods.forEach(period => {
+                const config = groupedHistory[period];
+                const periodLabel = config.period_label || period;
+                historyHtml += `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="margin: 0 0 0.75rem 0; padding-bottom: 0.5rem; border-bottom: 2px solid #667eea; color: #667eea; font-size: 1rem;">
+                            ${periodLabel}
+                        </h5>
+                        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: #666;">
+                                    <span><strong>CP:</strong> ${config.cp} W</span>
+                                    <span><strong>W':</strong> ${config.w_prime} J</span>
+                                    <span><strong>Pmax:</strong> ${config.pmax} W</span>
+                                    ${config.rmse ? `<span><strong>RMSE:</strong> ${config.rmse.toFixed(1)} W</span>` : ''}
+                                    <span><strong>Punti:</strong> ${config.selected_durations.length}</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-primary" onclick="loadCustomCPConfig(${athleteId}, ${config.id})" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+                                    📥 Carica
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteCustomCPConfig(${athleteId}, ${config.id})" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        // Create or update modal
+        let modal = document.getElementById('custom-cp-history-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'custom-cp-history-modal';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+            document.body.appendChild(modal);
+        }
+        
+        modal.innerHTML = `
+            <div style="background: white; border-radius: 12px; max-width: 900px; width: 90%; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                <div style="padding: 1.5rem; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; color: #333;">📊 Storico Custom CP</h4>
+                    <button onclick="closeCustomCPHistory()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #666; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">&times;</button>
+                </div>
+                <div style="padding: 1.5rem; overflow-y: auto; flex: 1;">
+                    ${historyHtml}
+                </div>
+            </div>
+        `;
+        
+        modal.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading Custom CP history:', error);
+        showToast('Errore nel caricamento dello storico', 'error');
+    }
+};
+
+// Close Custom CP History Modal
+window.closeCustomCPHistory = function() {
+    const modal = document.getElementById('custom-cp-history-modal');
+    if (modal) {
+        modal.remove();
+    }
+};
+
+// Load a saved Custom CP configuration
+window.loadCustomCPConfig = async function(athleteId, configId) {
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp-detail/${configId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const config = await response.json();
+        
+        // Switch to the correct period if needed
+        if (config.period !== window.customCPCurrentPeriod) {
+            await switchCustomCPPeriod(config.period);
+        }
+        
+        // Set the selected points
+        window.customCPSelectedPoints = config.selected_durations;
+        
+        // Re-render selector and recalculate
+        renderCustomCPPointSelector(window.customCPData.secs || [], window.customCPData.watts || []);
+        calculateAndRenderCustomCP();
+        
+        // Close the modal
+        closeCustomCPHistory();
+        
+        showToast(`✓ Configurazione caricata da ${new Date(config.saved_at).toLocaleDateString('it-IT')}`, 'success');
+        
+    } catch (error) {
+        console.error('Error loading Custom CP config:', error);
+        showToast('Errore nel caricamento della configurazione', 'error');
+    }
+};
+
+// Delete a Custom CP configuration from history
+window.deleteCustomCPConfig = async function(athleteId, configId) {
+    if (!confirm('Eliminare questa configurazione dallo storico?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/custom-cp-history/${configId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showToast('✓ Configurazione eliminata', 'success');
+            // Refresh the history display
+            showCustomCPHistory(athleteId);
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error deleting Custom CP config:', error);
+        showToast('Errore nell\'eliminazione', 'error');
+    }
+};
+
+// Switch period for Custom CP
+window.switchCustomCPPeriod = async function(period) {
+    window.customCPCurrentPeriod = period;
+    
+    // Get data for this period
+    const data = window.customCPPeriodData[period];
+    if (!data) {
+        showToast('Nessun dato disponibile per questo periodo', 'warning');
+        return;
+    }
+    
+    window.customCPData = data;
+    
+    // Update period info label
+    const periodLabel = getCustomCPPeriodLabel();
+    const infoEl = document.getElementById('custom-cp-period-info');
+    if (infoEl) {
+        infoEl.textContent = `Periodo attivo: ${periodLabel}`;
+    }
+    
+    // Clear selections and charts
+    window.customCPSelectedPoints = [];
+    window.customCPLastResult = null;
+    
+    // Re-render
+    renderCustomCPPointSelector(data.secs || [], data.watts || []);
+    document.getElementById('custom-cp-stats').style.display = 'none';
+    document.getElementById('custom-cp-results-box').style.display = 'none';
+    
+    // Dispose charts
+    if (window.cpChart1) { window.cpChart1.dispose(); window.cpChart1 = null; }
+    if (window.cpChart2) { window.cpChart2.dispose(); window.cpChart2 = null; }
+    if (window.cpChart3) { window.cpChart3.dispose(); window.cpChart3 = null; }
+};
+
+// Refresh Custom CP (reload data)
+window.customCPRefresh = async function() {
+    if (!window.customCPAthleteId) return;
+    
+    // Clear cache for this athlete
+    const cacheKey = `${window.customCPAthleteId}_powercurve`;
+    if (window.athletePowerCurveCache) {
+        delete window.athletePowerCurveCache[cacheKey];
+    }
+    
+    // Re-render the tab
+    const tabContent = document.querySelector('.tab-content');
+    if (tabContent && window.currentAthleteActiveTab === 'custom-cp') {
+        const athlete = window.allAthletes.find(a => a.id === window.customCPAthleteId);
+        if (athlete) {
+            await renderCustomCPTab(window.customCPAthleteId, athlete, tabContent);
+            showToast('✓ Dati aggiornati', 'success');
+        }
+    }
+};
+
+// Show custom period picker modal
+window.showCustomCPPeriodPicker = function(athleteId) {
+    const today = new Date();
+    const days180ago = new Date(today.getTime() - 180 * 24 * 60 * 60 * 1000);
+    
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;';
+    
+    modal.innerHTML = `
+        <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 400px; width: 90%;">
+            <h5 style="margin: 0 0 1.5rem 0;">📅 Seleziona Periodo Personalizzato</h5>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Data inizio:</label>
+                <input type="date" id="custom-period-start" value="${days180ago.toISOString().split('T')[0]}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Data fine:</label>
+                <input type="date" id="custom-period-end" value="${today.toISOString().split('T')[0]}" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="this.closest('div[style*=fixed]').remove()">Annulla</button>
+                <button class="btn btn-primary" onclick="loadCustomCPPeriod(${athleteId})">Carica</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+};
+
+// Load custom period data
+window.loadCustomCPPeriod = async function(athleteId) {
+    const startInput = document.getElementById('custom-period-start');
+    const endInput = document.getElementById('custom-period-end');
+    
+    if (!startInput || !endInput) return;
+    
+    const oldest = startInput.value;
+    const newest = endInput.value;
+    
+    if (!oldest || !newest) {
+        showToast('Seleziona entrambe le date', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/athletes/${athleteId}/power-curve?oldest=${oldest}&newest=${newest}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store with date range for label
+        data._dateRange = { start: oldest, end: newest };
+        window.customCPPeriodData.custom = data;
+        
+        // Switch to custom period
+        await switchCustomCPPeriod('custom');
+        
+        // Close modal
+        document.querySelector('div[style*="position: fixed"]').remove();
+        
+        showToast(`✓ Periodo personalizzato caricato (${oldest} - ${newest})`, 'success');
+        
+    } catch (error) {
+        console.error('Error loading custom period:', error);
+        showToast('Errore nel caricamento del periodo', 'error');
+    }
+};
+
+// ========== STATISTICS TAB
 
 async function renderStatisticsTab(athleteId, athlete, tabContent) {
     if (!athlete.api_key) {
@@ -874,7 +2471,7 @@ function renderStatisticsTable(statistics, weight) {
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">RMSE (W)</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">Percentile</th>
                             <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">2-6min</th>
-                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">10min+</th>
+                            <th style="padding: 1rem; text-align: center; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.9rem;">10-30min</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -1106,7 +2703,7 @@ async function renderCPTab(athleteId, athlete, tabContent) {
                             <label><input type="checkbox" id="cp-use-medium-point-fallback" checked onchange="recalculateCP()"> Punto 2-6 min (sì/no)</label>
                         </div>
                         <div class="input-field">
-                            <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto > 10 min (sì/no)</label>
+                            <label><input type="checkbox" id="cp-use-long-point-fallback" checked onchange="recalculateCP()"> Punto 10-30 min (sì/no)</label>
                         </div>
                     </div>
                 </div>
@@ -1621,7 +3218,7 @@ window.deleteSeason = async function(seasonId, athleteId) {
     }
 };
 
-function renderPowerCurveChart(data) {
+function renderPowerCurveChart(data, selectedCustomPoints = []) {
     // Transform data for ApexCharts
     const durations = data.secs || [];
     const watts = data.watts || [];
@@ -1650,12 +3247,39 @@ function renderPowerCurveChart(data) {
         rawX: sec
     }));
 
+    // Prepare selected points data for highlighting
+    let selectedPointsData = [];
+    if (selectedCustomPoints && selectedCustomPoints.length > 0) {
+        // For each selected custom duration, find the CLOSEST point in the data
+        selectedPointsData = selectedCustomPoints.map(customDur => {
+            let closestPoint = null;
+            let minDistance = Infinity;
+            
+            seriesData.forEach(point => {
+                const distance = Math.abs(point.rawX - customDur);
+                // Only consider points within 10% tolerance
+                if (distance <= customDur * 0.1 && distance < minDistance) {
+                    minDistance = distance;
+                    closestPoint = point;
+                }
+            });
+            
+            return closestPoint;
+        }).filter(p => p !== null);
+    }
+
     // ApexCharts configuration with adaptive logarithmic X axis
     const options = {
-        series: [{
-            name: 'Potenza (W)',
-            data: seriesData
-        }],
+        series: [
+            {
+                name: 'Potenza (W)',
+                data: seriesData
+            },
+            ...(selectedPointsData.length > 0 ? [{
+                name: 'Punti Selezionati',
+                data: selectedPointsData
+            }] : [])
+        ],
         chart: {
             type: 'line',
             height: 500,
@@ -1679,7 +3303,7 @@ function renderPowerCurveChart(data) {
             curve: 'smooth',
             width: 3
         },
-        colors: ['#3b82f6'],
+        colors: ['#3b82f6', '#10b981'],
         xaxis: {
             type: 'numeric',
             title: {
@@ -1751,10 +3375,17 @@ function renderPowerCurveChart(data) {
             strokeDashArray: 4
         },
         markers: {
-            size: 0,
+            size: selectedPointsData.length > 0 ? [0, 8] : 0,
             hover: {
-                size: 6
-            }
+                size: selectedPointsData.length > 0 ? [4, 10] : 6
+            },
+            colors: ['transparent', '#10b981'],
+            strokeWidth: [0, 2],
+            strokeColors: ['transparent', '#059669']
+        },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'right'
         }
     };
 
@@ -1809,6 +3440,7 @@ function renderBestEffortsTable(data) {
         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
             <thead>
                 <tr>
+                    ${window.customCPMode ? '<th style="width: 25px; text-align: center; padding: 0.5rem; border-bottom: 1px solid #ddd;"><input type="checkbox" id="select-all-checkbox" onchange="selectAllCustomPoints(this.checked)" style="cursor: pointer;"></th>' : ''}
                     <th style="text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 0.8rem;">Durata</th>
                     <th style="text-align: right; padding: 0.5rem; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 0.8rem;">Potenza</th>
                     <th style="text-align: center; padding: 0.5rem; border-bottom: 1px solid #ddd; width: 35px;"></th>
@@ -1818,8 +3450,10 @@ function renderBestEffortsTable(data) {
     `;
 
     tableData.forEach(item => {
+        const isSelected = window.selectedCustomPoints && window.selectedCustomPoints.includes(item.duration);
         html += `
-            <tr style="border-bottom: 1px solid #f0f0f0;">
+            <tr style="border-bottom: 1px solid #f0f0f0; background: ${isSelected ? '#e8f5e9' : 'white'};">
+                ${window.customCPMode ? `<td style="text-align: center; padding: 0.4rem 0.5rem;"><input type="checkbox" class="custom-point-checkbox" value="${item.duration}" ${isSelected ? 'checked' : ''} onchange="toggleCustomPoint(${item.duration})" style="cursor: pointer;"></td>` : ''}
                 <td style="padding: 0.4rem 0.5rem; font-weight: 500; font-size: 0.85rem;">${item.label}</td>
                 <td style="padding: 0.4rem 0.5rem; text-align: right; color: #3b82f6; font-weight: 600; font-size: 0.85rem;">
                     ${Math.round(item.watts)} W
@@ -1882,6 +3516,130 @@ window.removeDuration = function(duration) {
     }
 };
 
+// ========== CUSTOM CP MODE FUNCTIONS ==========
+
+window.toggleCustomCPMode = function(athleteId) {
+    window.customCPMode = !window.customCPMode;
+    window.selectedCustomPoints = [];
+    
+    // Re-render the table to show/hide checkboxes
+    renderBestEffortsTable(window.currentPowerCurveData);
+    
+    // Show the custom CP result section when entering custom mode
+    const resultDiv = document.getElementById('custom-cp-result');
+    if (window.customCPMode) {
+        // Show empty state with message
+        document.getElementById('custom-cp-value').textContent = '-';
+        document.getElementById('custom-wprime-value').textContent = '-';
+        document.getElementById('custom-pmax-value').textContent = '-';
+        document.getElementById('custom-points-count').textContent = '0';
+        resultDiv.style.display = 'block';
+    } else {
+        resultDiv.style.display = 'none';
+    }
+};
+
+window.toggleCustomPoint = function(duration) {
+    if (!window.selectedCustomPoints) {
+        window.selectedCustomPoints = [];
+    }
+    
+    const index = window.selectedCustomPoints.indexOf(duration);
+    if (index > -1) {
+        window.selectedCustomPoints.splice(index, 1);
+    } else {
+        window.selectedCustomPoints.push(duration);
+    }
+    
+    // Update select-all checkbox state
+    updateSelectAllState();
+    
+    // If we have at least 3 points (1 sprint + 2 minutaggi), calculate and show CP
+    if (window.selectedCustomPoints.length >= 3) {
+        calculateAndDisplayCustomCP();
+    } else {
+        document.getElementById('custom-cp-result').style.display = 'none';
+    }
+};
+
+window.selectAllCustomPoints = function(checked) {
+    if (!window.customDurations) {
+        return;
+    }
+    
+    const durations = window.currentPowerCurveData.secs || [];
+    const watts = window.currentPowerCurveData.watts || [];
+    
+    window.selectedCustomPoints = [];
+    
+    if (checked) {
+        // Select all available points
+        window.customDurations.forEach(duration => {
+            const index = durations.findIndex(d => d >= duration);
+            if (index !== -1) {
+                window.selectedCustomPoints.push(duration);
+            }
+        });
+    }
+    
+    // Update UI
+    document.querySelectorAll('.custom-point-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    
+    // Calculate if we have enough points (minimum 3)
+    if (window.selectedCustomPoints.length >= 3) {
+        calculateAndDisplayCustomCP();
+    }
+};
+
+function updateSelectAllState() {
+    const durations = window.currentPowerCurveData.secs || [];
+    const totalAvailable = window.customDurations.filter(duration => 
+        durations.findIndex(d => d >= duration) !== -1
+    ).length;
+    
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = window.selectedCustomPoints.length === totalAvailable && window.selectedCustomPoints.length > 0;
+    }
+}
+
+function calculateAndDisplayCustomCP() {
+    const durations = window.currentPowerCurveData.secs || [];
+    const watts = window.currentPowerCurveData.watts || [];
+    
+    // Get weight from the athlete data
+    const currentAthlete = window.allAthletes.find(a => a.id === window.currentAthleteId);
+    const weight = currentAthlete?.weight_kg || 1;
+    
+    try {
+        const result = calculateCPModelWithCustomPoints(durations, watts, window.selectedCustomPoints, weight);
+        
+        if (!result) {
+            console.error('[CustomCP] Calculation returned null. Selected durations:', window.selectedCustomPoints);
+            showToast('Errore: i punti selezionati potrebbero non avere i dati necessari', 'error');
+            return;
+        }
+        
+        // Display results
+        document.getElementById('custom-cp-value').textContent = result.cp;
+        document.getElementById('custom-wprime-value').textContent = result.w_prime;
+        document.getElementById('custom-pmax-value').textContent = result.pmax;
+        document.getElementById('custom-points-count').textContent = result.pointsUsed;
+        document.getElementById('custom-cp-result').style.display = 'block';
+        
+        // Store for saving
+        window.lastCustomCPResult = result;
+        
+        // Re-render the chart with selected points highlighted
+        renderPowerCurveChart(window.currentPowerCurveData, window.selectedCustomPoints);
+    } catch (error) {
+        console.error('[CustomCP] Exception during calculation:', error);
+        showToast('Errore nel calcolo CP: ' + error.message, 'error');
+    }
+}
+
 function formatDurationLabel(seconds) {
     if (seconds < 60) return seconds + ' sec';
     if (seconds < 3600) return Math.round(seconds / 60) + ' min';
@@ -1897,6 +3655,14 @@ window.refreshPowerCurve = async function(athleteId) {
 
 window.switchPowerCurvePeriod = function(period) {
     window.selectedPeriod = period;
+    
+    // Reset custom mode when switching period
+    window.customCPMode = false;
+    window.selectedCustomPoints = [];
+    const toggle = document.getElementById('toggle-custom-cp-mode');
+    if (toggle) toggle.checked = false;
+    const resultDiv = document.getElementById('custom-cp-result');
+    if (resultDiv) resultDiv.style.display = 'none';
     
     // Use the appropriate dataset
     let data;
@@ -1915,7 +3681,7 @@ window.switchPowerCurvePeriod = function(period) {
         return;
     }
     
-    // Re-render chart and table with selected period
+    // Re-render chart and table with selected period (no custom points highlighted)
     renderPowerCurveChart(data);
 };
 
@@ -2570,10 +4336,10 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
     }
     window.cpChart1 = echarts.init(chartDom);
 
-    // Generate fitted curve (log distributed points)
+    // Generate fitted curve (log distributed points for better granularity)
     const minTime = 1;
     const maxTime = 7200;
-    const numPoints = 300;
+    const numPoints = 2000; // Increased from 300 for much finer granularity
     const logMin = Math.log10(minTime);
     const logMax = Math.log10(maxTime);
     const fittedData = [];
@@ -2590,7 +4356,7 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
 
     const option = {
         title: {
-            text: 'OmniPD Power-Duration Curve',
+            text: 'OmniPD Power-Duration Curve (Scroll to zoom)',
             left: 'center',
             textStyle: {
                 color: '#667eea',
@@ -2617,6 +4383,19 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
             formatter: function(params) {
                 // Find hovered time (x value)
                 let hoveredTime = params[0].value[0];
+                
+                // Snap to the closest point in the fitted curve for precision
+                let closestIdx = 0;
+                let minDist = Infinity;
+                for (let i = 0; i < fittedData.length; i++) {
+                    const dist = Math.abs(fittedData[i][0] - hoveredTime);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIdx = i;
+                    }
+                }
+                hoveredTime = fittedData[closestIdx][0];
+                
                 // Find fitted curve value at this time
                 let fitted = null;
                 let real = null;
@@ -2698,6 +4477,28 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
                     return '';
                 },
                 color: '#666'
+            },
+            markLine: {
+                silent: true,
+                data: [
+                    { xAxis: 60, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 120, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 180, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 240, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 300, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 360, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 420, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 480, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 540, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 600, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 720, lineStyle: { color: 'rgba(200, 200, 200, 0.3)', width: 1 }, label: { show: false } },
+                    { xAxis: 900, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1 }, label: { show: false } },
+                    { xAxis: 1200, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 1800, lineStyle: { color: 'rgba(150, 150, 150, 0.4)', width: 1.5 }, label: { show: false } },
+                    { xAxis: 3600, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 5400, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } },
+                    { xAxis: 7200, lineStyle: { color: 'rgba(150, 150, 150, 0.5)', width: 1 }, label: { show: false } }
+                ]
             }
         },
         yAxis: {
@@ -2724,6 +4525,14 @@ function createCPPowerDurationChart(allTimes, allPowers, timeValues, powerValues
                 color: '#666'
             }
         },
+        dataZoom: [
+            {
+                type: 'inside',
+                xAxisIndex: 0,
+                start: 0,
+                end: 100
+            }
+        ],
         series: [
             {
                 name: 'Real Power Curve',
