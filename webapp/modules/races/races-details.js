@@ -567,8 +567,14 @@ window.refreshRaceDetails = async function(raceId) {
         document.getElementById('detail-date-start').value = race.race_date_start || '';
         document.getElementById('detail-date-end').value = race.race_date_end || '';
         document.getElementById('detail-num-stages').value = race.num_stages || 1;
-        document.getElementById('detail-distance').value = race.distance_km || '';
-        document.getElementById('detail-speed').value = race.avg_speed_kmh || '';
+        const detailDistanceInput = document.getElementById('detail-distance');
+        if (detailDistanceInput) {
+            detailDistanceInput.value = race.distance_km || '';
+        }
+        const detailSpeedInput = document.getElementById('detail-speed');
+        if (detailSpeedInput) {
+            detailSpeedInput.value = race.avg_speed_kmh || '';
+        }
         document.getElementById('detail-category').value = race.category || 'C';
         document.getElementById('detail-gender').value = race.gender || '';
         document.getElementById('detail-elevation').value = race.elevation_m || '';

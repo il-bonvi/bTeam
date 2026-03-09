@@ -2439,53 +2439,69 @@ function buildRouteTab(race) {
     `;
 }
 
+/**
+ * Validates that a route_link is a safe https:// URL from an allowed origin.
+ * Returns the sanitized URL string, or null if invalid/unsafe.
+ */
+function sanitizeRouteLink(link) {
+    if (!link || typeof link !== 'string') return null;
+    try {
+        const url = new URL(link);
+        // Only allow https:// URLs from known trusted origins
+        const allowedOrigins = ['https://il-bonvi.github.io'];
+        if (url.protocol !== 'https:' || !allowedOrigins.some(o => url.origin === o || url.href.startsWith(o + '/'))) {
+            return null;
+        }
+        return url.href;
+    } catch {
+        return null;
+    }
+}
+
 window.initRouteTab = function() {
     const race = window.currentRaceData;
     
     // Check if we have GPX data (route_file) or bonvi link (route_link)
     const hasGpxData = race?.route_file;
-    const hasBonviLink = race?.route_link;
+    const rawBonviLink = race?.route_link;
+    const hasBonviLink = sanitizeRouteLink(rawBonviLink);
     
     // If no GPX data but has bonvi link, embed bonvi page in iframe
     if (!hasGpxData && hasBonviLink) {
         const container = document.getElementById('route-tab-container');
         if (container) {
-            container.innerHTML = `
-                <div style="
-                    display: flex;
-                    flex-direction: column;
-                    height: 100%;
-                ">
-                    <div style="
-                        padding: 12px 16px;
-                        background: #e0f2fe;
-                        border-bottom: 2px solid #0284c7;
-                        display: flex;
-                        align-items: center;
-                        gap: 10px;
-                    ">
-                        <span style="color: #0284c7; font-weight: 500;">🗺️ Visualizzazione Bonvi Race Database</span>
-                        <a href="${hasBonviLink}" target="_blank" style="
-                            margin-left: auto;
-                            padding: 6px 12px;
-                            background: #0284c7;
-                            color: white;
-                            text-decoration: none;
-                            border-radius: 4px;
-                            font-size: 0.85rem;
-                            font-weight: 500;
-                        ">
-                            ↗️ Apri in nuova finestra
-                        </a>
-                    </div>
-                    <iframe
-                        id="bonvi-route-iframe"
-                        src="${hasBonviLink}"
-                        style="flex: 1; width: 100%; border: none; display: block;"
-                        title="Bonvi Race Database Route"
-                    ></iframe>
-                </div>
-            `;
+            // Build DOM safely to avoid innerHTML XSS
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'display: flex; flex-direction: column; height: 100%;';
+
+            const header = document.createElement('div');
+            header.style.cssText = 'padding: 12px 16px; background: #e0f2fe; border-bottom: 2px solid #0284c7; display: flex; align-items: center; gap: 10px;';
+
+            const label = document.createElement('span');
+            label.style.cssText = 'color: #0284c7; font-weight: 500;';
+            label.textContent = '🗺️ Visualizzazione Bonvi Race Database';
+
+            const anchor = document.createElement('a');
+            anchor.href = hasBonviLink;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.style.cssText = 'margin-left: auto; padding: 6px 12px; background: #0284c7; color: white; text-decoration: none; border-radius: 4px; font-size: 0.85rem; font-weight: 500;';
+            anchor.textContent = '↗️ Apri in nuova finestra';
+
+            header.appendChild(label);
+            header.appendChild(anchor);
+
+            const iframe = document.createElement('iframe');
+            iframe.id = 'bonvi-route-iframe';
+            iframe.src = hasBonviLink;
+            iframe.style.cssText = 'flex: 1; width: 100%; border: none; display: block;';
+            iframe.title = 'Bonvi Race Database Route';
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(iframe);
+
+            container.innerHTML = '';
+            container.appendChild(wrapper);
         }
         return;
     }

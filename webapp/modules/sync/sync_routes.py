@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 from shared.intervals.sync import IntervalsSyncService
 from shared.intervals.client import IntervalsAPIClient
@@ -14,6 +15,20 @@ from shared.storage import get_storage
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_route_link(link: Optional[str]) -> Optional[str]:
+    """Return the link only if it is a safe https:// URL from an allowed origin."""
+    if not link:
+        return None
+    try:
+        parsed = urlparse(link)
+        allowed_origins = {'il-bonvi.github.io'}
+        if parsed.scheme != 'https' or parsed.netloc not in allowed_origins:
+            return None
+        return link
+    except Exception:
+        return None
 
 
 class APIKeyRequest(BaseModel):
@@ -445,7 +460,7 @@ async def push_race(request: PushRaceRequest):
                     elevation_m = stage_data['elevation_m']
                     duration_minutes = stage_data['predicted_duration']
                     duration_hours = duration_minutes / 60
-                    route_link = stage_data.get('route_link')
+                    route_link = _sanitize_route_link(stage_data.get('route_link'))
                     
                     # Calculate KJ based on athlete's kj_per_hour_per_kg and weight
                     predicted_kj = duration_hours * kj_per_hour_per_kg * athlete_weight if duration_hours > 0 else 0
