@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
+from typing import Optional
 import logging
 from datetime import datetime, timedelta
 
@@ -34,6 +35,7 @@ class WellnessSyncRequest(BaseModel):
 
 class PushRaceRequest(BaseModel):
     race_id: int
+    athlete_ids: Optional[list[int]] = None  # if None → push to all enrolled athletes
 
 
 @router.post("/test-connection")
@@ -336,10 +338,13 @@ async def push_race(request: PushRaceRequest):
         if not race_athletes:
             raise HTTPException(status_code=400, detail="No athletes enrolled in this race")
 
-        # Filter athletes with API keys
+        # Filter athletes with API keys (and optional athlete_ids selection)
         athletes_with_keys = []
         for athlete_data in race_athletes:
             athlete_id = athlete_data.get('id')
+            # Skip if caller passed a selection and this athlete is not in it
+            if request.athlete_ids is not None and athlete_id not in request.athlete_ids:
+                continue
             athlete = storage.get_athlete(athlete_id)
             if athlete and athlete.get('api_key'):
                 athletes_with_keys.append({

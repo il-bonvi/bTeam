@@ -322,10 +322,12 @@ class APIClient {
         return result;
     }
 
-    async pushRace(raceId) {
+    async pushRace(raceId, athleteIds = null) {
+        const body = { race_id: raceId };
+        if (athleteIds !== null) body.athlete_ids = athleteIds;
         return this.request('/sync/push-race', {
             method: 'POST',
-            body: JSON.stringify({ race_id: raceId }),
+            body: JSON.stringify(body),
         });
     }
 

@@ -393,6 +393,7 @@ class Race(Base):
                 "team_name": ra.athlete.team.name if ra.athlete and ra.athlete.team else None,
                 "kj_per_hour_per_kg": ra.kj_per_hour_per_kg,
                 "objective": ra.objective,
+                "has_api_key": bool(ra.athlete.api_key) if ra.athlete else False,
             }
             for ra in self.athletes_assoc
         ]

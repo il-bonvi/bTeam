@@ -1211,14 +1211,18 @@ function formatDuration(minutes) {
  * Push race to Intervals.icu
  */
 window.pushRaceToIntervals = async function(raceId) {
+    const idToPush = raceId || window.currentRaceId;
+
+    let race;
     try {
         showLoading();
-        const idToPush = raceId || window.currentRaceId;
-        await api.pushRace(idToPush);
-        showToast('✅ Gara inviata a Intervals.icu', 'success');
+        race = await api.getRace(idToPush);
     } catch (err) {
-        showToast('Errore push Intervals: ' + (err.message || err), 'error');
+        showToast('Errore nel caricamento della gara: ' + err.message, 'error');
+        return;
     } finally {
         hideLoading();
     }
+
+    showPushRaceDialog(race);
 };
