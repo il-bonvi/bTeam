@@ -354,61 +354,45 @@ function buildStagesTab(race) {
                     ${stageOptionsHtml}
                 </select>
             </div>
-            
-            <button type="button" class="btn btn-primary" onclick="saveStagesTabData()" style="margin-bottom: 20px; width: 100%;">
-                💾 Salva Tappa
-            </button>
-            
-            <!-- Bonvi Stage Import Section -->
-            <div style="border: 2px dashed #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                    <i class="bi bi-link-45deg" style="color: #3b82f6; font-size: 16px;"></i>
-                    <label class="form-label" style="margin: 0; font-weight: 600;">🔗 Carica Tappa da Bonvi Race Database</label>
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    <input type="url" id="stages-bonvi-link" class="form-input"
-                        placeholder="Es: https://il-bonvi.github.io/bonvi-race-database/gare/bizkaikoloreak-S1-2025-DJ/"
-                        style="flex: 1;">
-                    <button type="button" onclick="loadStageFromBonvi()" class="btn btn-primary" style="width: auto; padding: 10px 16px;">
-                        📥 Carica
-                    </button>
-                </div>
-                <div id="stages-bonvi-loading" style="display: none; margin-top: 8px; padding: 8px; background: #e0f2fe; border-radius: 5px; color: #0369a1;">
-                    ⏳ Caricamento...
-                </div>
-                <div id="stages-bonvi-success" style="display: none; margin-top: 8px; padding: 8px; background: #dcfce7; border-radius: 5px; color: #166534;"></div>
-                <div id="stages-bonvi-error" style="display: none; margin-top: 8px; padding: 8px; background: #fee2e2; border-radius: 5px; color: #b91c1c;"></div>
-                <p style="margin: 6px 0 0; font-size: 12px; color: #666;">
-                    Usa il link della <strong>singola tappa</strong> (es. …-S1-2025-DJ/). Popolerà automaticamente distanza, dislivello e data.
-                </p>
-            </div>
 
             <div id="stages-details-container" style="background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #e0e0e0;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                     <div class="form-group">
-                        <label class="form-label">Distanza Tappa (km)</label>
-                        <input type="number" id="stages-stage-distance" class="form-input" step="0.1" placeholder="km" oninput="updateStagesPredictions()">
+                        <label class="form-label">Distanza (km)</label>
+                        <input type="number" id="stages-stage-distance" class="form-input" step="0.1" placeholder="km"
+                               oninput="updateStagesPredictions(); scheduleStageAutoSave();">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Dislivello Tappa (m)</label>
-                        <input type="number" id="stages-stage-elevation" class="form-input" step="1" placeholder="m" oninput="updateStagesPredictions()">
-                    </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                    <div class="form-group">
-                        <label class="form-label">Data Tappa</label>
-                        <input type="date" id="stages-stage-date" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Link BRD</label>
-                        <input type="url" id="stages-route-link" class="form-input" placeholder="https://il-bonvi.github.io/bonvi-race-database/gare/...">
+                        <label class="form-label">Dislivello (m)</label>
+                        <input type="number" id="stages-stage-elevation" class="form-input" step="1" placeholder="m"
+                               oninput="updateStagesPredictions(); scheduleStageAutoSave();">
                     </div>
                 </div>
                 
                 <div class="form-group">
+                    <label class="form-label">Data Tappa</label>
+                    <input type="date" id="stages-stage-date" class="form-input" onchange="scheduleStageAutoSave();">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Link BRD</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="url" id="stages-route-link" class="form-input"
+                            placeholder="Es: …/bizkaikoloreak-S1-2025-DJ/ (singola tappa)"
+                            style="flex: 1;" onchange="scheduleStageAutoSave();">
+                        <button type="button" onclick="loadStageFromBonvi()" class="btn btn-primary"
+                                style="white-space: nowrap; padding: 10px 14px;">📥 Carica BRD</button>
+                    </div>
+                    <div id="stages-bonvi-loading" style="display: none; margin-top: 6px; padding: 6px 10px; background: #e0f2fe; border-radius: 5px; color: #0369a1;">⏳ Caricamento...</div>
+                    <div id="stages-bonvi-success" style="display: none; margin-top: 6px; padding: 6px 10px; background: #dcfce7; border-radius: 5px; color: #166534;"></div>
+                    <div id="stages-bonvi-error"   style="display: none; margin-top: 6px; padding: 6px 10px; background: #fee2e2; border-radius: 5px; color: #b91c1c;"></div>
+                </div>
+                
+                <div class="form-group">
                     <label class="form-label">Note Tappa</label>
-                    <textarea id="stages-stage-notes" class="form-input" rows="2" placeholder="Note specifiche per questa tappa"></textarea>
+                    <textarea id="stages-stage-notes" class="form-input" rows="2"
+                              placeholder="Note specifiche per questa tappa"
+                              oninput="scheduleStageAutoSave();"></textarea>
                 </div>
             </div>
             
@@ -1023,12 +1007,23 @@ window.saveStagesTabData = async function() {
     }
 };
 
+/** Debounce timer for auto-save on field change */
+let _stageAutoSaveTimer = null;
+window.scheduleStageAutoSave = function() {
+    clearTimeout(_stageAutoSaveTimer);
+    _stageAutoSaveTimer = setTimeout(async () => {
+        if (window.currentStagesTabStageId) {
+            try { await _autoSaveStage(window.currentStagesTabStageId); }
+            catch (e) { console.warn('Auto-save failed:', e); }
+        }
+    }, 800);
+};
+
 /**
- * Load individual stage data from Bonvi Race Database
- * Called from the stage bonvi import button inside the Stages tab.
+ * Load individual stage data from Bonvi Race Database (reads link from stages-route-link field).
  */
 window.loadStageFromBonvi = async function() {
-    const link = document.getElementById('stages-bonvi-link').value.trim();
+    const link = document.getElementById('stages-route-link').value.trim();
     const loadingEl = document.getElementById('stages-bonvi-loading');
     const successEl = document.getElementById('stages-bonvi-success');
     const errorEl = document.getElementById('stages-bonvi-error');

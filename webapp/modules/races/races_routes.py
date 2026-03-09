@@ -50,8 +50,12 @@ class StageUpdate(BaseModel):
     avg_speed_kmh: Optional[float] = None
 
 
-def _parse_bonvi_html(html: str, link: str, month_map: dict) -> dict:
-    """Shared HTML parsing helper for bonvi-race-database pages."""
+def _parse_bonvi_html(html: str, url_slug: str, month_map: dict) -> dict:
+    """Shared HTML parsing helper for bonvi-race-database pages.
+    
+    Dates on the page appear WITHOUT a year (e.g. '14 ago'), so we extract
+    the year from the URL slug (e.g. 'bizkaikoloreak-2025-DJ' → 2025).
+    """
     race_name = None
     name_match = re.search(r'<span class="bar-title"[^>]*>([^<]+)</span>', html)
     if name_match:
@@ -63,15 +67,27 @@ def _parse_bonvi_html(html: str, link: str, month_map: dict) -> dict:
     elevation_match = re.search(r'\+(\d+)\s*m\b', html, re.IGNORECASE)
     elevation = float(elevation_match.group(1)) if elevation_match else None
 
+    # Year is in the slug (e.g. '-2025-'), NOT in the page body
+    year_match = re.search(r'-(\d{4})-', url_slug)
+    year = year_match.group(1) if year_match else str(datetime.now().year)
+
     months_pattern = '|'.join(month_map.keys())
+    # Dates appear as "14 ago" without year
     date_matches = list(re.finditer(
-        r'(\d{1,2})\s+(' + months_pattern + r')\s+(\d{4})', html, re.IGNORECASE
+        r'(\d{1,2})\s+(' + months_pattern + r')\b', html, re.IGNORECASE
     ))
 
     def _fmt_date(m):
-        return f"{m.group(3)}-{month_map[m.group(2).lower()]}-{m.group(1).zfill(2)}"
+        return f"{year}-{month_map[m.group(2).lower()]}-{m.group(1).zfill(2)}"
 
-    dates = [_fmt_date(m) for m in date_matches]
+    # Deduplicate while preserving order
+    seen = set()
+    dates = []
+    for m in date_matches:
+        d = _fmt_date(m)
+        if d not in seen:
+            seen.add(d)
+            dates.append(d)
 
     return {
         "name": race_name,
@@ -111,7 +127,7 @@ async def load_from_bonvi(data: BonviRaceLink):
             'set': '09', 'ott': '10', 'nov': '11', 'dic': '12'
         }
 
-        parsed = _parse_bonvi_html(html, link, month_map)
+        parsed = _parse_bonvi_html(html, url_slug, month_map)
         dates = parsed["dates"]
 
         # --- Detect link type ---
