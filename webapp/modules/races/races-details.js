@@ -359,6 +359,30 @@ function buildStagesTab(race) {
                 💾 Salva Tappa
             </button>
             
+            <!-- Bonvi Stage Import Section -->
+            <div style="border: 2px dashed #3b82f6; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <i class="bi bi-link-45deg" style="color: #3b82f6; font-size: 16px;"></i>
+                    <label class="form-label" style="margin: 0; font-weight: 600;">🔗 Carica Tappa da Bonvi Race Database</label>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="url" id="stages-bonvi-link" class="form-input"
+                        placeholder="Es: https://il-bonvi.github.io/bonvi-race-database/gare/bizkaikoloreak-S1-2025-DJ/"
+                        style="flex: 1;">
+                    <button type="button" onclick="loadStageFromBonvi()" class="btn btn-primary" style="width: auto; padding: 10px 16px;">
+                        📥 Carica
+                    </button>
+                </div>
+                <div id="stages-bonvi-loading" style="display: none; margin-top: 8px; padding: 8px; background: #e0f2fe; border-radius: 5px; color: #0369a1;">
+                    ⏳ Caricamento...
+                </div>
+                <div id="stages-bonvi-success" style="display: none; margin-top: 8px; padding: 8px; background: #dcfce7; border-radius: 5px; color: #166534;"></div>
+                <div id="stages-bonvi-error" style="display: none; margin-top: 8px; padding: 8px; background: #fee2e2; border-radius: 5px; color: #b91c1c;"></div>
+                <p style="margin: 6px 0 0; font-size: 12px; color: #666;">
+                    Usa il link della <strong>singola tappa</strong> (es. …-S1-2025-DJ/). Popolerà automaticamente distanza, dislivello e data.
+                </p>
+            </div>
+
             <div id="stages-details-container" style="background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #e0e0e0;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                     <div class="form-group">
@@ -877,12 +901,18 @@ window.initStagesTab = async function() {
 };
 
 /**
- * Load stage data for the Stages tab
+ * Load stage data for the Stages tab (auto-saves previous stage first)
  */
 window.loadStagesTabData = async function() {
     try {
         const stageNumber = parseInt(document.getElementById('stages-stage-selector').value);
         const raceId = window.currentRaceId;
+
+        // Auto-save currently loaded stage before switching
+        if (window.currentStagesTabStageId) {
+            try { await _autoSaveStage(window.currentStagesTabStageId); } catch (e) { console.warn('Auto-save failed:', e); }
+            window.currentStagesTabStageId = null;
+        }
         
         // Get all stages for this race
         const stages = await api.getStages(raceId);
@@ -951,49 +981,113 @@ window.loadStagesTabData = async function() {
 };
 
 /**
- * Save stage data from Stages tab
+ * Internal helper: collect current stage form data and send to API (silent, no toast).
+ */
+async function _autoSaveStage(stageId) {
+    if (!stageId || !window.currentRaceId) return;
+    const stageData = {
+        distance_km: document.getElementById('stages-stage-distance').value
+            ? parseFloat(document.getElementById('stages-stage-distance').value) : null,
+        elevation_m: document.getElementById('stages-stage-elevation').value
+            ? parseInt(document.getElementById('stages-stage-elevation').value) : null,
+        notes: document.getElementById('stages-stage-notes').value || null,
+        stage_date: document.getElementById('stages-stage-date').value || null,
+        route_link: document.getElementById('stages-route-link').value || null,
+        avg_speed_kmh: document.getElementById('stages-speed').value
+            ? parseFloat(document.getElementById('stages-speed').value) : null,
+        route_file: window.stagesGpxData ? JSON.stringify(window.stagesGpxData) : null
+    };
+    // Keep route_link even if null so it can be cleared; drop other nulls
+    Object.keys(stageData).forEach(key => {
+        if (key !== 'route_link' && stageData[key] === null) delete stageData[key];
+    });
+    await api.updateStage(window.currentRaceId, stageId, stageData);
+}
+
+/**
+ * Save stage data from Stages tab (manual button – shows toast)
  */
 window.saveStagesTabData = async function() {
+    if (!window.currentStagesTabStageId) {
+        showToast('Nessuna tappa selezionata', 'warning');
+        return;
+    }
     try {
-        if (!window.currentStagesTabStageId) {
-            showToast('Nessuna tappa selezionata', 'warning');
-            return;
-        }
-        
-        const stageData = {
-            distance_km: document.getElementById('stages-stage-distance').value 
-                ? parseFloat(document.getElementById('stages-stage-distance').value) 
-                : null,
-            elevation_m: document.getElementById('stages-stage-elevation').value 
-                ? parseInt(document.getElementById('stages-stage-elevation').value)
-                : null,
-            notes: document.getElementById('stages-stage-notes').value || null,
-            stage_date: document.getElementById('stages-stage-date').value || null,
-            route_link: document.getElementById('stages-route-link').value || null,
-            avg_speed_kmh: document.getElementById('stages-speed').value 
-                ? parseFloat(document.getElementById('stages-speed').value)
-                : null,
-            route_file: window.stagesGpxData ? JSON.stringify(window.stagesGpxData) : null
-        };
-        
-        // Remove null values to avoid overwriting existing data unnecessarily
-        // BUT keep route_link to allow updating it (even if empty)
-        Object.keys(stageData).forEach(key => {
-            if (key !== 'route_link' && stageData[key] === null) {
-                delete stageData[key];
-            }
-        });
-        
         showLoading();
-        await api.updateStage(window.currentRaceId, window.currentStagesTabStageId, stageData);
+        await _autoSaveStage(window.currentStagesTabStageId);
         showToast('✅ Tappa aggiornata con successo', 'success');
-        
-        // Reload race details to reflect changes
-        await refreshRaceDetails(window.currentRaceId);
     } catch (error) {
         showToast('Errore nel salvataggio della tappa: ' + error.message, 'error');
     } finally {
         hideLoading();
+    }
+};
+
+/**
+ * Load individual stage data from Bonvi Race Database
+ * Called from the stage bonvi import button inside the Stages tab.
+ */
+window.loadStageFromBonvi = async function() {
+    const link = document.getElementById('stages-bonvi-link').value.trim();
+    const loadingEl = document.getElementById('stages-bonvi-loading');
+    const successEl = document.getElementById('stages-bonvi-success');
+    const errorEl = document.getElementById('stages-bonvi-error');
+
+    if (!link) {
+        showToast('Inserisci il link della tappa', 'warning');
+        return;
+    }
+
+    loadingEl.style.display = 'block';
+    successEl.style.display = 'none';
+    errorEl.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/races/load-from-bonvi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ link })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Errore nel caricamento');
+        }
+
+        const data = await response.json();
+
+        if (data.link_type === 'stage_race') {
+            throw new Error('Hai incollato il link della corsa a tappe completa. Usa il link della singola tappa (con -S1-, -S2- ecc.).');
+        }
+        if (data.link_type === 'single_day') {
+            throw new Error('Hai incollato il link di una gara di un giorno. Usa il link della singola tappa (con -S1-, -S2- ecc.).');
+        }
+
+        // link_type === 'single_stage'
+        if (data.distance_km) document.getElementById('stages-stage-distance').value = data.distance_km;
+        if (data.elevation_m) document.getElementById('stages-stage-elevation').value = data.elevation_m;
+        if (data.stage_date) document.getElementById('stages-stage-date').value = data.stage_date;
+        document.getElementById('stages-route-link').value = data.route_link || link;
+
+        updateStagesPredictions();
+
+        // Auto-save immediately so data is persisted for this stage
+        if (window.currentStagesTabStageId) {
+            try { await _autoSaveStage(window.currentStagesTabStageId); } catch (e) { console.warn('Auto-save after bonvi import failed:', e); }
+        }
+
+        loadingEl.style.display = 'none';
+        successEl.style.display = 'block';
+        const dist = data.distance_km ? `${data.distance_km} km` : '--';
+        const elev = data.elevation_m ? `+${data.elevation_m} m` : '--';
+        const dateStr = data.stage_date || '--';
+        successEl.innerHTML = `✅ Tappa ${data.stage_number || ''} caricata: <strong>${data.name || '--'}</strong><br>${dist} · ${elev} · ${dateStr}`;
+        setTimeout(() => { successEl.style.display = 'none'; }, 6000);
+
+    } catch (error) {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'block';
+        errorEl.textContent = '❌ ' + error.message;
     }
 };
 

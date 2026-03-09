@@ -268,11 +268,45 @@ window.loadFromBonviDatabase = async function() {
         }
         
         const data = await response.json();
-        
-        // Populate form fields
+
+        // Populate form fields based on link_type
+        const linkType = data.link_type || 'single_day';
+
+        if (linkType === 'single_stage') {
+            // User pasted a single-stage link in the create dialog – inform them
+            loadingEl.style.display = 'none';
+            errorEl.style.display = 'block';
+            errorEl.textContent = '⚠️ Hai incollato il link di una singola tappa. Usa il link della corsa a tappe completa (senza -S1-, -S2- ecc.) per creare la gara, poi aggiungi i link delle tappe nella scheda Tappe.';
+            return;
+        }
+
         if (data.name) {
             document.getElementById('race-name').value = data.name;
         }
+
+        if (linkType === 'stage_race') {
+            // Stage race: populate dates and num_stages
+            if (data.race_date_start) {
+                document.getElementById('race-date-start').value = data.race_date_start;
+                document.getElementById('race-date-end').value = data.race_date_end || data.race_date_start;
+            }
+            if (data.num_stages) {
+                document.getElementById('race-num-stages').value = data.num_stages;
+            }
+            if (data.route_link) {
+                window.bonviRouteLink = data.route_link;
+            }
+            // Show success
+            loadingEl.style.display = 'none';
+            successEl.style.display = 'block';
+            const stagesText = data.num_stages ? ` · ${data.num_stages} tappe` : '';
+            const dateRange = data.race_date_start ? ` · ${data.race_date_start}` + (data.race_date_end && data.race_date_end !== data.race_date_start ? ` → ${data.race_date_end}` : '') : '';
+            successEl.innerHTML = `✅ Corsa a tappe caricata: <strong>${data.name || '--'}</strong>${dateRange}${stagesText}<br><small style="color:#166534;">Aggiungi i link delle singole tappe nella scheda Tappe dopo aver creato la gara.</small>`;
+            setTimeout(() => { successEl.style.display = 'none'; }, 7000);
+            return;
+        }
+
+        // --- single_day ---
         if (data.distance_km) {
             document.getElementById('race-distance').value = data.distance_km;
         }
