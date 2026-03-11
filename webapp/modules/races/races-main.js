@@ -127,45 +127,126 @@ window.renderRacesPage = async function() {
             </div>
         `;
 
-        const tableHtml = createTable(
-            [
-                { key: 'id', label: 'ID' },
-                { key: 'name', label: 'Nome Gara' },
-                { 
-                    key: 'date_range', 
-                    label: 'Periodo', 
-                    format: (_, row) => {
-                        const start = formatDate(row.race_date_start);
-                        const end = formatDate(row.race_date_end);
-                        if (start === end) return start;
-                        return `${start} → ${end}`;
-                    }
-                },
-                { key: 'num_stages', label: 'Tappe', format: v => v ? `${v}t` : '1t' },
-                { key: 'distance_km', label: 'Distanza (km)', format: v => formatNumber(v, 1) },
-                { key: 'category', label: 'Categoria' },
-                { key: 'gender', label: 'Genere' },
-                { key: 'elevation_m', label: 'Dislivello (m)', format: v => v ? formatNumber(v, 0) : '-' },
-                { key: 'predicted_duration_minutes', label: 'Durata', format: v => v ? formatDuration(v) : '-' },
-                { key: 'predicted_kj', label: 'KJ', format: v => v ? formatNumber(v, 0) : '-' },
-                {
-                    key: 'actions',
-                    label: 'Azioni',
-                    format: (_, row) => `
-                        <button class="btn btn-secondary btn-sm" onclick="viewRaceDetails(${row.id})" style="margin-right: 5px;">
-                            <i class="bi bi-eye"></i> Dettagli
-                        </button>
-                        <button class="btn btn-info btn-sm" onclick="pushRaceToIntervals(${row.id})" style="margin-right: 5px;">
-                            <i class="bi bi-cloud-arrow-up"></i> Intervals
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteRaceConfirm(${row.id})">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    `
+        // Build HTML table with expandable multi-stage races
+        let tableHtml = `
+            <table class="table table-striped" style="margin-bottom: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;"></th>
+                        <th>ID</th>
+                        <th>Nome Gara</th>
+                        <th>Periodo</th>
+                        <th>Distanza (km)</th>
+                        <th>Categoria</th>
+                        <th>Genere</th>
+                        <th>Dislivello (m)</th>
+                        <th>Durata</th>
+                        <th>KJ</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        for (const race of races) {
+            const isMultiStage = race.num_stages && race.num_stages > 1;
+            const raceId = race.id;
+            const start = formatDate(race.race_date_start);
+            const end = formatDate(race.race_date_end);
+            const dateRange = start === end ? start : `${start} → ${end}`;
+            const stages = race.stages || [];
+
+            // Parent race row
+            tableHtml += `
+                <tr class="race-row" data-race-id="${raceId}">
+                    <td style="text-align: center;">
+                        ${isMultiStage ? `
+                            <button class="btn-expand" onclick="window.toggleStages(${raceId})" style="
+                                background: none;
+                                border: none;
+                                font-size: 1.2rem;
+                                cursor: pointer;
+                                padding: 0;
+                                width: 30px;
+                                height: 30px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">
+                                ▶
+                            </button>
+                        ` : ''}
+                    </td>
+                    <td>${raceId}</td>
+                    <td><strong>${race.name}${isMultiStage ? ` <span style="color: #999;">(${race.num_stages} tappe)</span>` : ''}</strong></td>
+                    <td>${dateRange}</td>
+                    <td>${race.distance_km ? formatNumber(race.distance_km, 1) : '-'}</td>
+                    <td>${race.category || '-'}</td>
+                    <td>${race.gender || '-'}</td>
+                    <td>${race.elevation_m ? formatNumber(race.elevation_m, 0) : '-'}</td>
+                    <td>${isMultiStage ? `<strong>${race.num_stages} tappe</strong>` : (race.predicted_duration_minutes ? formatDuration(race.predicted_duration_minutes) : '-')}</td>
+                    <td>${race.predicted_kj ? formatNumber(race.predicted_kj, 0) : '-'}</td>
+                    <td>
+                        <div style="display:flex; gap:4px; align-items:center; flex-wrap:nowrap;">
+                            <button class="btn btn-secondary btn-sm" onclick="viewRaceDetails(${raceId})" title="Visualizza dettagli">
+                                <i class="bi bi-eye"></i> Dettagli
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="pushRaceToIntervals(${raceId})" title="Push su Intervals.icu">
+                                <i class="bi bi-cloud-arrow-up"></i> Intervals
+                            </button>
+                            ${!isMultiStage ? `
+                            <button class="btn btn-warning btn-sm" onclick="window.openRaceActivitySelector(${raceId})" title="Seleziona attività Intervals">
+                                <i class="bi bi-target"></i> Attività
+                            </button>
+                            ` : ''}
+                            <button class="btn btn-danger btn-sm" onclick="deleteRaceConfirm(${raceId})" title="Elimina gara">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+
+            // Stage rows (hidden by default if multi-stage)
+            if (isMultiStage) {
+                for (const stage of stages) {
+                    const stageDate = stage.stage_date ? formatDate(stage.stage_date) : '—';
+                    tableHtml += `
+                        <tr class="stage-row" data-race-id="${raceId}" style="display:none; background: #f9f9f9;">
+                            <td style="padding-left: 50px;"></td>
+                            <td>—</td>
+                            <td><em>Tappa ${stage.stage_number}</em></td>
+                            <td>${stageDate}</td>
+                            <td>—</td>
+                            <td>${stage.distance_km ? formatNumber(stage.distance_km, 1) : '-'}</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>${stage.elevation_m ? formatNumber(stage.elevation_m, 0) : '-'}</td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td>
+                                <div style="display:flex; gap:4px; align-items:center; flex-wrap:nowrap;">
+                                    <button class="btn btn-secondary btn-sm" onclick="viewRaceDetails(${raceId})" title="Visualizza dettagli">
+                                        <i class="bi bi-eye"></i> Dettagli
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" onclick="window.openRaceActivitySelector(${raceId}, ${stage.stage_number})" title="Seleziona attività Intervals">
+                                        <i class="bi bi-target"></i> Attività
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteRaceConfirm(${raceId})" title="Elimina gara">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
                 }
-            ],
-            races
-        );
+            }
+        }
+
+        tableHtml += `
+                </tbody>
+            </table>
+        `;
 
         document.getElementById('races-table').innerHTML = tableHtml;
 
@@ -174,6 +255,28 @@ window.renderRacesPage = async function() {
         console.error(error);
     } finally {
         hideLoading();
+    }
+};
+
+/**
+ * Toggle visibility of stage rows for multi-stage races
+ */
+window.toggleStages = function(raceId) {
+    const stageRows = document.querySelectorAll(`tr.stage-row[data-race-id="${raceId}"]`);
+    const toggleBtn = document.querySelector(`tr.race-row[data-race-id="${raceId}"] .btn-expand`);
+    
+    if (!stageRows.length) return;
+    
+    const isVisible = stageRows[0].style.display !== 'none';
+    
+    stageRows.forEach(row => {
+        row.style.display = isVisible ? 'none' : 'table-row';
+    });
+    
+    // Rotate arrow icon
+    if (toggleBtn) {
+        toggleBtn.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)';
+        toggleBtn.style.transition = 'transform 0.2s ease';
     }
 };
 

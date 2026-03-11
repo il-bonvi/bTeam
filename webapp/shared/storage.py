@@ -223,6 +223,32 @@ class RaceAthlete(Base):
         }
 
 
+class RaceActivity(Base):
+    """Link between a race and an athlete's activity from Intervals on race day."""
+    __tablename__ = "race_activities"
+
+    id = Column(Integer, primary_key=True)
+    race_id = Column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False)
+    athlete_id = Column(Integer, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False)
+    intervals_activity_id = Column(String(100), nullable=False)  # ID from Intervals API
+    race_name = Column(String(255), nullable=False)  # Cached race name for matching/display
+    linked_at = Column(String(255), nullable=False)
+
+    race = relationship("Race", back_populates="linked_activities")
+    athlete = relationship("Athlete", foreign_keys=[athlete_id])
+
+    def to_dict(self) -> Dict:
+        return {
+            "id": self.id,
+            "race_id": self.race_id,
+            "athlete_id": self.athlete_id,
+            "athlete_name": f"{self.athlete.last_name} {self.athlete.first_name}" if self.athlete else "Unknown",
+            "intervals_activity_id": self.intervals_activity_id,
+            "race_name": self.race_name,
+            "linked_at": self.linked_at,
+        }
+
+
 class Wellness(Base):
     """Dati wellness giornalieri dell'atleta (peso, FC riposo, HRV, etc)"""
     __tablename__ = "wellness"
@@ -382,6 +408,7 @@ class Race(Base):
 
     athletes_assoc = relationship("RaceAthlete", back_populates="race", cascade="all, delete-orphan")
     stages = relationship("RaceStage", cascade="all, delete-orphan")
+    linked_activities = relationship("RaceActivity", back_populates="race", cascade="all, delete-orphan")
 
     def to_dict(self) -> Dict:
         athletes = [
@@ -899,6 +926,28 @@ class BTeamStorage:
                         except sqlite3.OperationalError as e:
                             if "duplicate column name" not in str(e).lower():
                                 print(f"[bTeam] Errore aggiunta colonna '{col_name}': {e}")
+            
+            # Create race_activities table if it doesn't exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='race_activities'")
+            race_activities_exists = cursor.fetchone() is not None
+            
+            if not race_activities_exists:
+                try:
+                    cursor.execute("""
+                        CREATE TABLE race_activities (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            race_id INTEGER NOT NULL,
+                            athlete_id INTEGER NOT NULL,
+                            intervals_activity_id TEXT NOT NULL,
+                            race_name VARCHAR(255) NOT NULL,
+                            linked_at VARCHAR(255) NOT NULL,
+                            FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE CASCADE,
+                            FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+                        )
+                    """)
+                    print(f"[bTeam] Tabella 'race_activities' creata")
+                except sqlite3.Error as e:
+                    print(f"[bTeam] Errore creazione tabella 'race_activities': {e}")
             
             conn.commit()
             conn.close()
@@ -1752,6 +1801,89 @@ class BTeamStorage:
         except Exception as e:
             print(f"[bTeam] Errore lettura gara: {e}")
             return None
+
+    # ===== RACE ACTIVITY MATCHING =====
+    def link_race_activity(
+        self,
+        race_id: int,
+        athlete_id: int,
+        intervals_activity_id: str,
+        race_name: str
+    ) -> bool:
+        """Link an Intervals activity to a race for a specific athlete."""
+        try:
+            # Check if link already exists
+            existing = self.session.query(RaceActivity).filter_by(
+                race_id=race_id,
+                athlete_id=athlete_id
+            ).first()
+            
+            now = datetime.utcnow().isoformat()
+            
+            if existing:
+                # Update existing link
+                existing.intervals_activity_id = intervals_activity_id
+                existing.race_name = race_name
+                existing.linked_at = now
+            else:
+                # Create new link
+                race_activity = RaceActivity(
+                    race_id=race_id,
+                    athlete_id=athlete_id,
+                    intervals_activity_id=intervals_activity_id,
+                    race_name=race_name,
+                    linked_at=now
+                )
+                self.session.add(race_activity)
+            
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"[bTeam] Error linking race activity: {e}")
+            return False
+
+    def get_race_activity(self, race_id: int, athlete_id: int) -> Optional[Dict]:
+        """Get the linked activity for a race athlete (if any)."""
+        try:
+            link = self.session.query(RaceActivity).filter_by(
+                race_id=race_id,
+                athlete_id=athlete_id
+            ).first()
+            
+            if link:
+                return link.to_dict()
+            return None
+        except Exception as e:
+            print(f"[bTeam] Error retrieving race activity link: {e}")
+            return None
+
+    def unlink_race_activity(self, race_id: int, athlete_id: int) -> bool:
+        """Remove the link between a race and an athlete's activity."""
+        try:
+            link = self.session.query(RaceActivity).filter_by(
+                race_id=race_id,
+                athlete_id=athlete_id
+            ).first()
+            
+            if link:
+                self.session.delete(link)
+                self.session.commit()
+                return True
+            return False
+        except Exception as e:
+            self.session.rollback()
+            print(f"[bTeam] Error unlinking race activity: {e}")
+            return False
+
+    def get_race_activities(self, race_id: int) -> List[Dict]:
+        """Get all linked activities for a race."""
+        try:
+            links = self.session.query(RaceActivity).filter_by(race_id=race_id).all()
+            return [link.to_dict() for link in links]
+        except Exception as e:
+            print(f"[bTeam] Error retrieving race activities: {e}")
+            return []
 
     # ===== WELLNESS MANAGEMENT =====
     def add_wellness(

@@ -265,6 +265,34 @@ class APIClient {
         });
     }
 
+    // Race Activities
+    async getCandidateActivities(raceId) {
+        return this.request(`/races/${raceId}/candidate-activities`, {
+            method: 'POST',
+        });
+    }
+
+    async linkRaceActivity(raceId, athleteId, activityData) {
+        return this.request(`/races/${raceId}/link-activity`, {
+            method: 'POST',
+            body: JSON.stringify({
+                athlete_id: athleteId,
+                intervals_activity_id: activityData.intervals_activity_id,
+                race_name: activityData.race_name,
+            }),
+        });
+    }
+
+    async getLinkedActivity(raceId, athleteId) {
+        return this.request(`/races/${raceId}/athlete/${athleteId}/linked-activity`);
+    }
+
+    async unlinkRaceActivity(raceId, athleteId) {
+        return this.request(`/races/${raceId}/athlete/${athleteId}/linked-activity`, {
+            method: 'DELETE',
+        });
+    }
+
     // Wellness
     async getWellness(filters = {}) {
         const params = new URLSearchParams(filters).toString();

@@ -107,6 +107,9 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button class="btn btn-primary" onclick="saveRaceChanges()">
                             💾 Salva
                         </button>
+                        <button class="btn btn-info" onclick="window.openRaceActivitySelector(${race.id})">
+                            🎯 Attività Gara
+                        </button>
                         <button class="btn btn-success" onclick="pushRaceToIntervals(${race.id})">
                             🚀 Push Intervals
                         </button>

@@ -5,13 +5,23 @@
 
 // Store bonvi route link when loaded
 window.bonviRouteLink = null;
+// Store stage links for multi-stage races
+window.bonviStageLinks = [];
+// Store per-stage data (distance, elevation, date) fetched from bonvi
+window.bonviStagesData = [];
 
 /**
  * Show create race dialog with form
  */
 window.showCreateRaceDialog = function() {
     const today = new Date().toISOString().split('T')[0];
-    
+
+    // Reset bonvi global state for a fresh dialog
+    window.bonviRouteLink = null;
+    window.bonviStageLinks = [];
+    window.bonviStagesData = [];
+    // stages-bonvi-summary is inside the modal, re-created fresh each time — no reset needed
+
     createModal(
         '✨ Crea Nuova Gara',
         `
@@ -37,6 +47,24 @@ window.showCreateRaceDialog = function() {
                 ✅ Dati caricati con successo
             </div>
             <div id="bonvi-error" style="display: none; margin-top: 10px; padding: 10px; background: #fee2e2; border-radius: 5px; color: #b91c1c;"></div>
+        </div>
+
+        <!-- Stage details section – populated automatically after bonvi load -->
+        <div id="stages-bonvi-summary" style="display:none; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-bottom: 15px; background: #f0fdf4;">
+            <div style="font-weight: 600; color: #166534; margin-bottom: 8px;">📋 Tappe caricate</div>
+            <table id="stages-bonvi-table" style="width:100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background:#dcfce7; text-align:left;">
+                        <th style="padding:5px 8px;">Tappa</th>
+                        <th style="padding:5px 8px;">Data</th>
+                        <th style="padding:5px 8px;">Distanza</th>
+                        <th style="padding:5px 8px;">Dislivello</th>
+                        <th style="padding:5px 8px;">Vel. km/h</th>
+                        <th style="padding:5px 8px;">Link</th>
+                    </tr>
+                </thead>
+                <tbody id="stages-bonvi-tbody"></tbody>
+            </table>
         </div>
 
         <div class="form-group">
@@ -216,7 +244,11 @@ window.createRace = async function() {
         predicted_kj: null, // Will be calculated when athletes are added
         notes: document.getElementById('race-notes').value || null,
         // Save bonvi route link if available
-        route_link: window.bonviRouteLink || null
+        route_link: window.bonviRouteLink || null,
+        // Save auto-generated stage links
+        stage_links: window.bonviStageLinks || [],
+        // Per-stage details fetched from bonvi (distance, elevation, date)
+        stages_data: window.bonviStagesData.length > 0 ? window.bonviStagesData : null
     };
     
     try {
@@ -285,7 +317,7 @@ window.loadFromBonviDatabase = async function() {
         }
 
         if (linkType === 'stage_race') {
-            // Stage race: populate dates and num_stages
+            // Stage race: populate all fields
             if (data.race_date_start) {
                 document.getElementById('race-date-start').value = data.race_date_start;
                 document.getElementById('race-date-end').value = data.race_date_end || data.race_date_start;
@@ -293,16 +325,77 @@ window.loadFromBonviDatabase = async function() {
             if (data.num_stages) {
                 document.getElementById('race-num-stages').value = data.num_stages;
             }
+            if (data.distance_km) {
+                document.getElementById('race-distance').value = data.distance_km;
+            }
+            if (data.elevation_m) {
+                document.getElementById('race-elevation').value = data.elevation_m;
+            }
             if (data.route_link) {
                 window.bonviRouteLink = data.route_link;
             }
-            // Show success
+            if (data.stage_links && Array.isArray(data.stage_links)) {
+                window.bonviStageLinks = data.stage_links;
+            }
+            if (data.stages_data && Array.isArray(data.stages_data)) {
+                window.bonviStagesData = data.stages_data;
+            }
+            updateCreateRacePredictions();
+
+            // Populate stages table in dialog
+            const stagesSummaryEl = document.getElementById('stages-bonvi-summary');
+            const stagesTbody = document.getElementById('stages-bonvi-tbody');
+            if (stagesSummaryEl && stagesTbody && data.stages_data && data.stages_data.length > 0) {
+                stagesTbody.innerHTML = data.stages_data.map((s, idx) => {
+                    const dist = s.distance_km ? `${s.distance_km} km` : '--';
+                    const elev = s.elevation_m ? `+${s.elevation_m} m` : '--';
+                    const dt = s.stage_date || '--';
+                    const linkHtml = s.route_link
+                        ? `<a href="${s.route_link}" target="_blank" style="color:#2563eb; font-size:12px;">🔗 Apri</a>`
+                        : '--';
+                    const errHtml = s.fetch_error
+                        ? `<span style="color:#b91c1c;font-size:11px;"> ⚠️ ${s.fetch_error}</span>`
+                        : '';
+                    const speedVal = s.avg_speed_kmh || '';
+                    return `<tr style="border-top:1px solid #bbf7d0;">
+                        <td style="padding:5px 8px; font-weight:600;">T${s.stage_number}</td>
+                        <td style="padding:5px 8px;">${dt}</td>
+                        <td style="padding:5px 8px;">${dist}</td>
+                        <td style="padding:5px 8px;">${elev}${errHtml}</td>
+                        <td style="padding:5px 8px;">
+                            <input type="number" step="0.1" min="0" placeholder="km/h"
+                                value="${speedVal}"
+                                style="width:65px; padding:2px 4px; border:1px solid #bbf7d0; border-radius:4px; font-size:12px;"
+                                oninput="window.bonviStagesData[${idx}].avg_speed_kmh = this.value ? parseFloat(this.value) : null">
+                        </td>
+                        <td style="padding:5px 8px;">${linkHtml}</td>
+                    </tr>`;
+                }).join('');
+                stagesSummaryEl.style.display = 'block';
+            }
+
+            // Build per-stage summary
+            let stagesSummary = '';
+            if (data.stages_data && data.stages_data.length > 0) {
+                stagesSummary = '<br><small style="color:#166534;">'
+                    + data.stages_data.map(s => {
+                        const dist = s.distance_km ? `${s.distance_km} km` : '--';
+                        const elev = s.elevation_m ? `+${s.elevation_m} m` : '--';
+                        const dt = s.stage_date ? ` (${s.stage_date})` : '';
+                        return `T${s.stage_number}: ${dist}, ${elev}${dt}`;
+                    }).join(' &nbsp;|&nbsp; ')
+                    + '</small>';
+            }
+
             loadingEl.style.display = 'none';
             successEl.style.display = 'block';
-            const stagesText = data.num_stages ? ` · ${data.num_stages} tappe` : '';
-            const dateRange = data.race_date_start ? ` · ${data.race_date_start}` + (data.race_date_end && data.race_date_end !== data.race_date_start ? ` → ${data.race_date_end}` : '') : '';
-            successEl.innerHTML = `✅ Corsa a tappe caricata: <strong>${data.name || '--'}</strong>${dateRange}${stagesText}<br><small style="color:#166534;">Aggiungi i link delle singole tappe nella scheda Tappe dopo aver creato la gara.</small>`;
-            setTimeout(() => { successEl.style.display = 'none'; }, 7000);
+            const dateRange = data.race_date_start
+                ? ` · ${data.race_date_start}` + (data.race_date_end && data.race_date_end !== data.race_date_start ? ` → ${data.race_date_end}` : '')
+                : '';
+            const totDist = data.distance_km ? ` · ${data.distance_km} km` : '';
+            const totElev = data.elevation_m ? ` · +${data.elevation_m} m` : '';
+            successEl.innerHTML = `✅ Corsa a tappe caricata: <strong>${data.name || '--'}</strong>${dateRange}${totDist}${totElev}${stagesSummary}`;
+            setTimeout(() => { successEl.style.display = 'none'; }, 10000);
             return;
         }
 
