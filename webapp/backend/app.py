@@ -81,6 +81,18 @@ async def health_check():
     return {"status": "ok", "message": "bTeam API is running"}
 
 
+# Client-side routing: serve index.html for all /app/* routes (except /api/*, /static, /modules)
+# This allows the Vue/React-like client-side router to work
+@app.get("/app/{full_path:path}", response_class=HTMLResponse)
+async def serve_app(full_path: str):
+    """Serve index.html for all client-side routes"""
+    html_file = Path(__file__).parent.parent / "templates" / "index.html"
+    if html_file.exists():
+        return FileResponse(html_file)
+    return HTMLResponse("<h1>bTeam WebApp</h1><p>Welcome to the cycling team management system</p>")
+
+
+
 # Include routers
 app.include_router(teams_routes.router, prefix="/api/teams", tags=["Teams"])
 app.include_router(categories_routes.router, prefix="/api/categories", tags=["Categories"])

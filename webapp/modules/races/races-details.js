@@ -7,8 +7,14 @@
  * View race details in full page (not modal)
  */
 window.viewRaceDetails = async function(raceId) {
-    window.currentRaceId = raceId;
-    await window.renderRaceDetailsPage(raceId);
+    // Use router for navigation with URL update
+    if (typeof Router !== 'undefined') {
+        await Router.navigate('races', raceId);
+    } else {
+        // Fallback if router not available
+        window.currentRaceId = raceId;
+        await window.renderRaceDetailsPage(raceId);
+    }
 };
 
 /**
@@ -116,7 +122,7 @@ window.renderRaceDetailsPage = async function(raceId) {
                         <button id="export-route-btn" class="btn btn-secondary" onclick="exportRouteHTML(window.currentRaceData?.name || 'Route', window.gpxTraceData)" title="Esporta percorso come HTML standalone" ${window.gpxTraceData ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"'}>
                             <i class="bi bi-download"></i> Export Route
                         </button>
-                        <button class="btn btn-secondary" onclick="loadRaces()">
+                        <button class="btn btn-secondary" onclick="goBack()">
                             ← Indietro
                         </button>
                     </div>
