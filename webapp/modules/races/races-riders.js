@@ -187,7 +187,7 @@ window.showAddRidersDialog = async function() {
 
         // Extract unique teams and categories for filter
         const teams = [...new Set(sortedAthletes.map(a => a.team_name).filter(t => t))].sort();
-        const categories = [...new Set(sortedAthletes.map(a => a.category).filter(c => c))].sort();
+        const categories = [...new Set(sortedAthletes.map(a => a.category_name).filter(c => c))].sort();
         const genders = [...new Set(sortedAthletes.map(a => a.gender).filter(g => g))].sort();
 
         // If race has a gender, auto-select it (no "Tutti" option for gender)
@@ -242,7 +242,7 @@ window.showAddRidersDialog = async function() {
                     </thead>
                     <tbody id="riders-filter-tbody">
                         ${sortedAthletes.map(athlete => `
-                            <tr class="rider-row" data-team="${athlete.team_name || ''}" data-category="${athlete.category || ''}" data-gender="${athlete.gender || ''}">
+                            <tr class="rider-row" data-team="${athlete.team_name || ''}" data-category="${athlete.category_name || ''}" data-gender="${athlete.gender || ''}">
                                 <td><input type="checkbox" class="rider-checkbox" value="${athlete.id}"></td>
                                 <td>${athlete.last_name} ${athlete.first_name}</td>
                                 <td>${athlete.team_name || '-'}</td>

@@ -106,10 +106,16 @@ window.showPushRaceDialog = function(race) {
  * Shows races table with actions
  */
 window.renderRacesPage = async function() {
+    const contentArea = document.getElementById('content-area');
+
+    // Se c'è una gara selezionata, mostra i dettagli
+    if (window.currentRaceView !== null && window.currentRaceView !== undefined) {
+        await window.renderRaceDetailsPage(window.currentRaceView);
+        return;
+    }
+
     // Ripristina la top-bar quando si torna alla lista gare
     document.querySelector('.top-bar')?.style.setProperty('display', '');
-
-    const contentArea = document.getElementById('content-area');
 
     try {
         showLoading();
