@@ -119,14 +119,26 @@ function createTeamCard(team, memberCount = 0) {
 
 window.showTeamDetail = function(teamId) {
     console.log('[TEAMS] Switching to detail view for team', teamId);
-    window.currentTeamView = teamId;
-    window.renderTeamsPage();
+    // Use router for navigation with URL update
+    if (typeof Router !== 'undefined') {
+        Router.navigate('teams', teamId).catch(err => console.error('Navigation error:', err));
+    } else {
+        // Fallback if router not available
+        window.currentTeamView = teamId;
+        window.renderTeamsPage();
+    }
 };
 
 window.backToTeamsDashboard = function() {
     console.log('[TEAMS] Switching back to dashboard');
-    window.currentTeamView = null;
-    window.renderTeamsPage();
+    // Use router to go back (maintains history)
+    if (typeof Router !== 'undefined') {
+        Router.navigate('teams').catch(err => console.error('Navigation error:', err));
+    } else {
+        // Fallback if router not available
+        window.currentTeamView = null;
+        window.renderTeamsPage();
+    }
 };
 
 async function renderTeamDetail(teamId, teams, contentArea) {
@@ -145,7 +157,7 @@ async function renderTeamDetail(teamId, teams, contentArea) {
     contentArea.innerHTML = `
         <div style="margin-bottom: 1.5rem;">
             <button class="btn btn-secondary" onclick="backToTeamsDashboard()">
-                <i class="bi bi-arrow-left"></i> Dashboard
+                <i class="bi bi-arrow-left"></i> Indietro
             </button>
         </div>
         

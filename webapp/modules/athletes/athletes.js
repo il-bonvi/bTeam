@@ -182,13 +182,25 @@ function createAthleteCard(athlete) {
 }
 
 window.showAthleteDetail = async function(athleteId) {
-    window.currentAthleteView = athleteId;
-    await renderAthletesPage();
+    // Use router for navigation with URL update
+    if (typeof Router !== 'undefined') {
+        await Router.navigate('athletes', athleteId);
+    } else {
+        // Fallback if router not available
+        window.currentAthleteView = athleteId;
+        await renderAthletesPage();
+    }
 };
 
 window.backToAthletesDashboard = function() {
-    window.currentAthleteView = null;
-    renderAthletesPage();
+    // Use router to go back (maintains history)
+    if (typeof Router !== 'undefined') {
+        Router.navigate('athletes').catch(err => console.error('Navigation error:', err));
+    } else {
+        // Fallback if router not available
+        window.currentAthleteView = null;
+        renderAthletesPage();
+    }
 };
 
 window.applyAthleteFilters = function() {

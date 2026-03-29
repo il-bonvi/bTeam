@@ -38,13 +38,10 @@ const pages = {
     }
 };
 
-// Current page state
-let currentPage = 'dashboard';
-
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();
-    loadPage('dashboard');
+    Router.init();
 });
 
 // Setup navigation
@@ -55,19 +52,15 @@ function setupNavigation() {
         item.addEventListener('click', () => {
             const page = item.getAttribute('data-page');
             
-            // Update active state
-            navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-            
-            // Load page
-            loadPage(page);
+            // Navigate using router (maintains browser history)
+            Router.navigate(page).catch(err => console.error('Navigation error:', err));
         });
     });
 }
 
 // Load page content
 async function loadPage(pageName) {
-    currentPage = pageName;
+    window.currentPage = pageName;
     const page = pages[pageName];
     
     if (!page) {
@@ -160,7 +153,7 @@ async function loadDashboard() {
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">Attività Recenti</h3>
-                    <button class="btn btn-primary" onclick="loadPage('activities')">
+                    <button class="btn btn-primary" onclick="navigateTo('activities')">
                         <i class="bi bi-eye"></i> Vedi Tutte
                     </button>
                 </div>
@@ -170,7 +163,7 @@ async function loadDashboard() {
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">Prossime Gare</h3>
-                    <button class="btn btn-primary" onclick="loadPage('races')">
+                    <button class="btn btn-primary" onclick="navigateTo('races')">
                         <i class="bi bi-eye"></i> Vedi Tutte
                     </button>
                 </div>
@@ -243,13 +236,14 @@ async function loadCategories() {
 }
 
 async function loadAthletes() {
-    const script = document.createElement('script');
-    script.src = '/modules/athletes/athletes.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderAthletesPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/modules/athletes/athletes.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderAthletesPage === 'function') {
         window.renderAthletesPage();
@@ -257,13 +251,14 @@ async function loadAthletes() {
 }
 
 async function loadActivities() {
-    const script = document.createElement('script');
-    script.src = '/modules/activities/activities.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderActivitiesPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/modules/activities/activities.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderActivitiesPage === 'function') {
         window.renderActivitiesPage();
@@ -280,13 +275,14 @@ async function loadRaces() {
 }
 
 async function loadWellness() {
-    const script = document.createElement('script');
-    script.src = '/modules/wellness/wellness.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderWellnessPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/modules/wellness/wellness.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderWellnessPage === 'function') {
         window.renderWellnessPage();
@@ -294,13 +290,14 @@ async function loadWellness() {
 }
 
 async function loadSync() {
-    const script = document.createElement('script');
-    script.src = '/modules/sync/sync.js';
-    document.body.appendChild(script);
-    
-    await new Promise(resolve => {
-        script.onload = resolve;
-    });
+    if (typeof window.renderSyncPage !== 'function') {
+        const script = document.createElement('script');
+        script.src = '/modules/sync/sync.js';
+        document.body.appendChild(script);
+        await new Promise(resolve => {
+            script.onload = resolve;
+        });
+    }
     
     if (typeof window.renderSyncPage === 'function') {
         window.renderSyncPage();
