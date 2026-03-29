@@ -2,7 +2,7 @@
 
 import re
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -638,7 +638,8 @@ async def get_candidate_activities(race_id: int):
                 oldest = race_date_start  # YYYY-MM-DD
                 newest = race.get('race_date_end', race_date_start)
                 
-                activities = client.get_activities(
+                activities = await run_in_threadpool(
+                    client.get_activities,
                     athlete_id='0',  # Current user (authenticated by API key)
                     oldest=oldest,
                     newest=newest
@@ -734,21 +735,24 @@ async def link_activity(race_id: int, request: LinkActivityRequest):
     
     try:
         # Insert or update the race_activity link
-        storage.link_race_activity(
+        success = storage.link_race_activity(
             race_id=race_id,
             athlete_id=request.athlete_id,
             intervals_activity_id=request.intervals_activity_id,
             race_name=request.race_name
         )
-        
-        return {
-            "message": "Activity linked successfully",
-            "race_id": race_id,
-            "athlete_id": request.athlete_id,
-            "intervals_activity_id": request.intervals_activity_id
-        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error linking activity: {str(e)}")
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to link activity: database write error")
+    
+    return {
+        "message": "Activity linked successfully",
+        "race_id": race_id,
+        "athlete_id": request.athlete_id,
+        "intervals_activity_id": request.intervals_activity_id
+    }
 
 
 @router.get("/{race_id}/athlete/{athlete_id}/linked-activity")

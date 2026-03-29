@@ -60,7 +60,7 @@ function setupNavigation() {
 
 // Load page content
 async function loadPage(pageName) {
-    currentPage = pageName;
+    window.currentPage = pageName;
     const page = pages[pageName];
     
     if (!page) {

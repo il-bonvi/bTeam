@@ -156,8 +156,8 @@ async function renderTeamDetail(teamId, teams, contentArea) {
     
     contentArea.innerHTML = `
         <div style="margin-bottom: 1.5rem;">
-            <button class="btn btn-secondary" onclick="goBack()">
-                <i class="bi bi-arrow-left"></i> Dashboard
+            <button class="btn btn-secondary" onclick="backToTeamsDashboard()">
+                <i class="bi bi-arrow-left"></i> Indietro
             </button>
         </div>
         

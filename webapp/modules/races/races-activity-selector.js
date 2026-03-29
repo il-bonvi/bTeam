@@ -5,6 +5,17 @@
  */
 
 /**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} str - Raw string to escape
+ * @returns {string} HTML-safe string
+ */
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/**
  * Open modal to select race activities from Intervals
  * @param {number} raceId - ID della gara
  * @param {number} stageNumber - (Opzionale) Numero della tappa (1-based)
@@ -13,10 +24,8 @@ window.openRaceActivitySelector = async function(raceId, stageNumber) {
     try {
         showLoading();
         
-        // Fetch candidate activities for all athletes
-        const url = stageNumber 
-            ? `/api/races/${raceId}/candidate-activities?stage_number=${stageNumber}`
-            : `/api/races/${raceId}/candidate-activities`;
+        // Fetch candidate activities for all athletes (stage_number not used server-side)
+        const url = `/api/races/${raceId}/candidate-activities`;
             
         const response = await fetch(url, {
             method: 'POST'
@@ -114,7 +123,7 @@ window.renderActivitySelector = async function(raceId, data, stageNumber) {
                 candidatesHtml += `
                     <div class="activity-candidate ${isHighlighted}" data-activity-id="${candidate.id}" data-athlete-id="${athleteId}">
                         <div class="activity-main">
-                            <div class="activity-name">${candidate.name}</div>
+                            <div class="activity-name">${escapeHtml(candidate.name)}</div>
                             ${highlightBadge}
                             <div class="activity-meta">
                                 <span>📅 ${candidate.date}</span>
@@ -124,7 +133,7 @@ window.renderActivitySelector = async function(raceId, data, stageNumber) {
                                 <span>❤️ ${hr}bpm</span>
                             </div>
                         </div>
-                        <button class="btn-small" onclick="window.selectActivity('${raceId}', ${athleteId}, '${candidate.id}', '${candidate.name.replace(/'/g, "\\'")}')">
+                        <button class="btn-small" onclick='window.selectActivity("${raceId}", ${athleteId}, "${candidate.id}", ${JSON.stringify(candidate.name)})'>
                             Seleziona
                         </button>
                     </div>
@@ -319,10 +328,23 @@ window.selectActivity = async function(raceId, athleteId, activityId, activityNa
     try {
         showLoading();
         
-        // Get race name from modal
-        const raceData = await fetch(`/api/races/${raceId}`);
-        const race = await raceData.json();
-        const raceName = race.name || 'Gara';
+        // Get race name with a client-side cache to avoid refetching on each selection
+        const raceNameCache = window._raceNameCache || (window._raceNameCache = {});
+        let raceName = raceNameCache[raceId];
+        if (!raceName) {
+            try {
+                const raceData = await fetch(`/api/races/${raceId}`);
+                if (raceData.ok) {
+                    const race = await raceData.json();
+                    raceName = (race && race.name) ? race.name : 'Gara';
+                } else {
+                    raceName = 'Gara';
+                }
+            } catch (_) {
+                raceName = 'Gara';
+            }
+            raceNameCache[raceId] = raceName;
+        }
         
         // Link activity
         const response = await fetch(`/api/races/${raceId}/link-activity`, {

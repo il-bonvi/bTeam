@@ -81,7 +81,9 @@ const Router = {
     // Load from state object (used by popstate)
     async loadFromState(state) {
         if (!state) {
-            this.navigate('dashboard');
+            // No state available (e.g., initial history entry). Derive route from URL.
+            const path = this.getCurrentPath();
+            await this.loadFromPath(path);
             return;
         }
 

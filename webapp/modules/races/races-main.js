@@ -223,7 +223,6 @@ window.renderRacesPage = async function() {
                             <td>—</td>
                             <td><em>Tappa ${stage.stage_number}</em></td>
                             <td>${stageDate}</td>
-                            <td>—</td>
                             <td>${stage.distance_km ? formatNumber(stage.distance_km, 1) : '-'}</td>
                             <td>—</td>
                             <td>—</td>
