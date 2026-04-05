@@ -373,6 +373,7 @@ async def push_race(request: PushRaceRequest):
 
         race_default_category = race.get('category') or 'C'
         race_name = race['name']
+        race_route_link = _sanitize_route_link(race.get('route_link'))
         
         # Check if multi-stage race
         num_stages = race.get('num_stages', 1)
@@ -475,9 +476,9 @@ async def push_race(request: PushRaceRequest):
 
                     # Build description with stage metrics
                     stage_description = (
-                        f'<div><b><span class="text-blue">Distanza</span>: {distance_km:.1f} km</b></div>'
-                        f'<div><b><span class="text-red-darken-2">Dislivello</span>: {int(elevation_m)}m</b></div>'
-                        f'<div><b><span class="text-green">Previsti</span>: {int(predicted_kj)}kJ'
+                        f'<div><b><span class="text-blue">Distanza:</span> {distance_km:.1f} km</b></div>'
+                        f'<div><b><span class="text-red-darken-2">Dislivello:</span> {int(elevation_m)}m</b></div>'
+                        f'<div><b><span class="text-green">Previsti:</span> {int(predicted_kj)}kJ'
                     )
 
                     if predicted_kj > 0 and duration_minutes > 0:
@@ -490,14 +491,21 @@ async def push_race(request: PushRaceRequest):
                         duration_36_str = format_duration((distance_km / 36.0) * 60)
                         duration_41_str = format_duration((distance_km / 41.0) * 60)
                         stage_description += (
-                            f'<div><b><span class="text-blue">avg 36 km/h</span>: {duration_36_str}</b>  |  <b><span class="text-blue-darken-4">avg 41 km/h</span>: {duration_41_str}</b></div>'
+                            f'<div><b><span class="text-blue">avg 36 km/h:</span> {duration_36_str}</b>  |  <b><span class="text-blue-darken-4">avg 41 km/h:</span> {duration_41_str}</b></div>'
                         )
 
                     # Add route link if available
                     if route_link:
                         stage_description += (
-                            f'<br><div><b><span class="text-orange">Percorso</span>: '
+                            f'<br><div><b><span class="text-orange">Percorso:</span> '
                             f'<a href="{route_link}" target="_blank">Visualizza in BRD</a></b></div>'
+                        )
+                    
+                    # Add race recap link for multi-stage races
+                    if num_stages > 1 and race_route_link:
+                        stage_description += (
+                            f'<br><div><b><span class="text-orange">Recap Corsa:</span> '
+                            f'<a href="{race_route_link}" target="_blank">Visualizza in BRD</a></b></div>'
                         )
 
                     # Check for duplicate in this specific athlete's calendar and delete if found
